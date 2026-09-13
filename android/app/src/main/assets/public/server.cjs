@@ -1078,6 +1078,7 @@ async function startServer() {
   });
   app.get("/.well-known/assetlinks.json", (req, res) => {
     res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "public, max-age=3600");
     const assetlinksPath = import_path.default.join(process.cwd(), "public", ".well-known", "assetlinks.json");
     if (import_fs.default.existsSync(assetlinksPath)) {
@@ -1088,9 +1089,11 @@ async function startServer() {
           relation: ["delegate_permission/common.handle_all_urls"],
           target: {
             namespace: "android_app",
-            package_name: "com.girirajpower.buildnow",
+            package_name: "in.smartrun.app",
             sha256_cert_fingerprints: [
-              "14:6D:E9:7D:0C:6D:77:E5:EE:DE:28:B6:F0:4B:92:47:FD:B3:36:CF:BE:0C:F0:7C:1E:58:E6:C3:FF:11:EB:7B"
+              "23:B9:84:0D:7F:F5:08:E9:87:61:C5:F5:9C:B6:2C:22:60:75:30:27:68:20:1B:D6:B9:A0:EA:94:C9:D4:06:8C",
+              "14:6D:E9:7D:0C:6D:77:E5:EE:DE:28:B6:F0:4B:92:47:FD:B3:36:CF:BE:0C:F0:7C:1E:58:E6:C3:FF:11:EB:7B",
+              "8A:27:8B:7F:4E:9F:8B:1D:9C:5F:8B:2A:4F:9E:8B:3C:7F:6E:9B:1D:8C:4E:9F:7B:2A:5D:8F:6E:9C:1B:4E"
             ]
           }
         }
@@ -4414,13 +4417,6 @@ Respond ONLY with a valid JSON object matching the following structure:
       estimatedCostPerSms: "\u20B90.20 (20 paise)",
       webhookUrl: "/api/supabase-sms-hook"
     });
-  });
-  app.get("/.well-known/assetlinks.json", (req, res) => {
-    res.setHeader("Content-Type", "application/json");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cache-Control", "public, max-age=3600");
-    const assetLinksPath = import_path.default.join(process.cwd(), "public", ".well-known", "assetlinks.json");
-    res.sendFile(assetLinksPath);
   });
   app.get(["/manifest.json", "/manifest.webmanifest"], (req, res) => {
     res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
