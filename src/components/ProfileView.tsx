@@ -196,7 +196,9 @@ export const ProfileView = ({
   // Clean user fields (no demo name/number)
   const rawName = userProfile?.name?.trim() || '';
   const rawPhone = userProfile?.phone?.trim() || '';
-  const rawEmail = userProfile?.email?.trim() || '';
+  const rawEmail = (userProfile?.email?.trim() || '').includes('@girirajpower.internal')
+    ? ''
+    : (userProfile?.email?.trim() || '');
   const displayDob = userProfile?.dob;
   const userPhoto = userProfile?.photoURL;
 

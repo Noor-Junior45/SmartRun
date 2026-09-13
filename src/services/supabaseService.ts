@@ -1,6 +1,8 @@
 import { supabase } from '../lib/supabaseClient';
 import { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
+import { isWebViewEnvironment } from '../utils/webViewDetection';
 import { Order, OrderStatus, WiringServiceBooking, SavedAddress, UserProfile, Product, CartItem, DeliveryPartner } from '../types';
 import { soundService } from './sound';
 import { showToast } from '../utils/toast';
@@ -221,7 +223,7 @@ export function getActiveAddressStorageKey(user?: { id?: string; email?: string 
 export function purgeLegacyUnscopedStorage(): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    const PURGE_DONE_FLAG = 'giriraj_legacy_purge_v1_done';
+    const PURGE_DONE_FLAG = 'giriraj_legacy_purge_v4_done';
     if (localStorage.getItem(PURGE_DONE_FLAG)) {
       return;
     }
@@ -251,6 +253,32 @@ export function purgeLegacyUnscopedStorage(): void {
       'giriraj_master_orders'
     ];
     legacyKeys.forEach((k) => localStorage.removeItem(k));
+
+    // Sanitize any cached profiles that may contain internal emails or leaked cross-user emails
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('giriraj_profile_phone_') || key.startsWith('giriraj_profile_uid_'))) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const p = JSON.parse(raw);
+            let modified = false;
+            if (p.email && p.email.includes('@girirajpower.internal')) {
+              p.email = '';
+              modified = true;
+            }
+            if (modified) {
+              localStorage.setItem(key, JSON.stringify(p));
+            }
+          }
+        } catch {
+          keysToRemove.push(key);
+        }
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+
     localStorage.setItem(PURGE_DONE_FLAG, 'true');
   } catch (e) {
     // ignore
@@ -408,17 +436,29 @@ export async function signInWithGoogle(): Promise<{ error: Error | null; url?: s
   try {
     const isIframe = typeof window !== 'undefined' && window.self !== window.top;
     const isNative = Capacitor.isNativePlatform();
-    
-    // In native Android APK, use custom app scheme or web origin for Supabase OAuth callback
-    const redirectTo = isNative
+    const isWv = typeof window !== 'undefined' && (isWebViewEnvironment() || (window as any).isAndroidApp);
+    const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+    const shouldUseAppFlow = isNative || isWv;
+
+    // Track pending native Google OAuth intent in localStorage
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('giriraj_pending_native_oauth', String(Date.now()));
+      if (shouldUseAppFlow || isAndroid) {
+        localStorage.setItem('giriraj_oauth_from_android_app', 'true');
+      }
+    }
+
+    // In native Android APK or App WebView, use custom app scheme: smartrun://login
+    // Supabase will redirect to smartrun://login which Android intercepts via intent filters
+    const redirectTo = shouldUseAppFlow
       ? 'smartrun://login'
-      : (typeof window !== 'undefined' ? window.location.origin : undefined);
+      : (typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo,
-        skipBrowserRedirect: isIframe || isNative,
+        skipBrowserRedirect: isIframe || shouldUseAppFlow,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent'
@@ -439,8 +479,22 @@ export async function signInWithGoogle(): Promise<{ error: Error | null; url?: s
           window.location.href = data.url;
         }
       } else if (isNative) {
-        // In native Android WebView, open in external device browser (Chrome) for Google OAuth compliance
-        window.open(data.url, '_system', 'noopener,noreferrer');
+        // In native Android APK, open in Chrome Custom Tab via Capacitor Browser
+        // Chrome Custom Tab maintains app task identity and automatically passes smartrun:// redirects to app
+        try {
+          await Browser.open({
+            url: data.url,
+            windowName: '_self',
+            presentationStyle: 'popover',
+            toolbarColor: '#F9C017'
+          });
+        } catch (browserErr) {
+          console.warn('Capacitor Browser.open error, falling back to window.open:', browserErr);
+          window.open(data.url, '_system', 'noopener,noreferrer');
+        }
+      } else if (isWv) {
+        // In Android WebView / TWA wrapper, open via external browser to avoid Google 403 disallowed_useragent
+        window.open(data.url, '_system', 'noopener,noreferrer') || (window.location.href = data.url);
       }
     }
 
@@ -992,18 +1046,45 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
       const { data: authData } = await supabase.auth.getUser();
       if (authData?.user?.id === userId) {
         const meta = authData.user.user_metadata || {};
-        if (!cloudPhone && (authData.user.phone || meta.phone)) {
-          cloudPhone = cleanPhoneAutofill(authData.user.phone || meta.phone);
-          found = true;
+        const isInternalPhoneUser =
+          Boolean(authData.user.email?.includes('@girirajpower.internal')) ||
+          (!authData.user.email && Boolean(authData.user.phone));
+
+        if (isInternalPhoneUser) {
+          // STRICT SANITIZATION: Phone-authenticated users must NEVER show another user's email!
+          if (cloudEmail) {
+            console.warn(`[Profile Sanitization] Cleared leaked email (${cloudEmail}) from phone user ${userId}`);
+            cloudEmail = '';
+            // Sanitize Supabase database record
+            Promise.resolve(supabase.from('user_profiles').update({ email: null }).eq('user_id', userId)).catch(() => {});
+          }
+          if (!cloudPhone && (authData.user.phone || meta.phone)) {
+            cloudPhone = cleanPhoneAutofill(authData.user.phone || meta.phone);
+            found = true;
+          }
+          if (!cloudName && (meta.full_name || meta.name)) {
+            cloudName = meta.full_name || meta.name;
+            found = true;
+          }
+          if (!cloudName) {
+            cloudName = `Giriraj Member (${cloudPhone.slice(-4) || 'User'})`;
+            found = true;
+          }
+        } else {
+          if (!cloudPhone && (authData.user.phone || meta.phone)) {
+            cloudPhone = cleanPhoneAutofill(authData.user.phone || meta.phone);
+            found = true;
+          }
+          if (!cloudName && (meta.full_name || meta.name)) {
+            cloudName = meta.full_name || meta.name;
+            found = true;
+          }
+          if (!cloudEmail && authData.user.email) {
+            cloudEmail = authData.user.email;
+            found = true;
+          }
         }
-        if (!cloudName && (meta.full_name || meta.name)) {
-          cloudName = meta.full_name || meta.name;
-          found = true;
-        }
-        if (!cloudEmail && authData.user.email) {
-          cloudEmail = authData.user.email;
-          found = true;
-        }
+
         if (!cloudDob && (meta.dob || meta.birth_date || meta.date_of_birth)) {
           cloudDob = meta.dob || meta.birth_date || meta.date_of_birth;
           found = true;
@@ -1015,13 +1096,17 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
       }
     } catch {}
 
+    if (cloudEmail && cloudEmail.includes('@girirajpower.internal')) {
+      cloudEmail = '';
+    }
+
     if (found) {
       const mappedProfile: UserProfile = {
         id: userId,
         name: cloudName || 'Customer',
         phone: cloudPhone,
         email: cloudEmail,
-        emailVerified: true,
+        emailVerified: Boolean(cloudEmail),
         photoURL: cloudAvatar,
         dob: cloudDob,
         walletBalance: walletBal,
@@ -1057,6 +1142,9 @@ export function getSavedUserProfile(userScopeOverride?: string): UserProfile | n
     const prof: UserProfile = JSON.parse(raw);
     if (!prof.phone && !prof.email && (!prof.name || prof.name === 'Customer')) {
       return null;
+    }
+    if (prof.email && prof.email.includes('@girirajpower.internal')) {
+      prof.email = '';
     }
     return prof;
   } catch {
@@ -1106,7 +1194,10 @@ export async function saveUserProfile(
     cashbackBalance: 0
   };
 
-  const effectiveEmail = data.email !== undefined ? data.email : existing.email;
+  let effectiveEmail = data.email !== undefined ? data.email : existing.email;
+  if (effectiveEmail && effectiveEmail.includes('@girirajpower.internal')) {
+    effectiveEmail = '';
+  }
 
   const updated: UserProfile = {
     ...existing,
@@ -1115,7 +1206,7 @@ export async function saveUserProfile(
     phoneVerified: data.phoneVerified !== undefined ? data.phoneVerified : existing.phoneVerified,
     name: data.name !== undefined ? data.name : existing.name,
     email: effectiveEmail,
-    emailVerified: data.emailVerified !== undefined ? data.emailVerified : existing.emailVerified,
+    emailVerified: data.emailVerified !== undefined ? data.emailVerified : Boolean(effectiveEmail),
     photoURL: data.photoURL !== undefined ? data.photoURL : existing.photoURL,
     dob: data.dob !== undefined ? data.dob : existing.dob,
     refundBalance: data.refundBalance !== undefined ? data.refundBalance : existing.refundBalance,
@@ -1137,7 +1228,7 @@ export async function saveUserProfile(
       const syncResult = await syncUserProfileToSupabase(authUserId, {
         phone: data.phone,
         full_name: data.name,
-        email: data.email,
+        email: effectiveEmail || null,
         avatar_url: data.photoURL,
         dob: data.dob
       });

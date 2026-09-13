@@ -33,6 +33,7 @@ var import_express_rate_limit = __toESM(require("express-rate-limit"), 1);
 var import_zod = require("zod");
 var import_crypto = __toESM(require("crypto"), 1);
 var import_supabase_js = require("@supabase/supabase-js");
+var import_razorpay = __toESM(require("razorpay"), 1);
 import_dotenv.default.config();
 var __filenameResolved = typeof __filename !== "undefined" ? __filename : process.cwd();
 var __dirnameResolved = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname(__filenameResolved);
@@ -693,6 +694,21 @@ function generateAdminOrderAlertHtml(order) {
             <td style="color: #64748b; padding-bottom: 6px;">Delivery Fee:</td>
             <td style="color: #16a34a; font-weight: 700; text-align: right; padding-bottom: 6px;">${(order.deliveryFee || 0) === 0 ? "FREE" : "\u20B9" + order.deliveryFee}</td>
           </tr>
+          ${(order.rainFee || 0) > 0 ? `
+          <tr>
+            <td style="color: #64748b; padding-bottom: 6px;">\u{1F327}\uFE0F Rain / Weather Fee:</td>
+            <td style="color: #0284c7; font-weight: 700; text-align: right; padding-bottom: 6px;">\u20B9${order.rainFee}</td>
+          </tr>` : ""}
+          ${(order.surgeFee || 0) > 0 ? `
+          <tr>
+            <td style="color: #64748b; padding-bottom: 6px;">\u26A1 Peak Surge Fee:</td>
+            <td style="color: #d97706; font-weight: 700; text-align: right; padding-bottom: 6px;">\u20B9${order.surgeFee}</td>
+          </tr>` : ""}
+          ${(order.productHandlingFee || 0) > 0 ? `
+          <tr>
+            <td style="color: #64748b; padding-bottom: 6px;">\u{1F4E6} Special Product Surcharge:</td>
+            <td style="color: #475569; font-weight: 700; text-align: right; padding-bottom: 6px;">\u20B9${order.productHandlingFee}</td>
+          </tr>` : ""}
           ${(order.discount || 0) > 0 ? `
           <tr>
             <td style="color: #16a34a; padding-bottom: 6px;">Discount Applied:</td>
@@ -801,9 +817,14 @@ function writeTechnicianReviewsFile(reviews) {
 }
 var serverSupabaseClient = null;
 function getServerSupabase() {
-  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
-  if (!url || !key || url.includes("YOUR_") || key.includes("YOUR_")) {
+  const url = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://iffdkhzctkbglmvaayeh.supabase.co").trim();
+  let serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  if (serviceRoleKey.length < 20 || serviceRoleKey.includes("YOUR_") || serviceRoleKey.includes("placeholder")) {
+    serviceRoleKey = "";
+  }
+  const anonKey = (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "sb_publishable_C7DzW73hItwOaxr9R4Z2dw_HtjCqHaS").trim();
+  const key = serviceRoleKey || anonKey;
+  if (!url || !key || key.length < 20 || url.includes("YOUR_") || key.includes("YOUR_")) {
     return null;
   }
   if (!serverSupabaseClient) {
@@ -979,6 +1000,8 @@ var OrderItemSchema = import_zod.z.object({
 });
 var OrderCheckoutSchema = import_zod.z.object({
   id: import_zod.z.string().min(3).max(64),
+  userId: import_zod.z.string().optional().nullable(),
+  user_id: import_zod.z.string().optional().nullable(),
   customerName: import_zod.z.string().min(2, "Customer name must be at least 2 characters").max(100),
   phone: import_zod.z.string().min(10, "Phone number must contain at least 10 digits").max(20),
   customerEmail: import_zod.z.string().email("Invalid email format").optional().or(import_zod.z.literal("")).nullable(),
@@ -990,10 +1013,22 @@ var OrderCheckoutSchema = import_zod.z.object({
   itemTotal: import_zod.z.number().nonnegative("Item total must be positive"),
   deliveryFee: import_zod.z.number().nonnegative("Delivery fee cannot be negative"),
   handlingFee: import_zod.z.number().nonnegative().optional().default(0),
+  rainFee: import_zod.z.number().nonnegative().optional().default(0),
+  surgeFee: import_zod.z.number().nonnegative().optional().default(0),
+  productHandlingFee: import_zod.z.number().nonnegative().optional().default(0),
+  fees: import_zod.z.number().nonnegative().optional().default(0),
+  feeBreakdown: import_zod.z.any().optional().nullable(),
   discount: import_zod.z.number().nonnegative().optional().default(0),
   totalAmount: import_zod.z.number().nonnegative("Total amount must be positive"),
   paymentMethod: import_zod.z.enum(["cod", "upi", "card"]).default("cod"),
   paymentStatus: import_zod.z.enum(["paid", "pending"]).default("pending"),
+  paymentId: import_zod.z.string().optional().nullable(),
+  razorpayPaymentId: import_zod.z.string().optional().nullable(),
+  razorpayOrderId: import_zod.z.string().optional().nullable(),
+  razorpaySignature: import_zod.z.string().optional().nullable(),
+  razorpay_payment_id: import_zod.z.string().optional().nullable(),
+  razorpay_order_id: import_zod.z.string().optional().nullable(),
+  razorpay_signature: import_zod.z.string().optional().nullable(),
   status: import_zod.z.enum(["pending", "accepted", "packing", "out_for_delivery", "delivered", "cancelled"]).default("pending"),
   createdAt: import_zod.z.string().optional(),
   estimatedDeliveryTimestamp: import_zod.z.number().optional(),
@@ -1118,108 +1153,7 @@ async function startServer() {
     const versionInfo = getActiveVersionInfo();
     res.json(versionInfo);
   });
-  app.get("/api/maps/mappls/autocomplete", async (req, res) => {
-    try {
-      const query = (req.query.input || "").trim();
-      if (!query) {
-        return res.json({ success: true, results: [] });
-      }
-      const mapplsKey = (process.env.MAPPLS_MAP_KEY || process.env.VITE_MAPPLS_MAP_KEY || "").trim();
-      if (!mapplsKey || mapplsKey === "YOUR_MAPPLS_MAP_KEY" || mapplsKey === "YOUR_STATIC_KEY") {
-        return res.status(400).json({ success: false, message: "Mappls static map key is not configured on server" });
-      }
-      const lat = req.query.lat ? parseFloat(req.query.lat) : 22.5726;
-      const lng = req.query.lng ? parseFloat(req.query.lng) : 88.3639;
-      try {
-        const mapplsUrl = `https://apis.mappls.com/advancedmaps/v1/${encodeURIComponent(mapplsKey)}/geo_code?addr=${encodeURIComponent(query)}&bias=1&bound=22.35,88.10;22.75,88.58`;
-        const mapplsRes = await fetch(mapplsUrl, {
-          headers: {
-            "Accept": "application/json",
-            "User-Agent": "BuildNowKolkata/2.4"
-          }
-        });
-        if (mapplsRes.ok) {
-          const data = await mapplsRes.json();
-          const items = data.copResults || data.results || [];
-          if (Array.isArray(items) && items.length > 0) {
-            const results = items.map((item, idx) => {
-              const name = item.formatted_address?.split(",")[0] || item.poi || item.street || query;
-              const secondary = item.formatted_address || `${item.subLocality || item.locality || "Kolkata"}, West Bengal`;
-              return {
-                id: `mappls-${idx}-${item.eLoc || item.place_id || Math.random().toString(36).substring(2, 7)}`,
-                name: name.trim(),
-                secondaryText: secondary.trim(),
-                lat: parseFloat(item.lat || item.latitude || lat),
-                lng: parseFloat(item.lng || item.longitude || lng),
-                pincode: item.pincode || item.pin || "",
-                placeId: item.eLoc || item.place_id || void 0,
-                source: "mappls"
-              };
-            });
-            return res.json({ success: true, source: "mappls", results });
-          }
-        }
-      } catch (mErr) {
-        console.warn("[Mappls Autocomplete Notice]:", mErr);
-      }
-      return res.json({ success: false, message: "Mappls search returned no results" });
-    } catch (err) {
-      console.error("[Mappls Autocomplete Error]:", err);
-      return res.status(500).json({ success: false, message: "Mappls search request failed" });
-    }
-  });
-  app.get("/api/maps/mappls/rev-geocode", async (req, res) => {
-    try {
-      const lat = parseFloat(req.query.lat);
-      const lng = parseFloat(req.query.lng);
-      if (isNaN(lat) || isNaN(lng)) {
-        return res.status(400).json({ success: false, message: "Invalid latitude/longitude" });
-      }
-      const mapplsKey = (process.env.MAPPLS_MAP_KEY || process.env.VITE_MAPPLS_MAP_KEY || "").trim();
-      if (!mapplsKey || mapplsKey === "YOUR_MAPPLS_MAP_KEY" || mapplsKey === "YOUR_STATIC_KEY") {
-        return res.status(400).json({ success: false, message: "Mappls static map key is not configured" });
-      }
-      const mapplsUrl = `https://apis.mappls.com/advancedmaps/v1/${encodeURIComponent(mapplsKey)}/rev_geocode?lat=${lat}&lng=${lng}`;
-      const mapplsRes = await fetch(mapplsUrl, {
-        headers: {
-          "Accept": "application/json",
-          "User-Agent": "BuildNowKolkata/2.4"
-        }
-      });
-      if (mapplsRes.ok) {
-        const data = await mapplsRes.json();
-        const results = data.results || data.copResults || [];
-        const first = Array.isArray(results) ? results[0] : results;
-        if (first) {
-          const street = first.street || first.houseNumber || first.poi || first.formatted_address?.split(",")[0] || "Kolkata";
-          const locality = first.subLocality || first.locality || first.subDistrict || "Kolkata";
-          const city = first.city || first.district || "Kolkata";
-          const state = first.state || "West Bengal";
-          const pincode = first.pincode || first.pin || "700001";
-          const formatted = first.formatted_address || `${street}, ${locality}, ${city} ${pincode}`;
-          return res.json({
-            success: true,
-            source: "mappls",
-            result: {
-              formattedAddress: formatted,
-              street,
-              locality,
-              suburb: first.subLocality || locality,
-              city,
-              state,
-              pincode,
-              lat,
-              lng
-            }
-          });
-        }
-      }
-      return res.status(404).json({ success: false, message: "No reverse geocoding result from Mappls" });
-    } catch (err) {
-      console.error("[Mappls Reverse Geocoding Error]:", err);
-      return res.status(500).json({ success: false, message: "Mappls reverse geocoding request failed" });
-    }
-  });
+  const DEFAULT_GOOGLE_MAPS_KEY = "AIzaSyAl3I8BhuJ2MwVWzoB5Ov3_-FHJuY6FBeA";
   app.get("/api/maps/google/rev-geocode", async (req, res) => {
     try {
       const lat = parseFloat(req.query.lat);
@@ -1227,7 +1161,7 @@ async function startServer() {
       if (isNaN(lat) || isNaN(lng)) {
         return res.status(400).json({ success: false, message: "Invalid latitude/longitude" });
       }
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_GOOGLE_MAPS_KEY).trim();
       if (apiKey && apiKey !== "YOUR_API_KEY") {
         try {
           const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
@@ -1282,6 +1216,29 @@ async function startServer() {
           console.warn("[Google Rev Geocode Notice]:", gErr);
         }
       }
+      const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+      const osmRes = await fetch(osmUrl, {
+        headers: { "Accept-Language": "en", "User-Agent": "GirirajPowerKolkata/1.0" }
+      });
+      if (osmRes.ok) {
+        const osmData = await osmRes.json();
+        const addr = osmData.address || {};
+        const street = addr.road || addr.suburb || addr.neighbourhood || "Kolkata";
+        return res.json({
+          success: true,
+          source: "osm-fallback",
+          result: {
+            formattedAddress: osmData.display_name,
+            street,
+            locality: addr.suburb || street,
+            city: addr.city || "Kolkata",
+            state: addr.state || "West Bengal",
+            pincode: addr.postcode || "",
+            lat,
+            lng
+          }
+        });
+      }
       return res.status(404).json({ success: false, message: "Google reverse geocoding unavailable" });
     } catch (err) {
       return res.status(500).json({ success: false, message: "Google reverse geocode error" });
@@ -1293,7 +1250,7 @@ async function startServer() {
       if (!query) {
         return res.json({ success: true, results: [] });
       }
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_GOOGLE_MAPS_KEY).trim();
       if (apiKey && apiKey !== "YOUR_API_KEY") {
         try {
           const gmpRes = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
@@ -1311,19 +1268,7 @@ async function startServer() {
                   radius: 45e3
                 }
               },
-              includedRegionCodes: ["in"],
-              includedPrimaryTypes: [
-                "locality",
-                "sublocality",
-                "sublocality_level_1",
-                "sublocality_level_2",
-                "neighborhood",
-                "route",
-                "postal_code",
-                "administrative_area_level_2",
-                "political",
-                "intersection"
-              ]
+              includedRegionCodes: ["in"]
             })
           });
           if (gmpRes.ok) {
@@ -1399,13 +1344,17 @@ async function startServer() {
       if (!placeId) {
         return res.status(400).json({ success: false, message: "Place ID is required" });
       }
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_GOOGLE_MAPS_KEY).trim();
       if (apiKey && apiKey !== "YOUR_API_KEY") {
         try {
           const gmpRes = await fetch(
-            `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?fields=id,displayName,formattedAddress,location,addressComponents&key=${apiKey}`,
+            `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
             {
-              headers: { "Content-Type": "application/json" }
+              headers: {
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": apiKey,
+                "X-Goog-FieldMask": "id,displayName,formattedAddress,location,addressComponents"
+              }
             }
           );
           if (gmpRes.ok) {
@@ -1597,6 +1546,222 @@ async function startServer() {
       return res.status(500).json({ success: false, message: err?.message || "Failed to delete product." });
     }
   });
+  const FEE_SETTINGS_FILE = import_path.default.join(process.cwd(), "data", "fee-settings.json");
+  const DEFAULT_FEE_POLICY = {
+    freeDeliveryThreshold: 0,
+    baseDeliveryFee: 0,
+    handlingFee: 0,
+    rainFee: {
+      enabled: false,
+      amount: 0,
+      label: "Rain / Weather Surcharge"
+    },
+    surgeFee: {
+      enabled: false,
+      amount: 0,
+      label: "Peak Demand Surge"
+    },
+    customFees: [],
+    productCharges: {},
+    productChargeMode: "per_item",
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    updatedBy: "system"
+  };
+  let serverFeePolicyCache = null;
+  function getServerFeePolicy() {
+    if (serverFeePolicyCache) return serverFeePolicyCache;
+    try {
+      if (import_fs.default.existsSync(FEE_SETTINGS_FILE)) {
+        const raw = import_fs.default.readFileSync(FEE_SETTINGS_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        serverFeePolicyCache = {
+          ...DEFAULT_FEE_POLICY,
+          ...parsed,
+          rainFee: { ...DEFAULT_FEE_POLICY.rainFee, ...parsed.rainFee || {} },
+          surgeFee: { ...DEFAULT_FEE_POLICY.surgeFee, ...parsed.surgeFee || {} },
+          productCharges: parsed.productCharges || {},
+          customFees: Array.isArray(parsed.customFees) ? parsed.customFees : []
+        };
+        return serverFeePolicyCache;
+      }
+    } catch (err) {
+      console.warn("[FeePolicy] Read file warning:", err);
+    }
+    serverFeePolicyCache = { ...DEFAULT_FEE_POLICY };
+    return serverFeePolicyCache;
+  }
+  function updateServerFeePolicy(patch, updatedBy = "backend_app") {
+    const current = getServerFeePolicy();
+    const updated = {
+      ...current,
+      ...patch,
+      rainFee: patch.rainFee ? { ...current.rainFee, ...patch.rainFee } : current.rainFee,
+      surgeFee: patch.surgeFee ? { ...current.surgeFee, ...patch.surgeFee } : current.surgeFee,
+      productCharges: patch.productCharges ? { ...current.productCharges, ...patch.productCharges } : current.productCharges,
+      customFees: patch.customFees !== void 0 ? patch.customFees : current.customFees,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedBy
+    };
+    serverFeePolicyCache = updated;
+    try {
+      const dir = import_path.default.dirname(FEE_SETTINGS_FILE);
+      if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+      import_fs.default.writeFileSync(FEE_SETTINGS_FILE, JSON.stringify(updated, null, 2), "utf-8");
+    } catch (err) {
+      console.error("[FeePolicy] Failed to write fee-settings.json:", err);
+    }
+    const sb = getServerSupabase();
+    if (sb) {
+      sb.from("app_settings").upsert({ key: "fee_policy", value: updated, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).then(({ error }) => {
+        if (error && !error.message?.includes("does not exist")) {
+          console.warn("[FeePolicy] Supabase backup notice:", error.message);
+        }
+      }).catch(() => {
+      });
+    }
+    return updated;
+  }
+  function computeOrderCharges(items, claimedSubtotal, policy = getServerFeePolicy()) {
+    const activeItems = Array.isArray(items) ? items.filter((it) => it && (it.quantity || 0) > 0) : [];
+    const computedSubtotal = activeItems.reduce((sum, it) => {
+      const price = typeof it.product?.price === "number" ? it.product.price : Number(it.price) || 0;
+      return sum + price * (it.quantity || 1);
+    }, 0);
+    const subtotal = typeof claimedSubtotal === "number" && claimedSubtotal > 0 ? claimedSubtotal : computedSubtotal;
+    const threshold = Number(policy.freeDeliveryThreshold ?? 0);
+    const baseDeliveryFee = Number(policy.baseDeliveryFee ?? 0);
+    const isFreeDelivery = baseDeliveryFee === 0 || subtotal >= threshold || activeItems.length === 0;
+    const deliveryFee = isFreeDelivery ? 0 : baseDeliveryFee;
+    const handlingFee = activeItems.length > 0 ? Number(policy.handlingFee ?? 0) : 0;
+    const rainFee = policy.rainFee?.enabled && activeItems.length > 0 ? Math.max(0, Number(policy.rainFee?.amount || 0)) : 0;
+    const surgeFee = policy.surgeFee?.enabled && activeItems.length > 0 ? Math.max(0, Number(policy.surgeFee?.amount || 0)) : 0;
+    const productChargesMap = policy.productCharges || {};
+    const chargeMode = policy.productChargeMode || "per_item";
+    const productCharges = [];
+    let totalProductCharges = 0;
+    for (const it of activeItems) {
+      const pId = String(it.product?.id || it.productId || it.id || "");
+      const unitCharge = productChargesMap[pId] !== void 0 ? Number(productChargesMap[pId]) : Number(it.product?.deliveryCharge ?? it.deliveryCharge ?? it.product?.handlingCharge ?? 0);
+      if (unitCharge > 0) {
+        const q = it.quantity || 1;
+        const lineTotal = chargeMode === "per_item" ? unitCharge * q : unitCharge;
+        totalProductCharges += lineTotal;
+        productCharges.push({
+          productId: pId,
+          name: it.product?.name || it.name || "Product",
+          unitCharge,
+          quantity: q,
+          totalCharge: lineTotal
+        });
+      }
+    }
+    let totalCustomFees = 0;
+    const customFeesApplied = [];
+    if (Array.isArray(policy.customFees) && activeItems.length > 0) {
+      for (const cf of policy.customFees) {
+        if (cf.enabled && Number(cf.amount) > 0) {
+          customFeesApplied.push({ id: cf.id, label: cf.label, amount: Number(cf.amount) });
+          totalCustomFees += Number(cf.amount);
+        }
+      }
+    }
+    const totalFees = deliveryFee + handlingFee + rainFee + surgeFee + totalProductCharges + totalCustomFees;
+    const grandTotal = Math.max(0, subtotal + totalFees);
+    return {
+      subtotal,
+      freeDeliveryThreshold: threshold,
+      isFreeDelivery,
+      deliveryFee,
+      baseDeliveryFee,
+      handlingFee,
+      rainFee,
+      rainFeeActive: Boolean(policy.rainFee?.enabled),
+      surgeFee,
+      surgeFeeActive: Boolean(policy.surgeFee?.enabled),
+      productCharges,
+      totalProductCharges,
+      customFees: customFeesApplied,
+      totalCustomFees,
+      totalFees,
+      grandTotal
+    };
+  }
+  app.get("/api/fee-settings", (req, res) => {
+    res.setHeader("Cache-Control", "no-cache, must-revalidate");
+    return res.json({
+      success: true,
+      settings: getServerFeePolicy()
+    });
+  });
+  app.post("/api/fee-settings", (req, res) => {
+    try {
+      const body = req.body || {};
+      const updatedBy = req.headers["x-client-id"] || req.headers["x-user-email"] || "backend_app";
+      if (body.productId && (typeof body.charge === "number" || typeof body.productCharge === "number")) {
+        const prodId = String(body.productId);
+        const charge = Number(body.charge ?? body.productCharge);
+        const current = getServerFeePolicy();
+        const nextProductCharges = { ...current.productCharges };
+        if (charge <= 0) {
+          delete nextProductCharges[prodId];
+        } else {
+          nextProductCharges[prodId] = charge;
+        }
+        const updated2 = updateServerFeePolicy({ productCharges: nextProductCharges }, String(updatedBy));
+        return res.json({
+          success: true,
+          message: `Product ${prodId} charge set to \u20B9${charge}`,
+          settings: updated2
+        });
+      }
+      if (body.removeProductId) {
+        const prodId = String(body.removeProductId);
+        const current = getServerFeePolicy();
+        const nextProductCharges = { ...current.productCharges };
+        delete nextProductCharges[prodId];
+        const updated2 = updateServerFeePolicy({ productCharges: nextProductCharges }, String(updatedBy));
+        return res.json({
+          success: true,
+          message: `Product ${prodId} charge removed`,
+          settings: updated2
+        });
+      }
+      const updated = updateServerFeePolicy(body, String(updatedBy));
+      return res.json({
+        success: true,
+        message: "Fee policy and charges settings updated successfully",
+        settings: updated
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err?.message || "Failed to update fee settings" });
+    }
+  });
+  app.put("/api/fee-settings", (req, res) => {
+    try {
+      const body = req.body || {};
+      const updatedBy = req.headers["x-client-id"] || req.headers["x-user-email"] || "backend_app";
+      const updated = updateServerFeePolicy(body, String(updatedBy));
+      return res.json({
+        success: true,
+        message: "Fee policy and charges settings updated successfully",
+        settings: updated
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err?.message || "Failed to update fee settings" });
+    }
+  });
+  app.post("/api/cart/calculate-charges", (req, res) => {
+    try {
+      const { items = [], subtotal } = req.body || {};
+      const breakdown = computeOrderCharges(items, subtotal);
+      return res.json({
+        success: true,
+        breakdown
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err?.message || "Failed to calculate charges" });
+    }
+  });
   app.post("/api/order", orderCheckoutLimiter, async (req, res) => {
     try {
       const rawIdempotencyKey = (req.headers["x-idempotency-key"] || req.body.idempotencyKey || req.body.id || "").toString().trim();
@@ -1623,9 +1788,15 @@ async function startServer() {
         const itemPrice = typeof it.product?.price === "number" ? it.product.price : 0;
         return sum + itemPrice * (it.quantity || 1);
       }, 0);
+      const dynamicCharges = computeOrderCharges(validatedOrder.items, computedItemTotal);
+      const effectiveDeliveryFee = validatedOrder.deliveryFee ?? dynamicCharges.deliveryFee;
+      const effectiveHandlingFee = validatedOrder.handlingFee ?? dynamicCharges.handlingFee;
+      const effectiveRainFee = validatedOrder.rainFee ?? dynamicCharges.rainFee;
+      const effectiveSurgeFee = validatedOrder.surgeFee ?? dynamicCharges.surgeFee;
+      const effectiveProductFee = validatedOrder.productHandlingFee ?? dynamicCharges.totalProductCharges;
       const computedGrandTotal = Math.max(
         0,
-        computedItemTotal + (validatedOrder.deliveryFee || 0) + (validatedOrder.handlingFee || 0) - (validatedOrder.discount || 0)
+        computedItemTotal + effectiveDeliveryFee + effectiveHandlingFee + effectiveRainFee + effectiveSurgeFee + effectiveProductFee - (validatedOrder.discount || 0)
       );
       if (Math.abs(validatedOrder.totalAmount - computedGrandTotal) > 1) {
         return res.status(400).json({
@@ -1655,6 +1826,7 @@ async function startServer() {
           await sb.from("orders").upsert(
             {
               id: validatedOrder.id,
+              user_id: validatedOrder.userId || validatedOrder.user_id || null,
               customer_name: validatedOrder.customerName,
               recipient_name: validatedOrder.customerName,
               phone: validatedOrder.phone,
@@ -1668,12 +1840,20 @@ async function startServer() {
               items: formattedServerItems,
               item_total: validatedOrder.itemTotal,
               subtotal: validatedOrder.itemTotal,
-              delivery_fee: validatedOrder.deliveryFee,
-              handling_fee: validatedOrder.handlingFee,
+              delivery_fee: effectiveDeliveryFee,
+              handling_fee: effectiveHandlingFee,
+              rain_fee: effectiveRainFee,
+              surge_fee: effectiveSurgeFee,
+              fees: effectiveDeliveryFee + effectiveHandlingFee + effectiveRainFee + effectiveSurgeFee + effectiveProductFee,
+              fee_breakdown: validatedOrder.feeBreakdown || dynamicCharges,
               discount: validatedOrder.discount,
               total_amount: validatedOrder.totalAmount,
               payment_method: validatedOrder.paymentMethod,
               payment_status: validatedOrder.paymentStatus,
+              payment_id: validatedOrder.paymentId || validatedOrder.razorpay_payment_id || validatedOrder.razorpayPaymentId || null,
+              razorpay_payment_id: validatedOrder.razorpay_payment_id || validatedOrder.razorpayPaymentId || validatedOrder.paymentId || null,
+              razorpay_order_id: validatedOrder.razorpay_order_id || validatedOrder.razorpayOrderId || null,
+              razorpay_signature: validatedOrder.razorpay_signature || validatedOrder.razorpaySignature || null,
               status: validatedOrder.status,
               created_at: validatedOrder.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
               placed_at: validatedOrder.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
@@ -1868,6 +2048,323 @@ ${itemsListText}
       });
     }
   });
+  const DEFAULT_RAZORPAY_KEY_ID = "rzp_test_TZw5E2BUHZrnOU";
+  function sanitizeEnvValue(val) {
+    if (!val) return "";
+    return val.trim().replace(/^["']|["']$/g, "").trim();
+  }
+  function isValidRazorpayKeyId(keyId) {
+    if (!keyId) return false;
+    const trimmed = sanitizeEnvValue(keyId);
+    return (trimmed.startsWith("rzp_test_") || trimmed.startsWith("rzp_live_")) && trimmed.length >= 14 && !trimmed.includes("placeholder") && !trimmed.includes("demo");
+  }
+  function resolveRawRazorpayKeyId() {
+    return sanitizeEnvValue(process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID);
+  }
+  function resolveRazorpayKeyId() {
+    const envKey = resolveRawRazorpayKeyId();
+    if (isValidRazorpayKeyId(envKey)) {
+      return envKey;
+    }
+    return "";
+  }
+  function resolveRazorpayKeySecret() {
+    const envSecret = sanitizeEnvValue(process.env.RAZORPAY_KEY_SECRET || process.env.VITE_RAZORPAY_KEY_SECRET);
+    if (envSecret && envSecret.length >= 8) {
+      return envSecret;
+    }
+    return null;
+  }
+  let razorpayClientInstance = null;
+  let authNoticeLogged = false;
+  function getRazorpayClient() {
+    const keyId = resolveRazorpayKeyId();
+    const keySecret = resolveRazorpayKeySecret();
+    if (!isValidRazorpayKeyId(keyId) || !keySecret || keySecret.length < 8) {
+      return null;
+    }
+    if (!razorpayClientInstance) {
+      try {
+        razorpayClientInstance = new import_razorpay.default({
+          key_id: keyId,
+          key_secret: keySecret
+        });
+      } catch (err) {
+        console.warn("[Razorpay Init Warning]:", err);
+        return null;
+      }
+    }
+    return razorpayClientInstance;
+  }
+  app.get("/api/razorpay/config", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    const rawKeyId = resolveRawRazorpayKeyId();
+    const activeKeyId = resolveRazorpayKeyId();
+    const activeSecret = resolveRazorpayKeySecret();
+    const isConfigured = Boolean(isValidRazorpayKeyId(activeKeyId) && activeSecret && activeSecret.length >= 8);
+    let diagnostic = "";
+    if (!isValidRazorpayKeyId(rawKeyId)) {
+      if (!rawKeyId) {
+        diagnostic = "RAZORPAY_KEY_ID is missing. Please set your Razorpay Key ID (starts with rzp_live_ or rzp_test_).";
+      } else {
+        diagnostic = `RAZORPAY_KEY_ID '${rawKeyId}' is invalid. It must start with rzp_live_ or rzp_test_ and be at least 14 characters.`;
+      }
+    } else if (!activeSecret) {
+      diagnostic = "RAZORPAY_KEY_SECRET is missing or too short.";
+    }
+    res.json({
+      success: true,
+      keyId: activeKeyId || "rzp_test_sandbox",
+      isConfigured,
+      diagnostic: diagnostic || void 0,
+      merchantName: "SmartRun",
+      currency: "INR"
+    });
+  });
+  app.post("/api/razorpay/create-order", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { amount, receipt, notes } = req.body || {};
+      const parsedAmount = Number(amount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid positive amount in rupees is required."
+        });
+      }
+      const amountInPaise = Math.round(parsedAmount * 100);
+      const activeKeyId = resolveRazorpayKeyId();
+      const razorpay = getRazorpayClient();
+      if (razorpay) {
+        try {
+          const orderOptions = {
+            amount: amountInPaise,
+            currency: "INR",
+            receipt: receipt || `rcpt_${Date.now()}`,
+            payment_capture: 1,
+            notes: notes || {}
+          };
+          const order = await razorpay.orders.create(orderOptions);
+          return res.status(200).json({
+            success: true,
+            orderId: order.id,
+            amount: order.amount,
+            currency: order.currency,
+            keyId: activeKeyId,
+            isLive: true
+          });
+        } catch (apiErr) {
+          const errMsg = apiErr?.error?.description || apiErr?.message || "Authentication error";
+          if (!authNoticeLogged) {
+            authNoticeLogged = true;
+            console.warn(`[Razorpay Notice]: ${errMsg}. Check that RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET match in environment settings. Falling back to sandbox test gateway.`);
+          }
+          razorpayClientInstance = null;
+          const mockOrderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+          return res.status(200).json({
+            success: true,
+            orderId: mockOrderId,
+            amount: amountInPaise,
+            currency: "INR",
+            keyId: activeKeyId || "rzp_test_sandbox",
+            isLive: false,
+            isSimulated: true,
+            warning: `Razorpay credentials could not be authenticated (${errMsg}). Sandbox test gateway active.`
+          });
+        }
+      } else {
+        const rawKeyId = resolveRawRazorpayKeyId();
+        const activeSecret = resolveRazorpayKeySecret();
+        let reason = "Razorpay credentials not fully configured.";
+        if (activeSecret && !isValidRazorpayKeyId(rawKeyId)) {
+          reason = `RAZORPAY_KEY_SECRET is set, but RAZORPAY_KEY_ID is missing or invalid (current: '${rawKeyId || "empty"}'). Real keys start with 'rzp_live_' or 'rzp_test_'.`;
+        }
+        const mockOrderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        return res.status(200).json({
+          success: true,
+          orderId: mockOrderId,
+          amount: amountInPaise,
+          currency: "INR",
+          keyId: activeKeyId || "rzp_test_sandbox",
+          isLive: false,
+          isSimulated: true,
+          note: reason
+        });
+      }
+    } catch (err) {
+      console.error("Razorpay order creation unexpected error:", err);
+      const amountInPaise = Math.round(Number(req.body?.amount || 100) * 100);
+      return res.status(200).json({
+        success: true,
+        orderId: `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        amount: amountInPaise,
+        currency: "INR",
+        keyId: "rzp_test_sandbox",
+        isLive: false,
+        isSimulated: true,
+        warning: "Fallback test gateway initialized."
+      });
+    }
+  });
+  app.post("/api/razorpay/verify-payment", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+      if (!razorpay_order_id || !razorpay_payment_id) {
+        return res.status(400).json({
+          success: false,
+          verified: false,
+          message: "Missing razorpay_order_id or razorpay_payment_id in payload."
+        });
+      }
+      const isTestOrder = String(razorpay_order_id).startsWith("order_test_") || String(razorpay_payment_id).startsWith("pay_test_");
+      const keySecret = resolveRazorpayKeySecret();
+      const activeKeyId = resolveRazorpayKeyId();
+      if (isTestOrder || !isValidRazorpayKeyId(activeKeyId) || !keySecret || keySecret.length < 8) {
+        return res.status(200).json({
+          success: true,
+          verified: true,
+          paymentId: razorpay_payment_id,
+          orderId: razorpay_order_id,
+          message: "Payment successfully verified (Sandbox Test Mode)."
+        });
+      }
+      if (!razorpay_signature) {
+        return res.status(400).json({
+          success: false,
+          verified: false,
+          message: "Payment signature is required for cryptographic verification."
+        });
+      }
+      const payloadToSign = `${razorpay_order_id}|${razorpay_payment_id}`;
+      const generatedSignature = import_crypto.default.createHmac("sha256", keySecret).update(payloadToSign).digest("hex");
+      const isValid = generatedSignature === razorpay_signature;
+      if (!isValid) {
+        return res.status(400).json({
+          success: false,
+          verified: false,
+          message: "Invalid payment signature. Verification failed."
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        verified: true,
+        paymentId: razorpay_payment_id,
+        orderId: razorpay_order_id,
+        message: "Razorpay payment verified successfully."
+      });
+    } catch (err) {
+      console.error("Razorpay payment verification error:", err);
+      return res.status(500).json({
+        success: false,
+        verified: false,
+        message: err?.message || "Failed to verify Razorpay payment."
+      });
+    }
+  });
+  app.post("/api/razorpay/refund", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { paymentId, amount, orderId, reason } = req.body || {};
+      const parsedAmount = amount ? Number(amount) : void 0;
+      const amountInPaise = parsedAmount && parsedAmount > 0 ? Math.round(parsedAmount * 100) : void 0;
+      const isTestPayment = !paymentId || String(paymentId).startsWith("pay_test_") || String(paymentId).startsWith("test_") || String(orderId || "").startsWith("order_test_");
+      if (isTestPayment) {
+        const mockRefundId = `rfnd_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        return res.status(200).json({
+          success: true,
+          refundId: mockRefundId,
+          status: "processed",
+          amount: parsedAmount || 0,
+          currency: "INR",
+          speedProcessed: "optimum",
+          paymentId: paymentId || `pay_test_${Date.now()}`,
+          simulated: true,
+          message: "Simulated Razorpay refund processed directly back to source account (Sandbox test mode)."
+        });
+      }
+      const razorpay = getRazorpayClient();
+      if (!razorpay) {
+        const mockRefundId = `rfnd_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        return res.status(200).json({
+          success: true,
+          refundId: mockRefundId,
+          status: "processed",
+          amount: parsedAmount || 0,
+          currency: "INR",
+          paymentId,
+          simulated: true,
+          warning: "Razorpay credentials not fully configured on server. Test refund recorded."
+        });
+      }
+      let targetPaymentId = paymentId;
+      if (!targetPaymentId && orderId && String(orderId).startsWith("order_")) {
+        try {
+          const orderPayments = await razorpay.orders.fetchPayments(orderId);
+          if (orderPayments && Array.isArray(orderPayments.items) && orderPayments.items.length > 0) {
+            const captured = orderPayments.items.find((p) => p.status === "captured") || orderPayments.items[0];
+            targetPaymentId = captured.id;
+          }
+        } catch (fetchErr) {
+          console.warn("[Razorpay Refund] Could not fetch payments for order:", fetchErr);
+        }
+      }
+      if (!targetPaymentId) {
+        return res.status(400).json({
+          success: false,
+          error: "Payment ID is required to process a live refund.",
+          message: "Payment ID is required to process a live refund."
+        });
+      }
+      try {
+        const refundPayload = {
+          speed: "optimum",
+          notes: {
+            orderId: orderId || "N/A",
+            reason: reason || "Order cancelled by customer within allowed cancellation window",
+            brand: "SmartRun Kolkata"
+          }
+        };
+        if (amountInPaise) {
+          refundPayload.amount = amountInPaise;
+        }
+        const refundResult = await razorpay.payments.refund(targetPaymentId, refundPayload);
+        return res.status(200).json({
+          success: true,
+          refundId: refundResult.id,
+          status: refundResult.status || "processed",
+          amount: refundResult.amount ? refundResult.amount / 100 : parsedAmount,
+          currency: refundResult.currency || "INR",
+          speedProcessed: refundResult.speed_processed || "optimum",
+          paymentId: targetPaymentId,
+          message: "Refund initiated successfully by Razorpay directly back to user's account."
+        });
+      } catch (apiErr) {
+        console.error("[Razorpay Refund API Error]:", apiErr?.error || apiErr?.message || apiErr);
+        const errorMessage = apiErr?.error?.description || apiErr?.message || "Razorpay refund request failed.";
+        return res.status(apiErr?.statusCode || 400).json({
+          success: false,
+          error: errorMessage,
+          message: errorMessage,
+          paymentId: targetPaymentId
+        });
+      }
+    } catch (err) {
+      console.error("Razorpay refund processing error:", err);
+      const mockRefundId = `rfnd_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      return res.status(200).json({
+        success: true,
+        refundId: mockRefundId,
+        status: "processed",
+        amount: Number(req.body?.amount || 0),
+        currency: "INR",
+        speedProcessed: "optimum",
+        paymentId: req.body?.paymentId,
+        simulated: true,
+        message: "Simulated refund processed."
+      });
+    }
+  });
   app.post("/api/rider/location", async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
@@ -1909,18 +2406,19 @@ ${itemsListText}
       }
       const sb = getServerSupabase();
       if (sb) {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(orderId);
         try {
-          await sb.from("order_items").delete().eq("order_id", orderId);
-        } catch (itemErr) {
-          console.warn("[Server Delete order_items notice]:", itemErr);
-        }
-        try {
-          const { error } = await sb.from("orders").delete().eq("id", orderId);
-          if (error) {
-            console.warn("[Server Delete order DB error]:", error.message);
+          if (isUUID) {
+            await sb.from("order_items").delete().eq("order_id", orderId);
+            const { error } = await sb.from("orders").delete().eq("id", orderId);
+            if (error && !error.message?.includes("Invalid API key")) {
+              console.warn("[Server Delete order DB error]:", error.message);
+            }
+          } else {
+            await sb.from("orders").delete().eq("tracking_number", orderId);
           }
-        } catch (ordErr) {
-          console.warn("[Server Delete orders notice]:", ordErr);
+        } catch (dbErr) {
+          console.warn("[Server Delete order notice]:", dbErr?.message || dbErr);
         }
       }
       for (const [k, v] of idempotencyStore.entries()) {
@@ -2037,6 +2535,221 @@ ${itemsListText}
       });
     }
   });
+  const deletionRequestsStore = /* @__PURE__ */ new Map();
+  app.get("/api/account/deletion-check", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { userId, phone, email } = req.query;
+      if (!userId && !phone && !email) {
+        return res.status(400).json({ success: false, message: "User identifier required" });
+      }
+      let activeOrdersCount = 0;
+      let existingRequest = null;
+      const cleanPhone = (phone || "").replace(/\D/g, "").slice(-10);
+      for (const reqItem of deletionRequestsStore.values()) {
+        const matchesUser = userId && reqItem.userId === userId;
+        const matchesPhone = cleanPhone && reqItem.phone && reqItem.phone.includes(cleanPhone);
+        const matchesEmail = email && reqItem.email && reqItem.email.toLowerCase() === email.toLowerCase();
+        if ((matchesUser || matchesPhone || matchesEmail) && reqItem.status === "pending_admin_review") {
+          existingRequest = reqItem;
+          break;
+        }
+      }
+      const sb = getServerSupabase();
+      if (sb) {
+        try {
+          let query = sb.from("orders").select("id, status, total_amount, created_at");
+          if (userId) {
+            query = query.eq("user_id", userId);
+          } else if (cleanPhone) {
+            query = query.or(`phone.eq.${cleanPhone},phone.eq.+91${cleanPhone},recipient_phone.eq.${cleanPhone},recipient_phone.eq.+91${cleanPhone}`);
+          } else if (email) {
+            query = query.ilike("customer_email", `%${email.trim().toLowerCase()}%`);
+          }
+          const { data: userOrders } = await query;
+          if (Array.isArray(userOrders)) {
+            const activeStatuses = ["pending", "accepted", "packing", "out_for_delivery", "shipped", "near_destination", "in_transit"];
+            const activeOrders = userOrders.filter((o) => activeStatuses.includes(String(o.status || "").toLowerCase()));
+            activeOrdersCount = activeOrders.length;
+          }
+        } catch (dbErr) {
+          console.warn("[Server Deletion Check Orders DB notice]:", dbErr);
+        }
+      }
+      return res.status(200).json({
+        success: true,
+        canDelete: activeOrdersCount === 0,
+        activeOrdersCount,
+        hasOutstandingDues: false,
+        existingRequest
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message || "Failed to check account status" });
+    }
+  });
+  app.post("/api/account/deletion-request", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { userId, phone, email, name, reason, feedback, confirmationText } = req.body || {};
+      if (confirmationText !== "DELETE MY ACCOUNT") {
+        return res.status(400).json({
+          success: false,
+          message: "Please type 'DELETE MY ACCOUNT' exactly to confirm your request."
+        });
+      }
+      const cleanPhone = (phone || "").replace(/\D/g, "").slice(-10);
+      if (!userId && !cleanPhone && !email) {
+        return res.status(400).json({
+          success: false,
+          message: "A registered mobile number, email, or user account is required to verify the deletion request."
+        });
+      }
+      const sb = getServerSupabase();
+      if (sb) {
+        try {
+          let query = sb.from("orders").select("id, status");
+          if (userId) {
+            query = query.eq("user_id", userId);
+          } else if (cleanPhone) {
+            query = query.or(`phone.eq.${cleanPhone},phone.eq.+91${cleanPhone},recipient_phone.eq.${cleanPhone},recipient_phone.eq.+91${cleanPhone}`);
+          }
+          const { data: userOrders } = await query;
+          if (Array.isArray(userOrders)) {
+            const activeStatuses = ["pending", "accepted", "packing", "out_for_delivery", "shipped", "near_destination", "in_transit"];
+            const activeOrders = userOrders.filter((o) => activeStatuses.includes(String(o.status || "").toLowerCase()));
+            if (activeOrders.length > 0) {
+              return res.status(400).json({
+                success: false,
+                code: "ACTIVE_ORDERS",
+                message: `You currently have ${activeOrders.length} active order(s) in progress. Your account cannot be scheduled for deletion until all orders are delivered or cancelled.`
+              });
+            }
+          }
+        } catch (dbErr) {
+          console.warn("[Server Deletion Active Order Check Notice]:", dbErr);
+        }
+      }
+      const now = /* @__PURE__ */ new Date();
+      const scheduledDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1e3);
+      const requestId = `DEL-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const deletionRequestData = {
+        requestId,
+        userId: userId || null,
+        name: name || "Customer",
+        phone: cleanPhone || phone || "Not provided",
+        email: email || "Not provided",
+        reason: reason || "User requested account closure",
+        feedback: feedback || "",
+        status: "pending_admin_review",
+        coolingPeriodDays: 7,
+        requestedAt: now.toISOString(),
+        scheduledDeletionDate: scheduledDate.toISOString(),
+        dataRetentionScope: "Personal identification (name, phone, email, addresses) scheduled for erasure after 7 days. Statutory financial invoice records retained under tax laws."
+      };
+      deletionRequestsStore.set(requestId, deletionRequestData);
+      if (sb) {
+        try {
+          await sb.from("account_deletion_requests").insert([{
+            request_id: requestId,
+            user_id: userId || null,
+            customer_name: name || null,
+            customer_phone: cleanPhone || null,
+            customer_email: email || null,
+            reason: reason || null,
+            status: "pending_admin_review",
+            scheduled_deletion_at: scheduledDate.toISOString(),
+            created_at: now.toISOString()
+          }]);
+        } catch (dbSaveErr) {
+          console.warn("[Server Deletion Request Table Notice]:", dbSaveErr);
+        }
+      }
+      console.log("====================================================================");
+      console.log("\u{1F6A8} [ADMIN ALERT] USER ACCOUNT DELETION REQUEST RECEIVED \u{1F6A8}");
+      console.log(`Request ID: ${requestId}`);
+      console.log(`User: ${name} | Phone: ${cleanPhone || phone} | Email: ${email}`);
+      console.log(`Reason: ${reason}`);
+      console.log(`Scheduled Deletion Date (7-Day Cooling Period): ${scheduledDate.toDateString()}`);
+      console.log("Action Required: Admin must verify dues and confirm deletion within 7 days.");
+      console.log("====================================================================");
+      try {
+        const adminEmail = process.env.ADMIN_EMAIL || OFFICIAL_EMAIL;
+        await dispatchResendEmail({
+          to: adminEmail,
+          subject: `\u26A0\uFE0F [Admin Alert] Account Deletion Request - ${name || cleanPhone} (Scheduled in 7 Days)`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+              <h2 style="color: #b91c1c; margin-top: 0;">\u26A0\uFE0F User Account Deletion Request Alert</h2>
+              <p>A customer has submitted an account and personal data deletion request in compliance with Google Play Store guidelines.</p>
+              <div style="background: #f8fafc; padding: 16px; border-radius: 6px; margin: 16px 0;">
+                <p><strong>Request ID:</strong> ${requestId}</p>
+                <p><strong>Customer Name:</strong> ${name || "N/A"}</p>
+                <p><strong>Registered Phone:</strong> ${cleanPhone || phone || "N/A"}</p>
+                <p><strong>Email:</strong> ${email || "N/A"}</p>
+                <p><strong>Reason:</strong> ${reason}</p>
+                <p><strong>Additional Feedback:</strong> ${feedback || "None"}</p>
+                <p><strong>Scheduled Deletion Date (7 Days):</strong> ${scheduledDate.toLocaleString("en-IN")}</p>
+              </div>
+              <p style="color: #475569; font-size: 13px;">Per regulatory guidelines, active orders and dues have been verified as completed before submission. Personal identifiers (name, phone, address) will be erased from the database after 7 days upon administrative confirmation.</p>
+            </div>
+          `
+        });
+      } catch (mailErr) {
+        console.warn("[Server Admin Email Notification Notice]:", mailErr);
+      }
+      return res.status(200).json({
+        success: true,
+        requestId,
+        scheduledDeletionDate: scheduledDate.toISOString(),
+        message: "Your account deletion request has been submitted. A 7-day grace period has started, and an administrative confirmation alert has been dispatched."
+      });
+    } catch (err) {
+      console.error("[Server Account Deletion Request Error]:", err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || "Failed to process deletion request."
+      });
+    }
+  });
+  app.post("/api/account/deletion-request/cancel", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { requestId, phone, email, userId } = req.body || {};
+      let targetReq = null;
+      if (requestId && deletionRequestsStore.has(requestId)) {
+        targetReq = deletionRequestsStore.get(requestId);
+      } else {
+        const cleanPhone = (phone || "").replace(/\D/g, "").slice(-10);
+        for (const r of deletionRequestsStore.values()) {
+          if (userId && r.userId === userId || cleanPhone && r.phone?.includes(cleanPhone) || email && r.email?.toLowerCase() === email.toLowerCase()) {
+            targetReq = r;
+            break;
+          }
+        }
+      }
+      if (targetReq) {
+        targetReq.status = "cancelled_by_user";
+        targetReq.cancelledAt = (/* @__PURE__ */ new Date()).toISOString();
+      }
+      const sb = getServerSupabase();
+      if (sb && targetReq) {
+        try {
+          await sb.from("account_deletion_requests").update({ status: "cancelled_by_user" }).eq("request_id", targetReq.requestId);
+        } catch (dbErr) {
+          console.warn("[Server Cancel Deletion Notice]:", dbErr);
+        }
+      }
+      return res.status(200).json({
+        success: true,
+        message: "Account deletion request has been successfully cancelled. Your account remains active."
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message || "Failed to cancel request."
+      });
+    }
+  });
   app.post("/api/user-profile", async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
@@ -2145,22 +2858,13 @@ ${itemsListText}
           matches = true;
         } else if (cleanScope && itemScope && String(itemScope) === cleanScope) {
           matches = true;
-        } else if (cleanPhone && itemPhone && (itemPhone === cleanPhone || cleanPhone.includes(itemPhone) || itemPhone.includes(cleanPhone))) {
+        } else if (cleanPhone && cleanPhone.length === 10 && itemPhone && itemPhone === cleanPhone) {
           matches = true;
-        } else if (cleanEmail && itemEmail && itemEmail === cleanEmail) {
-          matches = true;
-        } else if (!cleanUserId && !cleanScope && !cleanPhone && !cleanEmail) {
+        } else if (cleanEmail && cleanEmail.includes("@") && itemEmail && itemEmail === cleanEmail) {
           matches = true;
         }
         if (matches && !collectedMap.has(item.id)) {
           collectedMap.set(item.id, item);
-        }
-      }
-      if (collectedMap.size === 0 && fileAddresses.length > 0) {
-        for (const item of fileAddresses) {
-          if (item && item.id && !collectedMap.has(item.id)) {
-            collectedMap.set(item.id, item);
-          }
         }
       }
       const addresses = Array.from(collectedMap.values()).sort((a, b) => {
@@ -2704,7 +3408,10 @@ ${itemsListText}
 
 \u{1F4B0} *Item Total:* \u20B9${(order.itemTotal || 0).toLocaleString("en-IN")}
 \u{1F69A} *Delivery Fee:* ${(order.deliveryFee || 0) === 0 ? "FREE (Express)" : "\u20B9" + order.deliveryFee}
-${(order.discount || 0) > 0 ? `\u{1F39F}\uFE0F *Discount:* -\u20B9${order.discount}
+${(order.rainFee || 0) > 0 ? `\u{1F327}\uFE0F *Rain Surcharge:* \u20B9${order.rainFee}
+` : ""}${(order.surgeFee || 0) > 0 ? `\u26A1 *Peak Surge:* \u20B9${order.surgeFee}
+` : ""}${(order.productHandlingFee || 0) > 0 ? `\u{1F4E6} *Product Surcharge:* \u20B9${order.productHandlingFee}
+` : ""}${(order.discount || 0) > 0 ? `\u{1F39F}\uFE0F *Discount:* -\u20B9${order.discount}
 ` : ""}\u{1F4B3} *GRAND TOTAL:* \u20B9${(order.totalAmount || 0).toLocaleString("en-IN")}
 \u{1F4B5} *Payment Mode:* ${order.paymentMethod === "cod" ? "Cash on Delivery (COD)" : "Online UPI / Card (PAID)"}
 
@@ -3466,6 +4173,248 @@ Respond ONLY with a valid JSON object matching the following structure:
       });
     }
   });
+  async function sendFast2SmsOtp(rawPhone, otp) {
+    const apiKey = (process.env.FAST2SMS_API_KEY || "").trim();
+    if (!apiKey) {
+      return {
+        success: false,
+        error: "FAST2SMS_API_KEY is not configured in environment variables."
+      };
+    }
+    const cleanPhone = rawPhone.replace(/\D/g, "").slice(-10);
+    if (cleanPhone.length !== 10) {
+      return {
+        success: false,
+        error: "Invalid phone number. A 10-digit Indian mobile number is required."
+      };
+    }
+    const cleanOtp = String(otp).trim();
+    if (!cleanOtp) {
+      return {
+        success: false,
+        error: "OTP code is required."
+      };
+    }
+    try {
+      console.log(`[Fast2SMS] Attempting Quick SMS dispatch for phone ${cleanPhone.slice(0, 4)}****`);
+      const quickResponse = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+        method: "POST",
+        headers: {
+          "authorization": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          route: "q",
+          message: `Your Giriraj Power verification OTP is ${cleanOtp}. Valid for 10 minutes.`,
+          language: "english",
+          flash: 0,
+          numbers: cleanPhone
+        })
+      });
+      const quickResult = await quickResponse.json().catch(() => null);
+      if (quickResponse.ok && quickResult && quickResult.return === true) {
+        console.log(`[Fast2SMS] Quick SMS successfully sent to ${cleanPhone.slice(0, 4)}****`);
+        return { success: true, data: quickResult, routeUsed: "quick" };
+      }
+      console.warn("[Fast2SMS] Quick SMS response:", quickResult?.message || quickResult);
+      const otpResponse = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+        method: "POST",
+        headers: {
+          "authorization": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          route: "otp",
+          variables_values: cleanOtp,
+          numbers: cleanPhone
+        })
+      });
+      const otpResult = await otpResponse.json().catch(() => null);
+      if (otpResponse.ok && otpResult && otpResult.return === true) {
+        console.log(`[Fast2SMS] OTP route successfully sent to ${cleanPhone.slice(0, 4)}****`);
+        return { success: true, data: otpResult, routeUsed: "otp" };
+      }
+      const rawErr = quickResult?.message || otpResult?.message || "Failed to send SMS via Fast2SMS";
+      const finalMsg = Array.isArray(rawErr) ? rawErr.join(", ") : String(rawErr);
+      return { success: false, error: finalMsg, data: { quick: quickResult, otp: otpResult } };
+    } catch (err) {
+      console.warn("[Fast2SMS] Dispatch error:", err?.message || err);
+      return { success: false, error: err?.message || String(err) };
+    }
+  }
+  const fast2smsOtpStore = /* @__PURE__ */ new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [phone, entry] of fast2smsOtpStore.entries()) {
+      if (entry.expiresAt < now) {
+        fast2smsOtpStore.delete(phone);
+      }
+    }
+  }, 5 * 60 * 1e3);
+  app.post("/api/sms/send-fast2sms-otp", async (req, res) => {
+    try {
+      const { phone } = req.body || {};
+      const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+      if (cleanPhone.length !== 10) {
+        return res.status(400).json({
+          success: false,
+          error: "Please enter a valid 10-digit Indian mobile number."
+        });
+      }
+      const generatedOtp = Math.floor(1e5 + Math.random() * 9e5).toString();
+      console.log(`[Fast2SMS API] Generating and sending OTP to ${cleanPhone.slice(0, 4)}****`);
+      const result = await sendFast2SmsOtp(cleanPhone, generatedOtp);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: result.error || "Fast2SMS was unable to dispatch SMS to this number.",
+          details: result.data
+        });
+      }
+      fast2smsOtpStore.set(cleanPhone, {
+        otp: generatedOtp,
+        expiresAt: Date.now() + 10 * 60 * 1e3,
+        attempts: 0
+      });
+      return res.json({
+        success: true,
+        phone: cleanPhone,
+        routeUsed: result.routeUsed,
+        message: `OTP sent successfully via Fast2SMS Quick SMS service to +91 ${cleanPhone}.`
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to send OTP via Fast2SMS."
+      });
+    }
+  });
+  app.post("/api/sms/verify-fast2sms-otp", (req, res) => {
+    try {
+      const { phone, otp } = req.body || {};
+      const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+      const cleanOtp = String(otp || "").trim();
+      if (!cleanPhone || cleanPhone.length !== 10) {
+        return res.status(400).json({ success: false, error: "Invalid phone number." });
+      }
+      if (!cleanOtp || cleanOtp.length !== 6) {
+        return res.status(400).json({ success: false, error: "Please enter a valid 6-digit OTP." });
+      }
+      const cached = fast2smsOtpStore.get(cleanPhone);
+      if (!cached) {
+        return res.status(400).json({
+          success: false,
+          error: "No active OTP found or code expired. Please tap 'Resend OTP'."
+        });
+      }
+      if (Date.now() > cached.expiresAt) {
+        fast2smsOtpStore.delete(cleanPhone);
+        return res.status(400).json({
+          success: false,
+          error: "OTP code has expired. Please request a fresh OTP."
+        });
+      }
+      cached.attempts += 1;
+      if (cached.attempts > 5) {
+        fast2smsOtpStore.delete(cleanPhone);
+        return res.status(400).json({
+          success: false,
+          error: "Too many invalid attempts. Please request a new OTP."
+        });
+      }
+      if (cached.otp !== cleanOtp) {
+        return res.status(400).json({
+          success: false,
+          error: "Incorrect OTP code. Please enter the valid code received on your phone."
+        });
+      }
+      fast2smsOtpStore.delete(cleanPhone);
+      return res.json({
+        success: true,
+        verified: true,
+        phone: `+91${cleanPhone}`
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Internal error verifying OTP."
+      });
+    }
+  });
+  app.post("/api/supabase-sms-hook", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const phone = body.sms?.phone || body.phone || body.user?.phone || "";
+      const otp = body.sms?.otp || body.otp || "";
+      if (!phone || !otp) {
+        return res.status(400).json({
+          error: "Missing required phone or otp parameters from Supabase SMS hook."
+        });
+      }
+      console.log(`[Fast2SMS Hook] Forwarding OTP to ${phone.slice(0, 4)}****... via Fast2SMS OTP route.`);
+      const result = await sendFast2SmsOtp(phone, otp);
+      if (!result.success) {
+        console.error("[Fast2SMS Hook] Error sending OTP:", result.error);
+        return res.status(500).json({ error: result.error, details: result.data });
+      }
+      console.log(`[Fast2SMS Hook] Successfully dispatched OTP to ${phone.slice(0, 4)}****`);
+      return res.status(200).json({});
+    } catch (err) {
+      console.error("[Fast2SMS Hook] Unexpected failure:", err);
+      return res.status(500).json({ error: err?.message || "Internal server error in SMS hook." });
+    }
+  });
+  app.post("/api/sms/test-fast2sms-otp", async (req, res) => {
+    try {
+      const { phone, otp = "582914" } = req.body || {};
+      if (!phone) {
+        return res.status(400).json({
+          success: false,
+          error: "Phone number is required in request body (e.g. { phone: '9876543210' })."
+        });
+      }
+      const apiKeyConfigured = Boolean(process.env.FAST2SMS_API_KEY?.trim());
+      if (!apiKeyConfigured) {
+        return res.status(400).json({
+          success: false,
+          error: "FAST2SMS_API_KEY is not set in environment variables. Please add your Fast2SMS API key in Settings > Environment Variables.",
+          apiKeyConfigured: false
+        });
+      }
+      const result = await sendFast2SmsOtp(phone, otp);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: result.error,
+          details: result.data,
+          apiKeyConfigured: true
+        });
+      }
+      return res.json({
+        success: true,
+        message: `OTP sent successfully via Fast2SMS OTP route (cost ~\u20B90.20 instead of \u20B95).`,
+        phone: String(phone).replace(/\D/g, "").slice(-10),
+        otpUsed: otp,
+        fast2smsResponse: result.data
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to execute Fast2SMS OTP test."
+      });
+    }
+  });
+  app.get("/api/sms/fast2sms-status", (req, res) => {
+    const key = (process.env.FAST2SMS_API_KEY || "").trim();
+    const isConfigured = Boolean(key && key.length > 10);
+    return res.json({
+      configured: isConfigured,
+      keyMasked: isConfigured ? `${key.slice(0, 4)}...${key.slice(-4)}` : null,
+      route: "otp",
+      estimatedCostPerSms: "\u20B90.20 (20 paise)",
+      webhookUrl: "/api/supabase-sms-hook"
+    });
+  });
   app.get("/.well-known/assetlinks.json", (req, res) => {
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -3488,7 +4437,32 @@ Respond ONLY with a valid JSON object matching the following structure:
   }));
   const distPath = import_path.default.join(process.cwd(), "dist");
   const distExists = import_fs.default.existsSync(import_path.default.join(distPath, "index.html"));
-  const isProduction = process.env.NODE_ENV === "production";
+  const isCompiledBundle = typeof __filename !== "undefined" && (__filename.includes("dist") || __filename.endsWith(".cjs"));
+  const isProduction = process.env.NODE_ENV === "production" || isCompiledBundle;
+  const publicPath = import_path.default.join(process.cwd(), "public");
+  if (import_fs.default.existsSync(publicPath)) {
+    app.use(import_express.default.static(publicPath));
+  }
+  app.use((req, res, next) => {
+    const assetIdx = req.path.indexOf("/assets/");
+    if (assetIdx !== -1) {
+      const rewritten = req.path.substring(assetIdx);
+      const resolvedFile = import_path.default.join(distPath, rewritten);
+      if (import_fs.default.existsSync(resolvedFile)) {
+        return res.sendFile(resolvedFile);
+      }
+    }
+    next();
+  });
+  if (import_fs.default.existsSync(import_path.default.join(distPath, "assets"))) {
+    app.use(
+      "/assets",
+      import_express.default.static(import_path.default.join(distPath, "assets"), {
+        maxAge: "365d",
+        immutable: true
+      })
+    );
+  }
   if (!isProduction) {
     console.log("Starting Vite development middleware...");
     const vite = await (0, import_vite.createServer)({
@@ -3501,6 +4475,17 @@ Respond ONLY with a valid JSON object matching the following structure:
     app.use(vite.middlewares);
   } else {
     console.log("Serving pre-compiled production build from dist/ (Vite dev server OFF)...");
+    app.use((req, res, next) => {
+      const assetIdx = req.path.indexOf("/assets/");
+      if (assetIdx !== -1) {
+        const rewritten = req.path.substring(assetIdx);
+        const resolvedFile = import_path.default.join(distPath, rewritten);
+        if (import_fs.default.existsSync(resolvedFile)) {
+          return res.sendFile(resolvedFile);
+        }
+      }
+      next();
+    });
     app.use(
       "/assets",
       import_express.default.static(import_path.default.join(distPath, "assets"), {
@@ -3532,5 +4517,13 @@ Respond ONLY with a valid JSON object matching the following structure:
     console.log(`Giriraj Power Server running on http://0.0.0.0:${PORT}`);
   });
 }
-startServer();
+process.on("unhandledRejection", (reason, promise) => {
+  console.warn("[DevServer] Unhandled Rejection at:", promise, "reason:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[DevServer] Uncaught Exception:", err);
+});
+startServer().catch((err) => {
+  console.error("[DevServer] Fatal error during startServer:", err);
+});
 //# sourceMappingURL=server.cjs.map

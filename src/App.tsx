@@ -72,8 +72,10 @@ import { useVersionCheck } from './hooks/useVersionCheck';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { Browser } from '@capacitor/browser';
 import { initPushNotifications } from './services/pushNotificationService';
 import { showToast } from './utils/toast';
+import { AndroidAppBridgePrompt } from './components/AndroidAppBridgePrompt';
 
 export default function App() {
   const navigate = useNavigate();
@@ -341,10 +343,20 @@ export default function App() {
           setActiveUserScope(scope);
         }
         const userMeta = user.user_metadata || {};
+        const isInternalPhoneUser =
+          Boolean(user.email?.includes('@girirajpower.internal')) ||
+          (!user.email && Boolean(user.phone));
         const local = getSavedUserProfile(scope || undefined);
         const phone = cleanPhoneAutofill(user.phone || userMeta.phone || local?.phone || '');
-        const name = userMeta.full_name || userMeta.name || local?.name || (user.email ? user.email.split('@')[0] : 'Customer');
-        const email = user.email || local?.email || '';
+        const name =
+          userMeta.full_name ||
+          userMeta.name ||
+          local?.name ||
+          (user.email && !user.email.includes('@girirajpower.internal')
+            ? user.email.split('@')[0]
+            : (phone ? `Giriraj Member (${phone.slice(-4)})` : 'Customer'));
+        const rawEmail = isInternalPhoneUser ? '' : (user.email || local?.email || '');
+        const email = rawEmail.includes('@girirajpower.internal') ? '' : rawEmail;
         const photoURL = userMeta.avatar_url || userMeta.picture || local?.photoURL || undefined;
         const dob = userMeta.dob || userMeta.birth_date || userMeta.date_of_birth || local?.dob || '';
         const prof: UserProfile = {
@@ -352,7 +364,7 @@ export default function App() {
           phone,
           name,
           email,
-          emailVerified: !!user.email_confirmed_at || !!user.confirmed_at || local?.emailVerified || true,
+          emailVerified: isInternalPhoneUser ? false : (!!user.email_confirmed_at || !!user.confirmed_at || local?.emailVerified || Boolean(email)),
           photoURL,
           dob,
           walletBalance: local?.walletBalance || 0,
@@ -364,13 +376,15 @@ export default function App() {
           .then((cloudProf) => {
             if (cloudProf) {
               const mergedPhone = cleanPhoneAutofill(cloudProf.phone || prof.phone);
+              const cloudEmailClean =
+                cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : '';
               const merged: UserProfile = {
                 ...prof,
                 ...cloudProf,
                 id: user.id,
                 name: cloudProf.name || prof.name,
                 phone: mergedPhone,
-                email: cloudProf.email || prof.email,
+                email: isInternalPhoneUser ? '' : (cloudEmailClean || prof.email),
                 dob: cloudProf.dob || prof.dob,
                 photoURL: cloudProf.photoURL || prof.photoURL,
                 walletBalance: cloudProf.walletBalance ?? prof.walletBalance,
@@ -430,10 +444,20 @@ export default function App() {
           setActiveUserScope(scope);
         }
         const userMeta = user.user_metadata || {};
+        const isInternalPhoneUser =
+          Boolean(user.email?.includes('@girirajpower.internal')) ||
+          (!user.email && Boolean(user.phone));
         const local = getSavedUserProfile(scope || undefined);
         const phone = cleanPhoneAutofill(user.phone || userMeta.phone || local?.phone || '');
-        const name = userMeta.full_name || userMeta.name || local?.name || (user.email ? user.email.split('@')[0] : 'Customer');
-        const email = user.email || local?.email || '';
+        const name =
+          userMeta.full_name ||
+          userMeta.name ||
+          local?.name ||
+          (user.email && !user.email.includes('@girirajpower.internal')
+            ? user.email.split('@')[0]
+            : (phone ? `Giriraj Member (${phone.slice(-4)})` : 'Customer'));
+        const rawEmail = isInternalPhoneUser ? '' : (user.email || local?.email || '');
+        const email = rawEmail.includes('@girirajpower.internal') ? '' : rawEmail;
         const photoURL = userMeta.avatar_url || userMeta.picture || local?.photoURL || undefined;
         const dob = userMeta.dob || userMeta.birth_date || userMeta.date_of_birth || local?.dob || '';
         const prof: UserProfile = {
@@ -441,7 +465,7 @@ export default function App() {
           phone,
           name,
           email,
-          emailVerified: !!user.email_confirmed_at || !!user.confirmed_at || local?.emailVerified || true,
+          emailVerified: isInternalPhoneUser ? false : (!!user.email_confirmed_at || !!user.confirmed_at || local?.emailVerified || Boolean(email)),
           photoURL,
           dob,
           walletBalance: local?.walletBalance || 0,
@@ -453,13 +477,15 @@ export default function App() {
           .then((cloudProf) => {
             if (cloudProf) {
               const mergedPhone = cleanPhoneAutofill(cloudProf.phone || prof.phone);
+              const cloudEmailClean =
+                cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : '';
               const merged: UserProfile = {
                 ...prof,
                 ...cloudProf,
                 id: user.id,
                 name: cloudProf.name || prof.name,
                 phone: mergedPhone,
-                email: cloudProf.email || prof.email,
+                email: isInternalPhoneUser ? '' : (cloudEmailClean || prof.email),
                 dob: cloudProf.dob || prof.dob,
                 photoURL: cloudProf.photoURL || prof.photoURL,
                 walletBalance: cloudProf.walletBalance ?? prof.walletBalance,
@@ -572,11 +598,22 @@ export default function App() {
       try {
         if (!urlStr) return;
 
+        // Automatically close in-app Chrome Custom Tab if active
+        Browser.close().catch(() => {});
+
         // Check if OAuth callback with tokens or auth code
-        if (urlStr.includes('#access_token') || urlStr.includes('?access_token') || urlStr.includes('code=') || urlStr.includes('error_description')) {
-          // Normalize URL for parsing (support smartrun:// and legacy buildnow://)
+        if (
+          urlStr.includes('#access_token') ||
+          urlStr.includes('?access_token') ||
+          urlStr.includes('access_token=') ||
+          urlStr.includes('code=') ||
+          urlStr.includes('error_description')
+        ) {
+          // Normalize URL for parsing (support smartrun://, in.smartrun.app://, and legacy buildnow://)
           const normalizedUrl = urlStr.startsWith('smartrun://')
             ? urlStr.replace('smartrun://', 'https://smartrun.in/')
+            : urlStr.startsWith('in.smartrun.app://')
+            ? urlStr.replace('in.smartrun.app://', 'https://smartrun.in/')
             : urlStr.startsWith('buildnow://')
             ? urlStr.replace('buildnow://', 'https://smartrun.in/')
             : urlStr;
@@ -588,6 +625,7 @@ export default function App() {
             // 1. Check for error description
             const errorDesc = queryParams.get('error_description');
             if (errorDesc) {
+              Browser.close().catch(() => {});
               showToast(`Login failed: ${decodeURIComponent(errorDesc)}`, 'error');
               navigate('/login');
               return;
@@ -597,15 +635,25 @@ export default function App() {
               urlStr.includes('reset-password') ||
               queryParams.get('type') === 'recovery';
 
-            // 2. Check for PKCE Authorization Code (?code=...)
-            const authCode = queryParams.get('code');
+            // Check both query and hash fragments
+            const hashIdx = urlStr.indexOf('#');
+            const hashStr = hashIdx !== -1 ? urlStr.substring(hashIdx + 1) : '';
+            const hashParams = new URLSearchParams(hashStr);
+
+            // 2. Check for PKCE Authorization Code (?code=... or #code=...)
+            const authCode = queryParams.get('code') || hashParams.get('code');
             if (authCode) {
               supabase.auth.exchangeCodeForSession(authCode)
                 .then(({ data, error }) => {
+                  Browser.close().catch(() => {});
                   if (error) {
                     console.warn('exchangeCodeForSession error:', error);
                     showToast('Verification failed. Please try again.', 'error');
                   } else if (data?.session) {
+                    try {
+                      localStorage.removeItem('giriraj_pending_native_oauth');
+                      localStorage.removeItem('giriraj_oauth_from_android_app');
+                    } catch {}
                     if (isPasswordRecovery) {
                       showToast('Please enter your new password.', 'success');
                       navigate('/reset-password');
@@ -615,41 +663,48 @@ export default function App() {
                     }
                   }
                 })
-                .catch((err) => console.warn('exchangeCode error:', err));
+                .catch((err) => {
+                  Browser.close().catch(() => {});
+                  console.warn('exchangeCode error:', err);
+                });
               return;
             }
 
-            // 3. Check for Implicit Grant hash fragments (#access_token=...&refresh_token=...)
-            const hashIdx = urlStr.indexOf('#');
-            if (hashIdx !== -1) {
-              const hash = urlStr.substring(hashIdx + 1);
-              const hashParams = new URLSearchParams(hash);
-              const accessToken = hashParams.get('access_token');
-              const refreshToken = hashParams.get('refresh_token');
-              const isRecoveryFromHash = isPasswordRecovery || hashParams.get('type') === 'recovery';
-              if (accessToken && refreshToken) {
-                supabase.auth.setSession({
-                  access_token: accessToken,
-                  refresh_token: refreshToken
-                })
-                  .then(({ data, error }) => {
-                    if (!error && data?.session) {
-                      if (isRecoveryFromHash) {
-                        showToast('Please enter your new password.', 'success');
-                        navigate('/reset-password');
-                      } else {
-                        showToast('Welcome back! Successfully logged in.', 'success');
-                        navigate('/');
-                      }
+            // 3. Check for tokens in hash or query (?access_token=... or #access_token=...)
+            const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
+            const refreshToken = hashParams.get('refresh_token') || queryParams.get('refresh_token');
+            const isRecoveryFromHash = isPasswordRecovery || hashParams.get('type') === 'recovery' || queryParams.get('type') === 'recovery';
+            if (accessToken && refreshToken) {
+              supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken
+              })
+                .then(({ data, error }) => {
+                  Browser.close().catch(() => {});
+                  if (!error && data?.session) {
+                    try {
+                      localStorage.removeItem('giriraj_pending_native_oauth');
+                      localStorage.removeItem('giriraj_oauth_from_android_app');
+                    } catch {}
+                    if (isRecoveryFromHash) {
+                      showToast('Please enter your new password.', 'success');
+                      navigate('/reset-password');
+                    } else {
+                      showToast('Welcome back! Successfully logged in.', 'success');
+                      navigate('/');
                     }
-                  })
-                  .catch((e) => console.warn('Supabase setSession from deep link notice:', e));
-                return;
-              }
+                  }
+                })
+                .catch((e) => {
+                  Browser.close().catch(() => {});
+                  console.warn('Supabase setSession from deep link notice:', e);
+                });
+              return;
             }
           } catch (urlParseErr) {
             console.warn('Error parsing auth deep link:', urlParseErr);
           }
+          Browser.close().catch(() => {});
           if (urlStr.includes('reset-password')) {
             navigate('/reset-password');
           } else {
@@ -1067,38 +1122,71 @@ export default function App() {
   const isAuthenticated = Boolean(userProfile?.id || userProfile?.email || userProfile?.phone || userPhone);
 
   const handleAuthSuccess = async (phone: string, name: string, email?: string) => {
-    const photo = safeGetItem('giriraj_user_photo') || undefined;
-    let finalPhone = phone || '';
+    // 1. Sanitize incoming parameters (strip internal placeholder domain)
+    const cleanEmail = email && !email.includes('@girirajpower.internal') ? email : '';
+    let finalPhone = phone ? cleanPhoneAutofill(phone) : '';
     let finalName = name || '';
 
+    // 2. Fetch authenticated Supabase user to establish scope and isolation
+    let authUser: any = null;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.id) {
-        const cloudProf = await fetchUserProfileFromSupabase(user.id);
-        if (cloudProf) {
-          if (cloudProf.phone) finalPhone = cloudProf.phone;
-          if (cloudProf.name) finalName = cloudProf.name;
-          setUserProfile(cloudProf);
-          setUserPhone(cloudProf.phone || null);
-          setUserName(cloudProf.name || '');
+      const { data } = await supabase.auth.getUser();
+      authUser = data?.user || null;
+    } catch {}
+
+    const authId = authUser?.id || (finalPhone ? `uid_${finalPhone}` : undefined);
+    const scope = authUser ? getUserScopeKeyFromUser(authUser) : (finalPhone ? `phone_${finalPhone}` : null);
+    if (scope) {
+      setActiveUserScope(scope);
+    }
+
+    // 3. Clear previous user's cached in-memory state (orders & addresses)
+    setOrders([]);
+    setSavedAddresses(getStoredAddresses(scope || undefined));
+
+    // 4. Fetch cloud profile strictly for the authenticated user ID
+    if (authUser?.id) {
+      try {
+        const cloudProf = await fetchUserProfileFromSupabase(authUser.id);
+        if (cloudProf && cloudProf.id === authUser.id) {
+          const cloudEmailClean =
+            cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : cleanEmail;
+          const sanitizedCloudProf: UserProfile = {
+            ...cloudProf,
+            phone: cleanPhoneAutofill(cloudProf.phone || finalPhone),
+            name: cloudProf.name || finalName || (finalPhone ? `Giriraj Member (${finalPhone.slice(-4)})` : 'Customer'),
+            email: cloudEmailClean,
+            emailVerified: Boolean(cloudEmailClean)
+          };
+          setUserProfile(sanitizedCloudProf);
+          setUserPhone(sanitizedCloudProf.phone || null);
+          setUserName(sanitizedCloudProf.name || '');
           navigate('/');
           return;
         }
+      } catch (err) {
+        console.warn('handleAuthSuccess profile fetch notice:', err);
       }
-    } catch {}
+    }
 
+    // 5. Construct fresh, clean UserProfile with zero cross-user leakage
     const prof: UserProfile = {
-      id: userProfile?.id,
+      id: authId,
       phone: finalPhone,
-      name: finalName || 'Customer',
-      email: email || '',
-      emailVerified: Boolean(email),
-      photoURL: photo,
-      dob: userProfile?.dob || safeGetItem('giriraj_user_dob') || ''
+      phoneVerified: Boolean(finalPhone),
+      name: finalName || (finalPhone ? `Giriraj Member (${finalPhone.slice(-4)})` : 'Customer'),
+      email: cleanEmail,
+      emailVerified: Boolean(cleanEmail),
+      photoURL: undefined,
+      dob: '',
+      walletBalance: 0,
+      refundBalance: 0,
+      cashbackBalance: 0
     };
+
     setUserProfile(prof);
     setUserPhone(finalPhone || null);
-    setUserName(finalName || '');
+    setUserName(prof.name);
     navigate('/');
   };
 
@@ -1150,6 +1238,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 selection:bg-yellow-400 selection:text-black">
         <SEOHead />
+        <AndroidAppBridgePrompt />
         <main className="flex-1">
           <Routes>
             {/* Standalone Legal & Policy Pages */}
@@ -1184,6 +1273,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 selection:bg-yellow-400 selection:text-black">
       {/* Dynamic SEO Meta & Structured Data Manager */}
       <SEOHead />
+      <AndroidAppBridgePrompt />
       
       {/* Top Header - Hidden when viewing profile or live-order */}
       {location.pathname !== '/profile' && !location.pathname.startsWith('/live-order') && (

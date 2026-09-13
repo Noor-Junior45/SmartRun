@@ -5021,6 +5021,327 @@ Respond ONLY with a valid JSON object matching the following structure:
     }
   });
 
+  /**
+   * Fast2SMS OTP & Quick SMS Route Helper
+   * Supports Quick SMS route ("q") and dedicated "otp" route.
+   */
+  async function sendFast2SmsOtp(
+    rawPhone: string,
+    otp: string
+  ): Promise<{ success: boolean; data?: any; error?: string; routeUsed?: string }> {
+    const apiKey = (process.env.FAST2SMS_API_KEY || "").trim();
+    if (!apiKey) {
+      return {
+        success: false,
+        error: "FAST2SMS_API_KEY is not configured in environment variables."
+      };
+    }
+
+    // Fast2SMS expects 10-digit Indian mobile number without +91 prefix
+    const cleanPhone = rawPhone.replace(/\D/g, "").slice(-10);
+    if (cleanPhone.length !== 10) {
+      return {
+        success: false,
+        error: "Invalid phone number. A 10-digit Indian mobile number is required."
+      };
+    }
+
+    const cleanOtp = String(otp).trim();
+    if (!cleanOtp) {
+      return {
+        success: false,
+        error: "OTP code is required."
+      };
+    }
+
+    // 1. First attempt: Quick SMS route ("q")
+    try {
+      console.log(`[Fast2SMS] Attempting Quick SMS dispatch for phone ${cleanPhone.slice(0, 4)}****`);
+      const quickResponse = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+        method: "POST",
+        headers: {
+          "authorization": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          route: "q",
+          message: `Your Giriraj Power verification OTP is ${cleanOtp}. Valid for 10 minutes.`,
+          language: "english",
+          flash: 0,
+          numbers: cleanPhone
+        })
+      });
+
+      const quickResult: any = await quickResponse.json().catch(() => null);
+
+      if (quickResponse.ok && quickResult && quickResult.return === true) {
+        console.log(`[Fast2SMS] Quick SMS successfully sent to ${cleanPhone.slice(0, 4)}****`);
+        return { success: true, data: quickResult, routeUsed: "quick" };
+      }
+
+      console.warn("[Fast2SMS] Quick SMS response:", quickResult?.message || quickResult);
+
+      // 2. Secondary attempt: Dedicated OTP route ("otp")
+      const otpResponse = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+        method: "POST",
+        headers: {
+          "authorization": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          route: "otp",
+          variables_values: cleanOtp,
+          numbers: cleanPhone
+        })
+      });
+
+      const otpResult: any = await otpResponse.json().catch(() => null);
+      if (otpResponse.ok && otpResult && otpResult.return === true) {
+        console.log(`[Fast2SMS] OTP route successfully sent to ${cleanPhone.slice(0, 4)}****`);
+        return { success: true, data: otpResult, routeUsed: "otp" };
+      }
+
+      const rawErr = quickResult?.message || otpResult?.message || "Failed to send SMS via Fast2SMS";
+      const finalMsg = Array.isArray(rawErr) ? rawErr.join(", ") : String(rawErr);
+      return { success: false, error: finalMsg, data: { quick: quickResult, otp: otpResult } };
+    } catch (err: any) {
+      console.warn("[Fast2SMS] Dispatch error:", err?.message || err);
+      return { success: false, error: err?.message || String(err) };
+    }
+  }
+
+  // In-memory OTP storage for Fast2SMS phone verification
+  interface CachedOtp {
+    otp: string;
+    expiresAt: number;
+    attempts: number;
+  }
+  const fast2smsOtpStore = new Map<string, CachedOtp>();
+
+  // Clean expired OTPs every 5 minutes
+  setInterval(() => {
+    const now = Date.now();
+    for (const [phone, entry] of fast2smsOtpStore.entries()) {
+      if (entry.expiresAt < now) {
+        fast2smsOtpStore.delete(phone);
+      }
+    }
+  }, 5 * 60 * 1000);
+
+  /**
+   * Fast2SMS Direct Send OTP API Endpoint
+   * Used as direct SMS fallback when Firebase Phone Auth encounters billing/carrier issues
+   * POST /api/sms/send-fast2sms-otp
+   * Request Body: { phone: "9876543210" }
+   */
+  app.post("/api/sms/send-fast2sms-otp", async (req, res) => {
+    try {
+      const { phone } = req.body || {};
+      const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+      if (cleanPhone.length !== 10) {
+        return res.status(400).json({
+          success: false,
+          error: "Please enter a valid 10-digit Indian mobile number."
+        });
+      }
+
+      // Generate random 6-digit OTP
+      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      console.log(`[Fast2SMS API] Generating and sending OTP to ${cleanPhone.slice(0, 4)}****`);
+      const result = await sendFast2SmsOtp(cleanPhone, generatedOtp);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: result.error || "Fast2SMS was unable to dispatch SMS to this number.",
+          details: result.data
+        });
+      }
+
+      // Save into store valid for 10 minutes
+      fast2smsOtpStore.set(cleanPhone, {
+        otp: generatedOtp,
+        expiresAt: Date.now() + 10 * 60 * 1000,
+        attempts: 0
+      });
+
+      return res.json({
+        success: true,
+        phone: cleanPhone,
+        routeUsed: result.routeUsed,
+        message: `OTP sent successfully via Fast2SMS Quick SMS service to +91 ${cleanPhone}.`
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to send OTP via Fast2SMS."
+      });
+    }
+  });
+
+  /**
+   * Fast2SMS Verify OTP API Endpoint
+   * POST /api/sms/verify-fast2sms-otp
+   * Request Body: { phone: "9876543210", otp: "123456" }
+   */
+  app.post("/api/sms/verify-fast2sms-otp", (req, res) => {
+    try {
+      const { phone, otp } = req.body || {};
+      const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+      const cleanOtp = String(otp || "").trim();
+
+      if (!cleanPhone || cleanPhone.length !== 10) {
+        return res.status(400).json({ success: false, error: "Invalid phone number." });
+      }
+      if (!cleanOtp || cleanOtp.length !== 6) {
+        return res.status(400).json({ success: false, error: "Please enter a valid 6-digit OTP." });
+      }
+
+      const cached = fast2smsOtpStore.get(cleanPhone);
+      if (!cached) {
+        return res.status(400).json({
+          success: false,
+          error: "No active OTP found or code expired. Please tap 'Resend OTP'."
+        });
+      }
+
+      if (Date.now() > cached.expiresAt) {
+        fast2smsOtpStore.delete(cleanPhone);
+        return res.status(400).json({
+          success: false,
+          error: "OTP code has expired. Please request a fresh OTP."
+        });
+      }
+
+      cached.attempts += 1;
+      if (cached.attempts > 5) {
+        fast2smsOtpStore.delete(cleanPhone);
+        return res.status(400).json({
+          success: false,
+          error: "Too many invalid attempts. Please request a new OTP."
+        });
+      }
+
+      if (cached.otp !== cleanOtp) {
+        return res.status(400).json({
+          success: false,
+          error: "Incorrect OTP code. Please enter the valid code received on your phone."
+        });
+      }
+
+      // Validated! Remove from store
+      fast2smsOtpStore.delete(cleanPhone);
+      return res.json({
+        success: true,
+        verified: true,
+        phone: `+91${cleanPhone}`
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Internal error verifying OTP."
+      });
+    }
+  });
+
+  /**
+   * Supabase Custom SMS Hook Endpoint
+   * Used when Supabase Auth -> Hooks -> Send SMS is configured with this endpoint URL:
+   * https://<your-domain>/api/supabase-sms-hook
+   */
+  app.post("/api/supabase-sms-hook", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const phone = body.sms?.phone || body.phone || body.user?.phone || "";
+      const otp = body.sms?.otp || body.otp || "";
+
+      if (!phone || !otp) {
+        return res.status(400).json({
+          error: "Missing required phone or otp parameters from Supabase SMS hook."
+        });
+      }
+
+      console.log(`[Fast2SMS Hook] Forwarding OTP to ${phone.slice(0, 4)}****... via Fast2SMS OTP route.`);
+      const result = await sendFast2SmsOtp(phone, otp);
+
+      if (!result.success) {
+        console.error("[Fast2SMS Hook] Error sending OTP:", result.error);
+        return res.status(500).json({ error: result.error, details: result.data });
+      }
+
+      console.log(`[Fast2SMS Hook] Successfully dispatched OTP to ${phone.slice(0, 4)}****`);
+      return res.status(200).json({});
+    } catch (err: any) {
+      console.error("[Fast2SMS Hook] Unexpected failure:", err);
+      return res.status(500).json({ error: err?.message || "Internal server error in SMS hook." });
+    }
+  });
+
+  /**
+   * Fast2SMS OTP Route Direct Test Endpoint
+   * Allows immediately verifying if the Fast2SMS API key and OTP route are working
+   * Request Body: { phone: "9876543210", otp?: "123456" }
+   */
+  app.post("/api/sms/test-fast2sms-otp", async (req, res) => {
+    try {
+      const { phone, otp = "582914" } = req.body || {};
+
+      if (!phone) {
+        return res.status(400).json({
+          success: false,
+          error: "Phone number is required in request body (e.g. { phone: '9876543210' })."
+        });
+      }
+
+      const apiKeyConfigured = Boolean(process.env.FAST2SMS_API_KEY?.trim());
+      if (!apiKeyConfigured) {
+        return res.status(400).json({
+          success: false,
+          error: "FAST2SMS_API_KEY is not set in environment variables. Please add your Fast2SMS API key in Settings > Environment Variables.",
+          apiKeyConfigured: false
+        });
+      }
+
+      const result = await sendFast2SmsOtp(phone, otp);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: result.error,
+          details: result.data,
+          apiKeyConfigured: true
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: `OTP sent successfully via Fast2SMS OTP route (cost ~₹0.20 instead of ₹5).`,
+        phone: String(phone).replace(/\D/g, "").slice(-10),
+        otpUsed: otp,
+        fast2smsResponse: result.data
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to execute Fast2SMS OTP test."
+      });
+    }
+  });
+
+  // Fast2SMS Status Check Endpoint
+  app.get("/api/sms/fast2sms-status", (req, res) => {
+    const key = (process.env.FAST2SMS_API_KEY || "").trim();
+    const isConfigured = Boolean(key && key.length > 10);
+    return res.json({
+      configured: isConfigured,
+      keyMasked: isConfigured ? `${key.slice(0, 4)}...${key.slice(-4)}` : null,
+      route: "otp",
+      estimatedCostPerSms: "₹0.20 (20 paise)",
+      webhookUrl: "/api/supabase-sms-hook"
+    });
+  });
+
   // Explicitly serve Digital Asset Links for Android TWA verification with CORS
   app.get("/.well-known/assetlinks.json", (req, res) => {
     res.setHeader("Content-Type", "application/json");

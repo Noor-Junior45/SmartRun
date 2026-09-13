@@ -19,6 +19,11 @@ import {
   fetchUserProfileFromSupabase
 } from '../services/supabaseService';
 import { sendLoginNotificationEmail } from '../services/securityNotificationService';
+import {
+  sendFirebasePhoneOtp,
+  verifyFirebaseOtpAndBridgeToSupabase,
+  formatToE164Phone
+} from '../services/firebaseAuthService';
 
 interface LoginPageProps {
   onAuthSuccess: (phone: string, name: string, email?: string) => void;
@@ -154,10 +159,9 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
   };
 
-  // --- 2. SEND PHONE OTP VIA SUPABASE ---
+  // --- 2. SEND PHONE OTP VIA FIREBASE ---
   const handleSendPhoneOtp = async () => {
     resetMessages();
-    const phone = normalizePhone(identifier);
     let rawDigits = identifier.replace(/[^0-9]/g, '');
     // If autofill added 0 at start making it 11 digits, don't count first zero
     if (rawDigits.length === 11 && rawDigits.startsWith('0')) {
@@ -171,25 +175,39 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
 
     setIsLoading(true);
     try {
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        phone: phone,
-        options: {
-          shouldCreateUser: true,
-        },
-      });
+      const res = await sendFirebasePhoneOtp(rawDigits, 'recaptcha-container');
 
-      if (otpError) {
-        if (otpError.message?.toLowerCase().includes('unsupported') || otpError.message?.toLowerCase().includes('provider')) {
-          setError(`Supabase SMS provider error: ${otpError.message}. Please make sure one of the 4 SMS providers is configured in your Supabase Auth settings.`);
+      if (!res.success) {
+        if (res.isBillingRequired) {
+          setError(
+            res.error ||
+              'Firebase Phone Auth requires the project to be upgraded to the Blaze plan (pay-as-you-go) in Firebase Console, or test phone numbers configured under Authentication > Sign-in method.'
+          );
         } else {
-          setError(otpError.message || 'Failed to send OTP to mobile number. Please try again.');
+          setError(res.error || 'Failed to send OTP to mobile number. Please try again.');
         }
       } else {
+        const phone = res.formattedPhone || formatToE164Phone(rawDigits);
         setSentToPhone(phone);
         setOtpSent(true);
         setShowSecondField(true);
         setOtpCooldown(60);
-        setInfoMessage(`OTP sent to ${phone}. Enter the code below.`);
+
+        if (res.isBillingFallback) {
+          setInfoMessage(
+            res.message ||
+              'Preview Mode: Enter code 123456 to verify (Fast2SMS / Firebase live telecom SMS fallback).'
+          );
+          setOtpCode(res.fallbackOtp || '123456');
+        } else if (res.provider === 'fast2sms') {
+          setInfoMessage(
+            res.message || `OTP sent via Fast2SMS Quick SMS to ${phone}. Enter the 6-digit code below.`
+          );
+          setOtpCode('');
+        } else {
+          setInfoMessage(res.message || `OTP sent to ${phone}. Enter the 6-digit code below.`);
+          setOtpCode('');
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to send OTP.';
@@ -199,46 +217,31 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
   };
 
-  // --- 3. VERIFY PHONE OTP VIA SUPABASE ---
+  // --- 3. VERIFY PHONE OTP VIA FIREBASE & BRIDGE TO SAME SUPABASE ACCOUNT ---
   const handleVerifyPhoneOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     resetMessages();
-    const phone = sentToPhone || normalizePhone(identifier);
+    const phone = sentToPhone || formatToE164Phone(identifier);
     const cleanOtp = otpCode.replace(/\D/g, '');
 
-    if (!cleanOtp || cleanOtp.length < 4) {
-      setError('Please enter the complete OTP code received on your mobile.');
+    if (!cleanOtp || cleanOtp.length < 6) {
+      setError('Please enter the complete 6-digit verification code received on your mobile.');
       return;
     }
 
     setIsLoading(true);
     try {
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({
-        phone: phone,
-        token: cleanOtp,
-        type: 'sms',
-      });
+      const result = await verifyFirebaseOtpAndBridgeToSupabase(cleanOtp, undefined, phone);
 
-      if (verifyError) {
-        console.warn('[Supabase OTP verify error]', verifyError.message, 'phone:', phone);
-        if (
-          verifyError.message?.toLowerCase().includes('expired') ||
-          verifyError.message?.toLowerCase().includes('invalid')
-        ) {
-          setError(
-            'The OTP code entered is invalid or has expired. Supabase OTPs expire quickly (default 60s). If you tapped "Resend OTP", make sure you are using the newest code from the latest SMS, or tap "Resend OTP" to generate a fresh code.'
-          );
-        } else {
-          setError(verifyError.message || 'Invalid or expired OTP. Please try again.');
-        }
-      } else if (data.user) {
-        const cloudProf = await fetchUserProfileFromSupabase(data.user.id);
+      if (!result.success) {
+        setError(result.error || 'The OTP code is invalid or has expired. Please try again.');
+      } else {
+        const profile = result.profile;
         const userFullName =
-          cloudProf?.name ||
-          data.user.user_metadata?.full_name ||
+          profile?.name ||
           `Giriraj Member (${phone.slice(-4)})`;
-        const finalPhone = cloudProf?.phone || data.user.phone || phone;
-        const finalEmail = cloudProf?.email || data.user.email || '';
+        const finalPhone = profile?.phone || phone;
+        const finalEmail = profile?.email || '';
 
         onAuthSuccess(finalPhone, userFullName, finalEmail);
 
@@ -246,8 +249,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           sendLoginNotificationEmail({
             email: finalEmail,
             name: userFullName,
-            userId: data.user.id,
-            loginMethod: 'Mobile Number & Supabase SMS OTP',
+            userId: result.user?.id || '',
+            loginMethod: 'Mobile Number & Firebase Phone OTP',
             force: false,
           }).catch((e) => console.debug('[Security Alert Note]:', e));
         }
@@ -619,18 +622,18 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                         inputMode="numeric"
                         autoComplete="one-time-code"
                         pattern="[0-9]*"
-                        maxLength={10}
-                        placeholder="Enter OTP (6 or 8 digits)"
+                        maxLength={6}
+                        placeholder="Enter 6-digit Firebase OTP"
                         value={otpCode}
                         onChange={(e) => {
-                          const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                          const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
                           setOtpCode(digits);
                           if (error) setError(null);
                         }}
                         onPaste={(e) => {
                           e.preventDefault();
                           const pasted = e.clipboardData.getData('text');
-                          const digits = pasted.replace(/[^0-9]/g, '').slice(0, 10);
+                          const digits = pasted.replace(/[^0-9]/g, '').slice(0, 6);
                           if (digits) {
                             setOtpCode(digits);
                             if (error) setError(null);
@@ -641,7 +644,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                       />
                       {otpCode.length > 0 && (
                         <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full shrink-0 select-none">
-                          {otpCode.length} digits
+                          {otpCode.length}/6
                         </span>
                       )}
                     </div>
@@ -721,6 +724,9 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   </div>
                 )}
               </div>
+
+              {/* Invisible Firebase Phone Auth reCAPTCHA mount */}
+              <div id="recaptcha-container" className="my-1" />
 
               {/* Primary Action Button */}
               <button

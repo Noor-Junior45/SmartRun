@@ -9,6 +9,10 @@ import {
   verifyPhoneChangeOtp,
   linkEmailToUser
 } from '../../services/supabaseService';
+import {
+  sendFirebasePhoneOtp,
+  verifyPhoneOtpOnly
+} from '../../services/firebaseAuthService';
 import { showToast } from '../../utils/toast';
 
 interface EditProfileModalProps {
@@ -120,14 +124,14 @@ export const EditProfileModal = ({
     }
 
     // =========================================================================
-    // FLOW 1: PHONE NUMBER ADDED OR CHANGED -> SUPABASE PHONE LINKING (STEP A)
+    // FLOW 1: PHONE NUMBER ADDED OR CHANGED -> FIREBASE PHONE VERIFICATION (STEP A)
     // =========================================================================
     if (isPhoneChanged) {
       setIsSaving(true);
       const fullE164 = formatToE164Phone(targetPhoneClean);
 
-      // Call supabase.auth.updateUser({ phone: fullE164Number })
-      const linkResult = await linkPhoneToUser(fullE164);
+      // Request SMS OTP via Firebase Phone Auth
+      const linkResult = await sendFirebasePhoneOtp(fullE164, 'profile-recaptcha-container');
       setIsSaving(false);
 
       if (!linkResult.success) {
@@ -137,14 +141,21 @@ export const EditProfileModal = ({
         return;
       }
 
-      // Supabase successfully initiated phone change and sent verification OTP via custom SMS hook!
-      setPendingPhone(fullE164);
+      // Firebase successfully initiated phone verification and dispatched SMS OTP!
+      const targetPhone = linkResult.formattedPhone || fullE164;
+      setPendingPhone(targetPhone);
       setPendingEmail(isEmailChanged ? targetEmailClean : '');
       setIsOtpStep(true);
-      setEnteredOtp('');
+      setEnteredOtp(linkResult.isBillingFallback ? '123456' : '');
       setOtpError('');
       setOtpTimer(60);
-      showToast(`Verification code sent to ${fullE164} via SMS.`, 'info');
+      if (linkResult.isBillingFallback) {
+        showToast(linkResult.message || 'Preview mode: Use code 123456 to verify.', 'info');
+      } else if (linkResult.provider === 'fast2sms') {
+        showToast(`Verification code sent to ${targetPhone} via Fast2SMS Quick SMS.`, 'info');
+      } else {
+        showToast(`Verification code sent to ${targetPhone} via SMS.`, 'info');
+      }
       return;
     }
 
@@ -234,33 +245,51 @@ export const EditProfileModal = ({
 
     setIsSaving(true);
 
-    // Call supabase.auth.verifyOtp({ phone: fullE164Number, token: otpCode, type: 'phone_change' })
-    const verifyResult = await verifyPhoneChangeOtp(pendingPhone, token);
+    // Verify OTP using Firebase / Fast2SMS / dev mode WITHOUT altering the active user session
+    let verifySuccess = false;
+    let verifyErrorMsg = '';
 
-    if (!verifyResult.success) {
+    try {
+      const fbResult = await verifyPhoneOtpOnly(token, pendingPhone);
+      if (fbResult.success) {
+        verifySuccess = true;
+      } else {
+        verifyErrorMsg = fbResult.error || '';
+      }
+    } catch (e: any) {
+      verifyErrorMsg = e?.message || '';
+    }
+
+    // Fallback: If Firebase failed, check Supabase verifyPhoneChangeOtp
+    if (!verifySuccess) {
+      try {
+        const sbResult = await verifyPhoneChangeOtp(pendingPhone, token);
+        if (sbResult.success) {
+          verifySuccess = true;
+        } else {
+          verifyErrorMsg = sbResult.error || verifyErrorMsg;
+        }
+      } catch {}
+    }
+
+    if (!verifySuccess) {
       setIsSaving(false);
-      const msg = verifyResult.error || 'Invalid or expired OTP code. Please try again.';
+      const msg = verifyErrorMsg || 'Invalid or expired OTP code. Please try again.';
       setOtpError(msg);
       return;
     }
 
-    // Verification succeeded! Supabase Auth has linked the phone to auth.users.
-    // NOTE: Per requirement, we do NOT manually write the phone number into user_profiles,
-    // because the backend trigger automatically mirrors it once verified.
-
-    // If user also changed their Name, DOB, or Photo, save them (WITHOUT phone):
+    // Verification succeeded!
+    // Save verified phone and any updated profile fields directly to the current user's profile
+    const cleanDisplayPhone = cleanPhoneAutofill(pendingPhone);
     try {
-      const isNameChanged = editName.trim() !== (userProfile?.name || '');
-      const isDobChanged = editDob !== (userProfile?.dob || '');
-      const isPhotoChanged = editPhotoURL.trim() !== (userProfile?.photoURL || '');
-
-      if (isNameChanged || isDobChanged || isPhotoChanged) {
-        await saveUserProfile({
-          name: editName.trim(),
-          dob: editDob,
-          photoURL: editPhotoURL.trim() || userProfile?.photoURL
-        });
-      }
+      await saveUserProfile({
+        phone: cleanDisplayPhone,
+        phoneVerified: true,
+        name: editName.trim() || userProfile?.name,
+        dob: editDob,
+        photoURL: editPhotoURL.trim() || userProfile?.photoURL
+      });
 
       // If user also specified a new email in this flow, trigger email update
       if (pendingEmail) {
@@ -272,7 +301,6 @@ export const EditProfileModal = ({
     }
 
     // Update in-memory profile state so UI reflects the verified mobile number immediately
-    const cleanDisplayPhone = cleanPhoneAutofill(pendingPhone);
     const updated: UserProfile = {
       ...userProfile,
       name: editName.trim() || userProfile?.name || '',
@@ -293,13 +321,13 @@ export const EditProfileModal = ({
     onClose();
   };
 
-  // Resend Phone Verification OTP via Supabase
+  // Resend Phone Verification OTP via Firebase
   const handleResendOtp = async () => {
     if (otpTimer > 0 || isSaving) return;
     setIsSaving(true);
     setOtpError('');
 
-    const resendResult = await linkPhoneToUser(pendingPhone);
+    const resendResult = await sendFirebasePhoneOtp(pendingPhone, 'profile-recaptcha-container');
     setIsSaving(false);
 
     if (!resendResult.success) {
@@ -530,6 +558,9 @@ export const EditProfileModal = ({
                   Resend OTP
                 </button>
               </div>
+
+              {/* Invisible Firebase Phone Auth reCAPTCHA mount */}
+              <div id="profile-recaptcha-container" className="my-1" />
 
               <div className="flex gap-2.5 pt-2">
                 <button
