@@ -51,76 +51,38 @@ export interface RazorpayRefundResponse {
  */
 export function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
-    if (typeof window !== 'undefined' && (window as any).Razorpay) {
+    if (typeof window === 'undefined') {
+      resolve(false);
+      return;
+    }
+
+    if ((window as any).Razorpay) {
       resolve(true);
       return;
     }
 
-    const existingScript = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
-    if (existingScript) {
+    // Check every 100ms for up to 6 seconds in case index.html's script tag is loading
+    let checks = 0;
+    const interval = setInterval(() => {
+      checks++;
       if ((window as any).Razorpay) {
+        clearInterval(interval);
         resolve(true);
-        return;
-      }
-      let resolved = false;
-      const onLoad = () => {
-        if (!resolved) {
-          resolved = true;
-          cleanup();
+      } else if (checks >= 60) {
+        clearInterval(interval);
+        // If not loaded yet, try dynamically appending if not already injected
+        if (!document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')) {
+          const script = document.createElement('script');
+          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.async = true;
+          script.onload = () => resolve(Boolean((window as any).Razorpay));
+          script.onerror = () => resolve(false);
+          document.body.appendChild(script);
+        } else {
           resolve(Boolean((window as any).Razorpay));
         }
-      };
-      const onError = () => {
-        if (!resolved) {
-          resolved = true;
-          cleanup();
-          resolve(false);
-        }
-      };
-      const timer = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          cleanup();
-          resolve(Boolean((window as any).Razorpay));
-        }
-      }, 2000);
-
-      const cleanup = () => {
-        clearTimeout(timer);
-        existingScript.removeEventListener('load', onLoad);
-        existingScript.removeEventListener('error', onError);
-      };
-
-      existingScript.addEventListener('load', onLoad, { once: true });
-      existingScript.addEventListener('error', onError, { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    let resolved = false;
-    script.onload = () => {
-      if (!resolved) {
-        resolved = true;
-        resolve(true);
       }
-    };
-    script.onerror = () => {
-      if (!resolved) {
-        resolved = true;
-        console.warn('Failed to load Razorpay checkout.js script.');
-        resolve(false);
-      }
-    };
-    document.body.appendChild(script);
-
-    setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        resolve(Boolean((window as any).Razorpay));
-      }
-    }, 3000);
+    }, 100);
   });
 }
 
@@ -301,20 +263,26 @@ export async function launchRazorpayCheckout(
     currency: 'INR'
   }));
 
-  const effectiveKeyId =
-    serverOrder?.keyId ||
-    config.keyId ||
-    (import.meta.env.VITE_RAZORPAY_KEY_ID as string) ||
-    'rzp_live_TaSabydnxpQcJ0';
+  const isValidKey = (k?: string) =>
+    Boolean(
+      k &&
+      (k.startsWith('rzp_live_') || k.startsWith('rzp_test_')) &&
+      !k.includes('sandbox') &&
+      !k.includes('placeholder') &&
+      !k.includes('demo') &&
+      k.length >= 14
+    );
 
-  const isRealRazorpayKey = Boolean(
-    effectiveKeyId &&
-    (effectiveKeyId.startsWith('rzp_live_') || effectiveKeyId.startsWith('rzp_test_')) &&
-    !effectiveKeyId.includes('sandbox') &&
-    !effectiveKeyId.includes('placeholder') &&
-    !effectiveKeyId.includes('demo') &&
-    effectiveKeyId.length >= 14
-  );
+  const candidateKeys = [
+    serverOrder?.keyId,
+    config.keyId,
+    import.meta.env.VITE_RAZORPAY_KEY_ID as string,
+    'rzp_live_TaSabydnxpQcJ0'
+  ];
+
+  const effectiveKeyId = candidateKeys.find(isValidKey) || candidateKeys.find(Boolean) || 'rzp_live_TaSabydnxpQcJ0';
+
+  const isRealRazorpayKey = isValidKey(effectiveKeyId);
 
   const fallbackOrderId =
     serverOrder?.orderId || generateSecureToken('order_rcpt', 8);
@@ -422,10 +390,16 @@ export async function launchRazorpayCheckout(
       }
     }
 
-    // If Razorpay script wasn't loaded or real key is missing, report real gateway configuration error
-    const configError = new Error(
-      'Razorpay payment gateway is not initialized. Please ensure your internet connection is active and Razorpay API keys are configured.'
-    );
+    // If Razorpay script wasn't loaded or real key is missing, report descriptive error
+    const scriptLoaded = Boolean((window as any).Razorpay);
+    let diagnosticMsg = 'Razorpay payment gateway is not initialized.';
+    if (!scriptLoaded) {
+      diagnosticMsg = 'Razorpay SDK script could not be loaded. Please check your internet connection.';
+    } else if (!isRealRazorpayKey) {
+      diagnosticMsg = `Razorpay Key ID is invalid or missing (key: "${effectiveKeyId}"). A valid key starting with rzp_live_ or rzp_test_ must be configured.`;
+    }
+
+    const configError = new Error(diagnosticMsg);
     if (onFailure) onFailure(configError);
     reject(configError);
   });
