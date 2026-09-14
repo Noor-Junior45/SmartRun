@@ -368,7 +368,7 @@ export async function launchRazorpayCheckout(
           currency: serverOrder?.currency || 'INR',
           name: 'SmartRun',
           description,
-          image: '/smartrun.jpeg',
+          image: 'https://i.imgur.com/uPjUKdN.png',
           prefill: {
             name: customerName,
             contact: customerPhone.replace(/\D/g, '').slice(-10),
