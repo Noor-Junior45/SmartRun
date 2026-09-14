@@ -6,6 +6,7 @@
  */
 
 import { generateSecureToken } from '../utils/cryptoHelper';
+import { API_BASE_URL } from '../lib/apiBase';
 
 export interface RazorpayPaymentResponse {
   razorpay_payment_id: string;
@@ -128,7 +129,7 @@ export function loadRazorpayScript(): Promise<boolean> {
  */
 export async function getRazorpayConfig(): Promise<RazorpayConfigResponse> {
   try {
-    const res = await fetch('/api/razorpay/config');
+    const res = await fetch(`${API_BASE_URL}/api/razorpay/config`);
     if (!res.ok) {
       throw new Error(`Config request returned status ${res.status}`);
     }
@@ -153,7 +154,7 @@ export async function createRazorpayOrder(
   receipt?: string,
   notes?: Record<string, string>
 ): Promise<RazorpayCreateOrderResponse> {
-  const res = await fetch('/api/razorpay/create-order', {
+  const res = await fetch(`${API_BASE_URL}/api/razorpay/create-order`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -176,7 +177,7 @@ export async function verifyRazorpayPayment(
   paymentData: RazorpayPaymentResponse,
   orderId?: string
 ): Promise<{ success: boolean; verified: boolean; message?: string }> {
-  const res = await fetch('/api/razorpay/verify-payment', {
+  const res = await fetch(`${API_BASE_URL}/api/razorpay/verify-payment`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -210,7 +211,7 @@ export async function initiateRazorpayRefund(
   orderId?: string,
   reason?: string
 ): Promise<RazorpayRefundResponse> {
-  const res = await fetch('/api/razorpay/refund', {
+  const res = await fetch(`${API_BASE_URL}/api/razorpay/refund`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
