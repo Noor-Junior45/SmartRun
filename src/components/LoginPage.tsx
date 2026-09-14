@@ -5,6 +5,7 @@ import {
   Lock,
   Eye,
   EyeOff,
+  Check,
   CheckCircle2,
   KeyRound,
   LogIn,
@@ -75,6 +76,30 @@ const isPhoneInput = (input: string): boolean => {
   return digits.length >= 7;
 };
 
+// Helper: Check and persist terms agreement across sessions
+const isTermsAgreedSaved = (): boolean => {
+  try {
+    return (
+      localStorage.getItem('smartrun_terms_agreed') === 'true' ||
+      localStorage.getItem('gp_terms_agreed') === 'true' ||
+      localStorage.getItem('terms_agreed') === 'true'
+    );
+  } catch {
+    return false;
+  }
+};
+
+const saveTermsAgreed = (agreed: boolean): void => {
+  try {
+    const val = String(agreed);
+    localStorage.setItem('smartrun_terms_agreed', val);
+    localStorage.setItem('gp_terms_agreed', val);
+    localStorage.setItem('terms_agreed', val);
+  } catch {
+    // Ignore storage quota / private mode errors
+  }
+};
+
 export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   const navigate = useNavigate();
 
@@ -94,6 +119,20 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   const [showSecondField, setShowSecondField] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [sentToPhone, setSentToPhone] = useState('');
+
+  // Terms and Privacy Agreement state (persisted across login & logout)
+  const [termsAgreed, setTermsAgreed] = useState<boolean>(() => isTermsAgreedSaved());
+
+  const handleToggleTerms = () => {
+    setTermsAgreed((prev) => {
+      const next = !prev;
+      saveTermsAgreed(next);
+      return next;
+    });
+    if (error && error.toLowerCase().includes('terms')) {
+      setError(null);
+    }
+  };
 
   // Timers
   const [magicLinkCooldown, setMagicLinkCooldown] = useState(0);
@@ -144,12 +183,18 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
 
   // --- 1. GOOGLE SIGN IN ---
   const handleGoogleSignIn = async () => {
+    if (!termsAgreed) {
+      setError('Please agree to the Terms of service and Privacy policy to continue.');
+      return;
+    }
     setIsGoogleLoading(true);
     resetMessages();
     try {
       const res = await signInWithGoogle();
       if (res.error) {
         setError(res.error.message || 'Google Sign-In failed. Please try again.');
+      } else {
+        saveTermsAgreed(true);
       }
     } catch (e: unknown) {
       const err = e as { message?: string };
@@ -196,12 +241,12 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         if (res.isBillingFallback) {
           setInfoMessage(
             res.message ||
-              'Preview Mode: Enter code 123456 to verify (Fast2SMS / Firebase live telecom SMS fallback).'
+              'Preview Mode: Enter code 123456 to verify.'
           );
           setOtpCode(res.fallbackOtp || '123456');
         } else if (res.provider === 'fast2sms') {
           setInfoMessage(
-            res.message || `OTP sent via Fast2SMS Quick SMS to ${phone}. Enter the 6-digit code below.`
+            res.message || `OTP sent to ${phone}. Enter the 6-digit code below.`
           );
           setOtpCode('');
         } else {
@@ -243,6 +288,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         const finalPhone = profile?.phone || phone;
         const finalEmail = profile?.email || '';
 
+        saveTermsAgreed(true);
         onAuthSuccess(finalPhone, userFullName, finalEmail);
 
         if (finalEmail) {
@@ -299,6 +345,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           'Giriraj Customer';
         const finalPhone = cloudProf?.phone || data.user.phone || data.user.user_metadata?.phone || '';
 
+        saveTermsAgreed(true);
         onAuthSuccess(finalPhone, userFullName, cleanEmail);
         sendLoginNotificationEmail({
           email: cleanEmail,
@@ -321,6 +368,11 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   const handlePrimarySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     resetMessages();
+
+    if (!termsAgreed) {
+      setError('Please agree to the Terms of service and Privacy policy to continue.');
+      return;
+    }
 
     // If identifier was autofilled with 11 digits starting with 0, clean the leading zero
     let cleanId = identifier.trim();
@@ -370,6 +422,11 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     e.preventDefault();
     resetMessages();
 
+    if (!termsAgreed) {
+      setError('Please agree to the Terms of service and Privacy policy to continue.');
+      return;
+    }
+
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
       setError('Please enter a valid email address.');
@@ -406,6 +463,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           'Giriraj Customer';
         const finalPhone = cloudProf?.phone || data.user.phone || data.user.user_metadata?.phone || '';
 
+        saveTermsAgreed(true);
         onAuthSuccess(finalPhone, userFullName, cleanEmail);
         sendLoginNotificationEmail({
           email: cleanEmail,
@@ -465,6 +523,11 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   // --- 8. MAGIC LINK (1-CLICK PASSWORDLESS) ---
   const handleSendMagicLink = async () => {
     resetMessages();
+
+    if (!termsAgreed) {
+      setError('Please agree to the Terms of service and Privacy policy to continue.');
+      return;
+    }
 
     const cleanEmail = (identifier || email).trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
@@ -623,7 +686,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                         autoComplete="one-time-code"
                         pattern="[0-9]*"
                         maxLength={6}
-                        placeholder="Enter 6-digit Firebase OTP"
+                        placeholder="Enter 6-digit OTP"
                         value={otpCode}
                         onChange={(e) => {
                           const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
@@ -743,12 +806,12 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 ) : !showSecondField ? (
                   <>
                     <LogIn className="w-4 h-4" />
-                    <span>{isPhone ? 'Login / OTP' : 'Login / Password'}</span>
+                    <span>Sign In</span>
                   </>
                 ) : (
                   <>
                     <LogIn className="w-4 h-4" />
-                    <span>{isPhone ? 'Verify OTP & Login' : 'Login'}</span>
+                    <span>{isPhone ? 'Sign Up' : 'Sign In'}</span>
                   </>
                 )}
               </button>
@@ -977,23 +1040,42 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
 
         </div>
 
-        {/* Simple Hyperlink Legal Text */}
+        {/* Simple Hyperlink Legal Text with Minimal Circle Checkbox */}
         <div className="pt-3 text-center border-t border-slate-100">
-          <p className="text-xs text-slate-500">
-            You agree to our{' '}
-            <Link
-              to="/terms"
-              className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
+          <p className="text-xs text-slate-500 inline-flex items-center justify-center gap-2">
+            <button
+              type="button"
+              id="terms-agreed-tick"
+              role="checkbox"
+              aria-checked={termsAgreed}
+              aria-label="Agree to terms of service and privacy policy"
+              onClick={handleToggleTerms}
+              className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                termsAgreed
+                  ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
+                  : 'border-slate-300 bg-white hover:border-slate-400'
+              }`}
             >
-              Terms of service
-            </Link>
-            {' '}and{' '}
-            <Link
-              to="/privacy"
-              className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
-            >
-              Privacy policy
-            </Link>
+              {termsAgreed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+            </button>
+            <span className="leading-tight">
+              <span onClick={handleToggleTerms} className="cursor-pointer select-none">
+                You agree to our{' '}
+              </span>
+              <Link
+                to="/terms"
+                className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
+              >
+                Terms of service
+              </Link>
+              {' '}and{' '}
+              <Link
+                to="/privacy"
+                className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
+              >
+                Privacy policy
+              </Link>
+            </span>
           </p>
         </div>
 

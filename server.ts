@@ -2540,19 +2540,26 @@ async function startServer() {
   }
 
   function resolveRawRazorpayKeyId(): string {
-    return sanitizeEnvValue(process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID);
+    const primary = sanitizeEnvValue(process.env.RAZORPAY_KEY_ID);
+    const viteKey = sanitizeEnvValue(process.env.VITE_RAZORPAY_KEY_ID);
+    // If one of the keys is a valid rzp_ key, prefer it over an invalid placeholder (e.g. 'xyz')
+    if (isValidRazorpayKeyId(viteKey)) return viteKey;
+    if (isValidRazorpayKeyId(primary)) return primary;
+    return primary || viteKey;
   }
 
   function resolveRazorpayKeyId(): string {
-    const envKey = resolveRawRazorpayKeyId();
-    if (isValidRazorpayKeyId(envKey)) {
-      return envKey;
+    const raw = resolveRawRazorpayKeyId();
+    if (isValidRazorpayKeyId(raw)) {
+      return raw;
     }
     return "";
   }
 
   function resolveRazorpayKeySecret(): string | null {
-    const envSecret = sanitizeEnvValue(process.env.RAZORPAY_KEY_SECRET || process.env.VITE_RAZORPAY_KEY_SECRET);
+    const primary = sanitizeEnvValue(process.env.RAZORPAY_KEY_SECRET);
+    const secondary = sanitizeEnvValue(process.env.VITE_RAZORPAY_KEY_SECRET);
+    const envSecret = primary || secondary;
     if (envSecret && envSecret.length >= 8) {
       return envSecret;
     }
