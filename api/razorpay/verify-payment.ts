@@ -51,21 +51,22 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    const secret = getKeySecret();
-    if (!secret) {
-      // If secret is not set in environment but payment ID is present
-      return res.status(200).json({
-        success: true,
-        verified: true,
-        warning: "RAZORPAY_KEY_SECRET not set, payment accepted via client confirmation."
+    // For all non-test payments, razorpay_order_id and razorpay_signature are strictly required
+    if (!razorpay_order_id || !razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        message: "Missing required verification fields: razorpay_order_id and razorpay_signature must be present."
       });
     }
 
-    if (!razorpay_order_id || !razorpay_signature) {
-      return res.status(200).json({
-        success: true,
-        verified: true,
-        warning: "Standard client payment without order_id signature."
+    // Secret must be configured in environment; no unverified bypass permitted
+    const secret = getKeySecret();
+    if (!secret) {
+      return res.status(500).json({
+        success: false,
+        verified: false,
+        message: "Server configuration error: RAZORPAY_KEY_SECRET is not configured."
       });
     }
 
@@ -74,10 +75,12 @@ export default async function handler(req: any, res: any) {
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    const isMatch = crypto.timingSafeEqual(
-      Buffer.from(generatedSignature, "utf8"),
-      Buffer.from(razorpay_signature, "utf8")
-    );
+    const genBuf = Buffer.from(generatedSignature, "utf8");
+    const sigBuf = Buffer.from(String(razorpay_signature), "utf8");
+
+    const isMatch =
+      genBuf.length === sigBuf.length &&
+      crypto.timingSafeEqual(genBuf, sigBuf);
 
     if (isMatch) {
       return res.status(200).json({
