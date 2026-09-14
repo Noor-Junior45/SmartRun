@@ -30,8 +30,6 @@ let activeConfirmationResult: ConfirmationResult | null = null;
 let activeRecaptchaVerifier: RecaptchaVerifier | null = null;
 let lastSentPhoneNumber: string | null = null;
 let isFast2SmsSession = false;
-let isDevVerificationSession = false;
-let devVerificationOtp = '123456';
 
 /**
  * Format any Indian phone number into strict E.164 (+91XXXXXXXXXX)
@@ -110,17 +108,15 @@ export function getOrCreateRecaptchaVerifier(containerId = 'recaptcha-container'
 export interface SendFirebaseOtpResult {
   success: boolean;
   formattedPhone?: string;
-  provider?: 'firebase' | 'fast2sms' | 'preview';
+  provider?: 'firebase' | 'fast2sms';
   error?: string;
   isBillingRequired?: boolean;
-  isBillingFallback?: boolean;
-  fallbackOtp?: string;
   isRateLimited?: boolean;
   message?: string;
 }
 
 /**
- * Direct Fast2SMS Quick SMS dispatch helper
+ * Direct Fast2SMS Quick SMS dispatch helper (Tier 2 in the cascade)
  */
 export async function sendFast2SmsPhoneOtp(rawPhone: string): Promise<SendFirebaseOtpResult> {
   const digits = rawPhone.replace(/\D/g, '').slice(-10);
@@ -152,7 +148,6 @@ export async function sendFast2SmsPhoneOtp(rawPhone: string): Promise<SendFireba
 
     lastSentPhoneNumber = formattedPhone;
     isFast2SmsSession = true;
-    isDevVerificationSession = false;
     activeConfirmationResult = null;
 
     return {
@@ -207,9 +202,10 @@ export async function verifyFast2SmsPhoneOtp(
 }
 
 /**
- * Sends a real SMS OTP to the phone number using Google Firebase Phone Auth.
- * If Firebase encounters billing restrictions (Spark plan) or carrier errors,
- * it AUTOMATICALLY falls back to Fast2SMS Quick SMS service.
+ * Sends a real SMS OTP using dual real-SMS architecture:
+ * 1. Primary: Google Firebase Phone Auth (Web Client reCAPTCHA)
+ * 2. Fallback: Fast2SMS Quick SMS / Indian DLT Route
+ * No demo login or mock OTPs.
  */
 export async function sendFirebasePhoneOtp(
   rawPhone: string,
@@ -226,15 +222,17 @@ export async function sendFirebasePhoneOtp(
   const formattedPhone = formatToE164Phone(digits);
   lastSentPhoneNumber = formattedPhone;
 
+  // -------------------------------------------------------------
+  // PRIMARY: Firebase Phone Auth
+  // -------------------------------------------------------------
   try {
     resetRecaptchaVerifier();
     const verifier = getOrCreateRecaptchaVerifier(containerId);
 
-    console.log('[Firebase Auth] Requesting SMS verification code for:', formattedPhone);
+    console.log('[Auth Primary] Requesting Firebase SMS OTP for:', formattedPhone);
     const confirmation = await signInWithPhoneNumber(firebaseAuth, formattedPhone, verifier);
     activeConfirmationResult = confirmation;
     isFast2SmsSession = false;
-    isDevVerificationSession = false;
 
     return {
       success: true,
@@ -242,39 +240,30 @@ export async function sendFirebasePhoneOtp(
       provider: 'firebase',
       message: `Firebase SMS verification code sent to ${formattedPhone}.`
     };
-  } catch (err: any) {
-    console.warn('[Firebase Auth] Note in signInWithPhoneNumber:', err?.message || err);
+  } catch (firebaseErr: any) {
+    console.warn('[Auth Primary Note] Firebase SMS unavailable, trying Fast2SMS:', firebaseErr?.message || firebaseErr);
     resetRecaptchaVerifier();
 
-    // 1. AUTOMATIC FALLBACK: Dispatch via Fast2SMS Quick SMS!
-    console.log('[Firebase Auth] Firebase dispatch unavailable. Falling back to Fast2SMS Quick SMS service...');
+    // -------------------------------------------------------------
+    // FALLBACK: Fast2SMS Quick SMS / OTP Service
+    // -------------------------------------------------------------
+    console.log('[Auth Fallback] Dispatching real SMS via Fast2SMS service...');
     const fast2smsRes = await sendFast2SmsPhoneOtp(digits);
     if (fast2smsRes.success) {
       return {
         success: true,
         formattedPhone,
         provider: 'fast2sms',
-        message: fast2smsRes.message || `OTP sent via Fast2SMS Quick SMS to ${formattedPhone}.`
+        message: fast2smsRes.message || `OTP sent via Fast2SMS to ${formattedPhone}.`
       };
     }
+    console.warn('[Auth Fallback Notice] Fast2SMS returned error:', fast2smsRes.error);
 
-    console.warn('[Fast2SMS Fallback] Gateway returned notice:', fast2smsRes.error);
-
-    // 2. If Fast2SMS also encountered a carrier block (e.g., number in DND list),
-    // provide preview mode verification code (123456) so testing is never blocked!
-    isDevVerificationSession = true;
-    isFast2SmsSession = false;
-    devVerificationOtp = '123456';
-    lastSentPhoneNumber = formattedPhone;
-
+    // If both real gateways fail, return the actual error — NO DEMO OTP
     return {
-      success: true,
+      success: false,
       formattedPhone,
-      provider: 'preview',
-      isBillingRequired: true,
-      isBillingFallback: true,
-      fallbackOtp: '123456',
-      message: `Firebase requires Blaze plan and Fast2SMS reported: "${fast2smsRes.error}". For preview testing, use code: 123456.`
+      error: fast2smsRes.error || firebaseErr?.message || 'Unable to deliver SMS OTP. Please try again.'
     };
   }
 }
@@ -348,16 +337,6 @@ export async function verifyFirebaseOtpAndBridgeToSupabase(
     }
     console.log('[Fast2SMS] Phone successfully verified via Fast2SMS SMS code:', verifiedPhoneNumber);
     isFast2SmsSession = false;
-  } else if (isDevVerificationSession || cleanCode === '123456' || cleanCode === devVerificationOtp) {
-    // In preview mode or Spark plan fallback, code matches devVerificationOtp (123456)
-    if (cleanCode !== devVerificationOtp && cleanCode !== '123456') {
-      return {
-        success: false,
-        error: 'Invalid verification code. For preview mode testing, please use code 123456.'
-      };
-    }
-    console.log('[Firebase Auth] Verified phone via preview verification session:', verifiedPhoneNumber);
-    isDevVerificationSession = false;
   } else if (!verifiedPhoneNumber) {
     return {
       success: false,
@@ -412,17 +391,6 @@ export async function verifyPhoneOtpOnly(
       };
     }
     isFast2SmsSession = false;
-    return { success: true, formattedPhone };
-  }
-
-  if (isDevVerificationSession || cleanCode === '123456' || cleanCode === devVerificationOtp) {
-    if (cleanCode !== devVerificationOtp && cleanCode !== '123456') {
-      return {
-        success: false,
-        error: 'Invalid verification code. For preview mode testing, please use code 123456.'
-      };
-    }
-    isDevVerificationSession = false;
     return { success: true, formattedPhone };
   }
 
@@ -487,6 +455,52 @@ export async function bridgeVerifiedPhoneToSupabase(
     // Ignore signout cleanup errors
   }
 
+  // Pre-resolve existing customer profile across backend resolver and local storage
+  let preResolvedName = preferredName || '';
+  let preResolvedEmail = '';
+  let preResolvedPhoto = '';
+  let preResolvedDob = '';
+  let preResolvedWallet = 0;
+  let preResolvedRefund = 0;
+  let preResolvedCashback = 0;
+
+  try {
+    const resolveRes = await fetch('/api/auth/resolve-phone-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: clean10 })
+    }).catch(() => null);
+
+    if (resolveRes && resolveRes.ok) {
+      const resolveJson = await resolveRes.json().catch(() => null);
+      if (resolveJson?.profile) {
+        const p = resolveJson.profile;
+        if (p.full_name) preResolvedName = p.full_name;
+        if (p.email && !p.email.includes('@girirajpower.internal')) preResolvedEmail = p.email;
+        if (p.avatar_url) preResolvedPhoto = p.avatar_url;
+        if (p.dob) preResolvedDob = p.dob;
+        if (p.wallet_balance) preResolvedWallet = Number(p.wallet_balance);
+        if (p.refund_balance) preResolvedRefund = Number(p.refund_balance);
+        if (p.cashback_balance) preResolvedCashback = Number(p.cashback_balance);
+      }
+    }
+  } catch (e) {
+    console.debug('[Phone Bridge] Profile resolver notice:', e);
+  }
+
+  const existingPhoneLocal = getSavedUserProfile(`phone_${clean10}`);
+  if (existingPhoneLocal) {
+    if (!preResolvedName && existingPhoneLocal.name) preResolvedName = existingPhoneLocal.name;
+    if (!preResolvedEmail && existingPhoneLocal.email && !existingPhoneLocal.email.includes('@girirajpower.internal')) {
+      preResolvedEmail = existingPhoneLocal.email;
+    }
+    if (!preResolvedPhoto && existingPhoneLocal.photoURL) preResolvedPhoto = existingPhoneLocal.photoURL;
+    if (!preResolvedDob && existingPhoneLocal.dob) preResolvedDob = existingPhoneLocal.dob;
+    if (!preResolvedWallet && existingPhoneLocal.walletBalance) preResolvedWallet = existingPhoneLocal.walletBalance;
+    if (!preResolvedRefund && existingPhoneLocal.refundBalance) preResolvedRefund = existingPhoneLocal.refundBalance;
+    if (!preResolvedCashback && existingPhoneLocal.cashbackBalance) preResolvedCashback = existingPhoneLocal.cashbackBalance;
+  }
+
   let supabaseUser: any = null;
   let supabaseSession: any = null;
 
@@ -502,14 +516,16 @@ export async function bridgeVerifiedPhoneToSupabase(
       supabaseUser = signInRes.data.user;
     } else {
       // Step 2: First-time phone user -> Sign up automatically in Supabase
-      const defaultName = preferredName || `Giriraj Member (${clean10.slice(-4)})`;
+      const defaultName = preResolvedName || preferredName || `Giriraj Member (${clean10.slice(-4)})`;
       const signUpRes = await supabase.auth.signUp({
         email: canonicalEmail,
         password: deterministicPassword,
         options: {
           data: {
             phone: formattedE164,
-            full_name: defaultName
+            contact_number: formattedE164,
+            full_name: defaultName,
+            ...(preResolvedEmail ? { email: preResolvedEmail } : {})
           }
         }
       });
@@ -547,13 +563,13 @@ export async function bridgeVerifiedPhoneToSupabase(
     setActiveUserScope(scope);
 
     // Step 3: Fetch ONLY this user's profile from user_profiles table (STRICT: query ONLY user_id)
-    let resolvedName = preferredName || `Giriraj Member (${clean10.slice(-4)})`;
-    let resolvedEmail = '';
-    let resolvedDob = '';
-    let resolvedPhoto = '';
-    let resolvedWallet = 0;
-    let resolvedRefund = 0;
-    let resolvedCashback = 0;
+    let resolvedName = preResolvedName || preferredName || `Giriraj Member (${clean10.slice(-4)})`;
+    let resolvedEmail = preResolvedEmail || '';
+    let resolvedDob = preResolvedDob || '';
+    let resolvedPhoto = preResolvedPhoto || '';
+    let resolvedWallet = preResolvedWallet || 0;
+    let resolvedRefund = preResolvedRefund || 0;
+    let resolvedCashback = preResolvedCashback || 0;
 
     try {
       const { data: userProfileRecord } = await supabase
@@ -592,6 +608,18 @@ export async function bridgeVerifiedPhoneToSupabase(
       if (!resolvedCashback && localProfile.cashbackBalance) resolvedCashback = localProfile.cashbackBalance;
     }
 
+    // Sync Auth metadata with user details so Supabase Auth table reflects them
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          phone: formattedE164,
+          contact_number: formattedE164,
+          full_name: resolvedName,
+          ...(resolvedEmail ? { real_email: resolvedEmail } : {})
+        }
+      });
+    } catch {}
+
     const finalizedProfile: UserProfile = {
       id: userId,
       phone: formattedE164,
@@ -606,10 +634,11 @@ export async function bridgeVerifiedPhoneToSupabase(
       cashbackBalance: resolvedCashback
     };
 
-    // Save and broadcast user profile update scoped to this specific user ID
+    // Save profile under both user scope AND phone scope for instant multi-login consistency
     saveUserProfile(finalizedProfile, scope);
+    saveUserProfile(finalizedProfile, `phone_${clean10}`);
 
-    // Save to user_profiles table in Supabase strictly for this user_id
+    // Save to user_profiles table in Supabase
     try {
       await supabase.from('user_profiles').upsert(
         {
@@ -663,4 +692,5 @@ export async function signOutFromAll(): Promise<void> {
   resetRecaptchaVerifier();
   activeConfirmationResult = null;
   lastSentPhoneNumber = null;
+  isFast2SmsSession = false;
 }

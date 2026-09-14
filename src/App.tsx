@@ -224,33 +224,50 @@ export default function App() {
   const [userPhone, setUserPhone] = useState<string | null>(() => getSavedUserProfile()?.phone || null);
   const [userName, setUserName] = useState<string>(() => getSavedUserProfile()?.name || '');
 
+  const isAuthenticated = Boolean(userProfile?.id || userProfile?.email || userProfile?.phone || userPhone);
+
   const activeUserIdRef = useRef<string | null>(null);
   const isLoggingOutRef = useRef<boolean>(false);
+  const unsubscribeOrdersRef = useRef<(() => void) | null>(null);
+  const unsubscribeAddressesRef = useRef<(() => void) | null>(null);
+  const unsubscribeProfileRef = useRef<(() => void) | null>(null);
 
   // Initialize stored user profile, auth listener, live orders & saved addresses
   useEffect(() => {
-    let unsubscribeOrders: (() => void) | null = null;
-    let unsubscribeAddresses: (() => void) | null = null;
-    let unsubscribeProfile: (() => void) | null = null;
     let activeUserId: string | null = null;
 
     const setupUserSubscriptions = (userId?: string) => {
-      if (unsubscribeOrders) unsubscribeOrders();
-      if (unsubscribeAddresses) unsubscribeAddresses();
-      if (unsubscribeProfile) unsubscribeProfile();
+      if (unsubscribeOrdersRef.current) {
+        unsubscribeOrdersRef.current();
+        unsubscribeOrdersRef.current = null;
+      }
+      if (unsubscribeAddressesRef.current) {
+        unsubscribeAddressesRef.current();
+        unsubscribeAddressesRef.current = null;
+      }
+      if (unsubscribeProfileRef.current) {
+        unsubscribeProfileRef.current();
+        unsubscribeProfileRef.current = null;
+      }
 
-      unsubscribeOrders = subscribeToOrders((allOrders) => {
+      // For guests or logged out users, cancel realtime listeners and load local cart
+      if (!userId) {
+        setCartItems(getLocalCartItems());
+        return;
+      }
+
+      unsubscribeOrdersRef.current = subscribeToOrders((allOrders) => {
         setOrders(allOrders);
       });
 
-      unsubscribeAddresses = subscribeToAddresses((allAddrs) => {
+      unsubscribeAddressesRef.current = subscribeToAddresses((allAddrs) => {
         setSavedAddresses(allAddrs);
       });
 
       if (userId) {
         activeUserId = userId;
         activeUserIdRef.current = userId;
-        unsubscribeProfile = subscribeToUserProfile(userId, (freshData) => {
+        unsubscribeProfileRef.current = subscribeToUserProfile(userId, (freshData) => {
           if (isLoggingOutRef.current || isUserLoggingOut()) return;
           setUserProfile((prev) => {
             if (isLoggingOutRef.current || isUserLoggingOut()) return null;
@@ -525,6 +542,7 @@ export default function App() {
         }
       } else {
         activeUserId = null;
+        activeUserIdRef.current = null;
         setActiveUserScope(null);
         setUserProfile(null);
         setUserPhone(null);
@@ -535,20 +553,6 @@ export default function App() {
         setupUserSubscriptions();
       }
     });
-
-    const handleLogoutEvent = () => {
-      activeUserId = null;
-      activeUserIdRef.current = null;
-      setUserProfile(null);
-      setUserPhone(null);
-      setUserName('');
-      setOrders([]);
-      setSavedAddresses(getStoredAddresses());
-      setCartItems(getLocalCartItems());
-      setupUserSubscriptions();
-      navigate('/login', { replace: true });
-    };
-    window.addEventListener('giriraj_user_logged_out', handleLogoutEvent);
 
     // Initial default subscriptions for guests
     setupUserSubscriptions();
@@ -583,10 +587,9 @@ export default function App() {
       supabase.removeChannel(prodChannel);
       document.removeEventListener('visibilitychange', syncProfileOnFocus);
       window.removeEventListener('focus', syncProfileOnFocus);
-      window.removeEventListener('giriraj_user_logged_out', handleLogoutEvent);
-      if (unsubscribeOrders) unsubscribeOrders();
-      if (unsubscribeAddresses) unsubscribeAddresses();
-      if (unsubscribeProfile) unsubscribeProfile();
+      if (unsubscribeOrdersRef.current) unsubscribeOrdersRef.current();
+      if (unsubscribeAddressesRef.current) unsubscribeAddressesRef.current();
+      if (unsubscribeProfileRef.current) unsubscribeProfileRef.current();
     };
   }, []);
 
@@ -796,9 +799,17 @@ export default function App() {
         return;
       }
 
-      // If user is not at home root, navigate back
+      // If user is not authenticated and on login screen or root, exit app
       const currentPath = location.pathname;
-      if (currentPath !== '/' && currentPath !== '') {
+      if (!isAuthenticated) {
+        if (currentPath === '/login' || currentPath === '/' || currentPath === '') {
+          CapApp.exitApp();
+          return;
+        }
+      }
+
+      // If user is not at home root, navigate back
+      if (currentPath !== '/' && currentPath !== '' && currentPath !== '/login') {
         navigate(-1);
       } else {
         CapApp.exitApp();
@@ -809,6 +820,7 @@ export default function App() {
       backListenerPromise.then((handle) => handle.remove()).catch(() => {});
     };
   }, [
+    isAuthenticated,
     isAddProductOpen,
     selectedProductQuickView,
     isLocationModalOpen,
@@ -1119,8 +1131,6 @@ export default function App() {
     }
   };
 
-  const isAuthenticated = Boolean(userProfile?.id || userProfile?.email || userProfile?.phone || userPhone);
-
   const handleAuthSuccess = async (phone: string, name: string, email?: string) => {
     // 1. Sanitize incoming parameters (strip internal placeholder domain)
     const cleanEmail = email && !email.includes('@girirajpower.internal') ? email : '';
@@ -1191,24 +1201,51 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    if (isLoggingOutRef.current) return;
     isLoggingOutRef.current = true;
     activeUserIdRef.current = null;
+
     try {
+      // 1. Immediately cancel all active real-time subscriptions to prevent background queries
+      if (unsubscribeOrdersRef.current) {
+        unsubscribeOrdersRef.current();
+        unsubscribeOrdersRef.current = null;
+      }
+      if (unsubscribeAddressesRef.current) {
+        unsubscribeAddressesRef.current();
+        unsubscribeAddressesRef.current = null;
+      }
+      if (unsubscribeProfileRef.current) {
+        unsubscribeProfileRef.current();
+        unsubscribeProfileRef.current = null;
+      }
+
+      // 2. Perform backend sign out across Supabase and Firebase
+      await signOutUser();
+
+      // 3. Clear auth and session state in a single synchronous batch
       setActiveUserScope(null);
       setUserProfile(null);
       setUserPhone(null);
       setUserName('');
       setOrders([]);
       setSavedAddresses([]);
-      await signOutUser();
+      setCartItems(getLocalCartItems());
+
+      // 4. Smoothly navigate to /login replacing history
       navigate('/login', { replace: true });
     } catch (err) {
       console.error('Logout error:', err);
+      setActiveUserScope(null);
+      setUserProfile(null);
+      setUserPhone(null);
+      setUserName('');
+      setOrders([]);
       navigate('/login', { replace: true });
     } finally {
       setTimeout(() => {
         isLoggingOutRef.current = false;
-      }, 1000);
+      }, 500);
     }
   };
 
@@ -1262,7 +1299,7 @@ export default function App() {
 
             {/* Explicit Login Route & Wildcard fallback */}
             <Route path="/login" element={<LoginPage onAuthSuccess={handleAuthSuccess} />} />
-            <Route path="*" element={<LoginPage onAuthSuccess={handleAuthSuccess} />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </main>
       </div>

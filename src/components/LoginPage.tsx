@@ -10,7 +10,8 @@ import {
   KeyRound,
   LogIn,
   UserPlus,
-  Phone
+  Phone,
+  User
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '../lib/supabaseClient';
@@ -109,6 +110,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   // Input states
   const [identifier, setIdentifier] = useState(''); // Holds email or phone in signin
   const [email, setEmail] = useState(''); // Used in signup/forgot
+  const [signupName, setSignupName] = useState(''); // Full name for signup
+  const [signupPhone, setSignupPhone] = useState(''); // Mobile number for signup
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -238,15 +241,9 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         setShowSecondField(true);
         setOtpCooldown(60);
 
-        if (res.isBillingFallback) {
+        if (res.provider === 'fast2sms') {
           setInfoMessage(
-            res.message ||
-              'Preview Mode: Enter code 123456 to verify.'
-          );
-          setOtpCode(res.fallbackOtp || '123456');
-        } else if (res.provider === 'fast2sms') {
-          setInfoMessage(
-            res.message || `OTP sent to ${phone}. Enter the 6-digit code below.`
+            res.message || `OTP sent via Fast2SMS to ${phone}. Enter the 6-digit code below.`
           );
           setOtpCode('');
         } else {
@@ -443,6 +440,10 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       return;
     }
 
+    const cleanPhone = signupPhone.replace(/\D/g, '').slice(-10);
+    const formattedPhone = cleanPhone.length === 10 ? `+91${cleanPhone}` : null;
+    const finalFullName = signupName.trim() || cleanEmail.split('@')[0] || 'Giriraj Customer';
+
     setIsLoading(true);
     try {
       const { data, error: signUpError } = await supabase.auth.signUp({
@@ -450,30 +451,68 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         password: password,
         options: {
           emailRedirectTo: window.location.origin,
+          data: {
+            full_name: finalFullName,
+            phone: formattedPhone,
+            contact_number: formattedPhone
+          }
         },
       });
 
       if (signUpError) {
         setError(signUpError.message || 'Failed to create account.');
       } else if (data.session && data.user) {
-        const cloudProf = await fetchUserProfileFromSupabase(data.user.id);
-        const userFullName =
-          cloudProf?.name ||
-          cleanEmail.split('@')[0] ||
-          'Giriraj Customer';
-        const finalPhone = cloudProf?.phone || data.user.phone || data.user.user_metadata?.phone || '';
+        // Upsert user_profiles immediately with full details
+        try {
+          await supabase.from('user_profiles').upsert(
+            {
+              user_id: data.user.id,
+              full_name: finalFullName,
+              email: cleanEmail,
+              phone: formattedPhone,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'user_id' }
+          );
+        } catch {}
+
+        // Push to server-side profile store
+        fetch('/api/user-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: data.user.id,
+            full_name: finalFullName,
+            email: cleanEmail,
+            phone: formattedPhone
+          })
+        }).catch(() => {});
 
         saveTermsAgreed(true);
-        onAuthSuccess(finalPhone, userFullName, cleanEmail);
+        onAuthSuccess(formattedPhone || '', finalFullName, cleanEmail);
         sendLoginNotificationEmail({
           email: cleanEmail,
-          name: userFullName,
+          name: finalFullName,
           userId: data.user.id,
           loginMethod: 'New Account Creation & Password Sign-in',
           force: true
         }).catch((e) => console.debug('[Security Alert Trigger Note]:', e));
         navigate('/');
       } else {
+        if (data.user) {
+          try {
+            await supabase.from('user_profiles').upsert(
+              {
+                user_id: data.user.id,
+                full_name: finalFullName,
+                email: cleanEmail,
+                phone: formattedPhone,
+                updated_at: new Date().toISOString()
+              },
+              { onConflict: 'user_id' }
+            );
+          } catch {}
+        }
         setInfoMessage(`Account created! We have sent a confirmation link to ${cleanEmail}.`);
         setMode('signin');
       }
@@ -806,12 +845,12 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 ) : !showSecondField ? (
                   <>
                     <LogIn className="w-4 h-4" />
-                    <span>Sign In</span>
+                    <span>{isPhone ? 'Get OTP' : 'Continue'}</span>
                   </>
                 ) : (
                   <>
                     <LogIn className="w-4 h-4" />
-                    <span>{isPhone ? 'Sign Up' : 'Sign In'}</span>
+                    <span>{isPhone ? 'Verify OTP & Sign In' : 'Sign In'}</span>
                   </>
                 )}
               </button>
@@ -837,7 +876,24 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
             <form onSubmit={handlePasswordSignUp} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  EMAIL/PHONE
+                  FULL NAME
+                </label>
+                <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                  <User className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Enter your full name"
+                    value={signupName}
+                    onChange={(e) => setSignupName(e.target.value)}
+                    className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                  EMAIL ADDRESS
                 </label>
                 <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
                   <Mail className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
@@ -848,6 +904,23 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
                     required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                  MOBILE NUMBER (OPTIONAL)
+                </label>
+                <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                  <Phone className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                  <span className="text-sm font-semibold text-slate-600 mr-2">+91</span>
+                  <input
+                    type="tel"
+                    placeholder="10-digit mobile number"
+                    value={signupPhone}
+                    onChange={(e) => setSignupPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
                   />
                 </div>
               </div>

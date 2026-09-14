@@ -81,6 +81,14 @@ export const ProfileView = ({
 }: ProfileViewProps) => {
   const navigate = useNavigate();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Current active sub-page view: 'main' | 'orders' | 'addresses' | 'payments' | 'wallet' | 'services' | 'membership' | 'help' | 'notifications' | 'privacy' | 'terms' | 'favorites' | 'refund-policy'
   const [subPage, setSubPage] = useState<
@@ -749,7 +757,9 @@ export const ProfileView = ({
               } catch (err) {
                 console.error('Logout error:', err);
               } finally {
-                setIsSigningOut(false);
+                if (isMountedRef.current) {
+                  setIsSigningOut(false);
+                }
               }
             }}
             className="w-full py-3.5 px-6 rounded-full bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-70 disabled:cursor-not-allowed text-white transition-all font-medium text-[15px] sm:text-base flex items-center justify-center gap-2.5 cursor-pointer shadow-sm hover:shadow-md active:scale-[0.99]"

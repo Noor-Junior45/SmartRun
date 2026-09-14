@@ -2925,6 +2925,79 @@ async function startServer() {
     }
   });
 
+  /**
+   * 5. POST /api/razorpay/webhook - Razorpay Server-to-Server Webhook Handler
+   * Handles asynchronous payment confirmation (e.g. payment.captured, order.paid, payment.failed).
+   * Ensures orders are marked 'paid' even if the customer's browser disconnected before frontend confirmation.
+   */
+  app.post("/api/razorpay/webhook", async (req, res) => {
+    try {
+      const webhookSignature = req.headers["x-razorpay-signature"] as string;
+      const webhookSecret = (process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET || "").trim();
+
+      // If webhook secret is configured, verify HMAC SHA256 signature
+      if (webhookSecret && webhookSignature) {
+        const expectedSignature = crypto
+          .createHmac("sha256", webhookSecret)
+          .update(JSON.stringify(req.body))
+          .digest("hex");
+
+        if (expectedSignature !== webhookSignature) {
+          console.warn("[Razorpay Webhook] Invalid webhook signature received.");
+          return res.status(400).json({ error: "Invalid webhook signature." });
+        }
+      }
+
+      const event = req.body?.event;
+      const payload = req.body?.payload;
+      console.log(`[Razorpay Webhook] Event received: ${event}`);
+
+      if (event === "payment.captured" || event === "order.paid") {
+        const paymentEntity = payload?.payment?.entity;
+        const orderEntity = payload?.order?.entity;
+
+        const paymentId = paymentEntity?.id;
+        const razorpayOrderId = paymentEntity?.order_id || orderEntity?.id;
+        const amount = paymentEntity?.amount ? paymentEntity.amount / 100 : undefined;
+
+        console.log(`[Razorpay Webhook] Payment confirmed: ${paymentId} for order ${razorpayOrderId} (₹${amount})`);
+
+        // If Supabase is initialized on backend, update order payment status
+        const sb = getServerSupabase();
+        if (sb && razorpayOrderId) {
+          try {
+            const { error: updateErr } = await sb
+              .from("orders")
+              .update({
+                payment_status: "paid",
+                status: "confirmed",
+                razorpay_payment_id: paymentId,
+                payment_id: paymentId,
+                updated_at: new Date().toISOString()
+              })
+              .eq("razorpay_order_id", razorpayOrderId);
+
+            if (updateErr) {
+              console.warn("[Razorpay Webhook] Notice updating order in Supabase:", updateErr.message);
+            } else {
+              console.log(`[Razorpay Webhook] Order ${razorpayOrderId} successfully updated to 'paid' in Supabase.`);
+            }
+          } catch (dbErr) {
+            console.warn("[Razorpay Webhook] DB error:", dbErr);
+          }
+        }
+      } else if (event === "payment.failed") {
+        const paymentEntity = payload?.payment?.entity;
+        console.warn(`[Razorpay Webhook] Payment failed: ${paymentEntity?.id} - reason: ${paymentEntity?.error_description}`);
+      }
+
+      return res.status(200).json({ status: "ok" });
+    } catch (err: any) {
+      console.error("[Razorpay Webhook Error]:", err);
+      return res.status(500).json({ error: err?.message || "Webhook processing error." });
+    }
+  });
+
   // POST /api/rider/location -> Generic endpoint for rider GPS telemetry
   app.post("/api/rider/location", async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -5264,6 +5337,98 @@ Respond ONLY with a valid JSON object matching the following structure:
         error: err?.message || "Internal error verifying OTP."
       });
     }
+  });
+
+  /**
+   * Phone User Profile Resolution Endpoint
+   * POST /api/auth/resolve-phone-user
+   * Matches verified phone number against user_profiles and orders to retrieve the user's primary profile
+   */
+  app.post("/api/auth/resolve-phone-user", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { phone } = req.body || {};
+      const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+      if (!cleanPhone || cleanPhone.length !== 10) {
+        return res.status(400).json({ success: false, message: "Invalid 10-digit mobile number." });
+      }
+
+      const formattedE164 = `+91${cleanPhone}`;
+      const sb = getServerSupabase();
+
+      let resolvedProfile: any = null;
+
+      if (sb) {
+        // 1. Check user_profiles table for any existing record matching this phone
+        try {
+          const { data: profiles, error: pErr } = await sb
+            .from("user_profiles")
+            .select("*")
+            .or(`phone.eq.${formattedE164},phone.eq.${cleanPhone}`)
+            .order("updated_at", { ascending: false })
+            .limit(1);
+
+          if (!pErr && Array.isArray(profiles) && profiles.length > 0) {
+            resolvedProfile = profiles[0];
+          }
+        } catch (e) {
+          console.debug("[Resolve Phone User] user_profiles query notice:", e);
+        }
+
+        // 2. If not found in user_profiles, check orders table for customer name / email
+        if (!resolvedProfile) {
+          try {
+            const { data: orderRows, error: oErr } = await sb
+              .from("orders")
+              .select("user_id, customer_name, recipient_name, customer_email, recipient_email, address, address_line1, city, pincode")
+              .or(`phone.eq.${cleanPhone},phone.eq.${formattedE164},recipient_phone.eq.${cleanPhone},recipient_phone.eq.${formattedE164}`)
+              .order("created_at", { ascending: false })
+              .limit(1);
+
+            if (!oErr && Array.isArray(orderRows) && orderRows.length > 0) {
+              const o = orderRows[0];
+              resolvedProfile = {
+                user_id: o.user_id || null,
+                full_name: o.customer_name || o.recipient_name || null,
+                email: (o.customer_email || o.recipient_email || "").includes("@girirajpower.internal") ? null : (o.customer_email || o.recipient_email || null),
+                phone: formattedE164
+              };
+            }
+          } catch (e) {
+            console.debug("[Resolve Phone User] orders lookup notice:", e);
+          }
+        }
+      }
+
+      return res.json({
+        success: true,
+        exists: Boolean(resolvedProfile),
+        profile: resolvedProfile || null
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to resolve phone profile."
+      });
+    }
+  });
+
+  // SMS Providers Status Endpoint (Firebase + Fast2SMS)
+  app.get("/api/sms/providers-status", (req, res) => {
+    const fast2smsKey = (process.env.FAST2SMS_API_KEY || "").trim();
+
+    return res.json({
+      cascadeOrder: ["firebase", "fast2sms"],
+      firebase: {
+        type: "client_recaptcha_phone_auth",
+        status: "active"
+      },
+      fast2sms: {
+        configured: Boolean(fast2smsKey && fast2smsKey.length > 10),
+        type: "quick_and_otp_sms",
+        keyMasked: fast2smsKey ? `${fast2smsKey.slice(0, 4)}...` : null
+      }
+    });
   });
 
   /**

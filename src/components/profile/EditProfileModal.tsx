@@ -141,18 +141,16 @@ export const EditProfileModal = ({
         return;
       }
 
-      // Firebase successfully initiated phone verification and dispatched SMS OTP!
+      // Successfully initiated phone verification and dispatched SMS OTP!
       const targetPhone = linkResult.formattedPhone || fullE164;
       setPendingPhone(targetPhone);
       setPendingEmail(isEmailChanged ? targetEmailClean : '');
       setIsOtpStep(true);
-      setEnteredOtp(linkResult.isBillingFallback ? '123456' : '');
+      setEnteredOtp('');
       setOtpError('');
       setOtpTimer(60);
-      if (linkResult.isBillingFallback) {
-        showToast(linkResult.message || 'Preview mode: Use code 123456 to verify.', 'info');
-      } else if (linkResult.provider === 'fast2sms') {
-        showToast(`Verification code sent to ${targetPhone} via Fast2SMS Quick SMS.`, 'info');
+      if (linkResult.provider === 'fast2sms') {
+        showToast(`Verification code sent to ${targetPhone} via Fast2SMS.`, 'info');
       } else {
         showToast(`Verification code sent to ${targetPhone} via SMS.`, 'info');
       }

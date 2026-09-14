@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
+import { signOutUser } from '../services/supabaseService';
 
 export interface AuthContextType {
   user: User | null;
@@ -67,7 +68,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await signOutUser();
     if (isMountedRef.current) {
       setUser(null);
       setSession(null);

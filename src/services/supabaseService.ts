@@ -206,9 +206,15 @@ export function getActiveUserScope(): string | null {
 
 export function getUserScopeKeyFromUser(user?: { id?: string; email?: string | null; phone?: string | null } | null): string | null {
   if (!user) return null;
+  // If user has a verified phone number, scope by their phone for unified account persistence
+  if (user.phone && user.phone.trim()) {
+    const cleanPhone = user.phone.replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length === 10) {
+      return `phone_${cleanPhone}`;
+    }
+  }
   if (user.id) return `uid_${user.id}`;
   if (user.email && user.email.trim()) return `email_${user.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-  if (user.phone && user.phone.trim()) return `phone_${user.phone.replace(/\D/g, '')}`;
   return null;
 }
 
@@ -733,30 +739,31 @@ export async function signOutUser(): Promise<void> {
       }
     }
 
-    // Try local sign out first to immediately remove session from memory and client storage
+    // Also sign out from Firebase Auth and clear verification sessions
     try {
-      await supabase.auth.signOut({ scope: 'local' });
+      const { signOutFromAll } = await import('./firebaseAuthService');
+      await signOutFromAll();
     } catch (e) {
-      console.warn('Local sign out caught:', e);
+      console.debug('Firebase signout note:', e);
     }
 
-    // Then try remote sign out to revoke token on the server
+    // Try standard Supabase sign out first, fall back to local scope if network fails
     try {
       await supabase.auth.signOut();
     } catch (e) {
-      console.warn('Global sign out caught:', e);
+      console.warn('Supabase sign out notice, ensuring local cleanup:', e);
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {}
     }
   } catch (error) {
     console.error('Supabase sign out error:', error);
   } finally {
     clearUserProfile();
     activeUserScope = null;
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('giriraj_user_logged_out'));
-    }
     setTimeout(() => {
       isLoggingOut = false;
-    }, 1200);
+    }, 500);
   }
 }
 
@@ -1051,12 +1058,9 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
           (!authData.user.email && Boolean(authData.user.phone));
 
         if (isInternalPhoneUser) {
-          // STRICT SANITIZATION: Phone-authenticated users must NEVER show another user's email!
-          if (cloudEmail) {
-            console.warn(`[Profile Sanitization] Cleared leaked email (${cloudEmail}) from phone user ${userId}`);
+          // Keep genuine user email if present, strip synthetic internal email
+          if (cloudEmail && cloudEmail.includes('@girirajpower.internal')) {
             cloudEmail = '';
-            // Sanitize Supabase database record
-            Promise.resolve(supabase.from('user_profiles').update({ email: null }).eq('user_id', userId)).catch(() => {});
           }
           if (!cloudPhone && (authData.user.phone || meta.phone)) {
             cloudPhone = cleanPhoneAutofill(authData.user.phone || meta.phone);
@@ -1432,25 +1436,24 @@ export function doesOrderBelongToUser(
   if (!user || !user.id) return false;
 
   const orderUserId = order.user_id || order.userId;
-  // If the order has an explicit user_id assigned, it MUST strictly match user.id
-  if (orderUserId) {
-    return String(orderUserId) === String(user.id);
-  }
-
-  // Only for legacy orders created without a user_id:
-  // Check exact email match (case-insensitive)
-  const uEmail = (user.email || user.user_metadata?.email || '').trim().toLowerCase();
-  const oEmail = (order.customerEmail || order.customer_email || order.recipient_email || order.recipientEmail || '').trim().toLowerCase();
-  if (uEmail && oEmail && uEmail.includes('@') && uEmail === oEmail) {
+  // If the order has an explicit user_id matching current user, confirm ownership
+  if (orderUserId && String(orderUserId) === String(user.id)) {
     return true;
   }
 
-  // Check exact 10-digit phone match (both must be valid 10-digit numbers)
-  const rawUPhone = user.phone || user.user_metadata?.phone || '';
+  // Check exact 10-digit phone match (orders placed under the user's verified phone number)
+  const rawUPhone = user.phone || user.user_metadata?.phone || user.user_metadata?.contact_number || '';
   const uPhone = rawUPhone.replace(/\D/g, '').slice(-10);
-  const rawOPhone = order.phone || order.recipient_phone || order.recipientPhone || order.customerPhone || '';
+  const rawOPhone = order.phone || order.recipient_phone || order.recipientPhone || order.customerPhone || order.customer_phone || '';
   const oPhone = rawOPhone.replace(/\D/g, '').slice(-10);
   if (uPhone && oPhone && uPhone.length === 10 && oPhone.length === 10 && uPhone === oPhone) {
+    return true;
+  }
+
+  // Check exact email match (case-insensitive) - ignore internal synthetic emails
+  const uEmail = (user.email || user.user_metadata?.email || user.user_metadata?.real_email || '').trim().toLowerCase();
+  const oEmail = (order.customerEmail || order.customer_email || order.recipient_email || order.recipientEmail || '').trim().toLowerCase();
+  if (uEmail && oEmail && uEmail.includes('@') && !uEmail.includes('@girirajpower.internal') && uEmail === oEmail) {
     return true;
   }
 
@@ -2734,6 +2737,19 @@ export function getStoredAddresses(userScopeOverride?: string): SavedAddress[] {
           collected.push(activeObj);
         }
       } catch {}
+    }
+
+    // 3. Fallback across linked scopes (e.g. phone scope <-> uid scope)
+    if (collected.length === 0) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('giriraj_addrs_phone_') || key.startsWith('giriraj_addrs_uid_'))) {
+          try {
+            const extra = JSON.parse(localStorage.getItem(key) || '[]');
+            addAddresses(extra);
+          } catch {}
+        }
+      }
     }
 
     // If local storage was cleared / empty, trigger server fetch asynchronously to restore addresses
