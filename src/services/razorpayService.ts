@@ -254,6 +254,7 @@ export interface RazorpayCheckoutResult {
   paymentId: string;
   orderId: string;
   signature: string;
+  verified: boolean;
 }
 
 /**
@@ -344,7 +345,8 @@ export async function launchRazorpayCheckout(
           const result: RazorpayCheckoutResult = {
             paymentId: response.razorpay_payment_id,
             orderId: response.razorpay_order_id || fallbackOrderId,
-            signature: response.razorpay_signature || ''
+            signature: response.razorpay_signature || '',
+            verified: isVerified
           };
           if (onSuccess) onSuccess(response);
           resolve(result);

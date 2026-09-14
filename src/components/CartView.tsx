@@ -546,6 +546,7 @@ export const CartView = ({
     let paymentId: string | undefined = undefined;
     let razorpayOrderId: string | undefined = undefined;
     let razorpaySignature: string | undefined = undefined;
+    let isPaymentVerified = false;
 
     const isCod = activeOption === 'cash' || (activeOption as any) === 'cod';
     const normalizedPaymentMethod: 'cod' | 'upi' | 'card' = isCod
@@ -567,6 +568,7 @@ export const CartView = ({
         paymentId = paymentRes.paymentId;
         razorpayOrderId = paymentRes.orderId;
         razorpaySignature = paymentRes.signature;
+        isPaymentVerified = Boolean(paymentRes.verified);
       } catch (payErr: any) {
         hapticError();
         setIsSubmitting(false);
@@ -613,7 +615,7 @@ export const CartView = ({
       couponCode,
       totalAmount: finalTotalAmount,
       paymentMethod: normalizedPaymentMethod,
-      paymentStatus: isCod ? 'pending' : 'paid',
+      paymentStatus: !isCod && isPaymentVerified ? 'paid' : 'pending',
       paymentId,
       razorpayPaymentId: paymentId,
       razorpayOrderId,
