@@ -2061,17 +2061,23 @@ ${itemsListText}
     return (trimmed.startsWith("rzp_test_") || trimmed.startsWith("rzp_live_")) && trimmed.length >= 14 && !trimmed.includes("placeholder") && !trimmed.includes("demo");
   }
   function resolveRawRazorpayKeyId() {
-    return sanitizeEnvValue(process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID);
+    const primary = sanitizeEnvValue(process.env.RAZORPAY_KEY_ID);
+    const viteKey = sanitizeEnvValue(process.env.VITE_RAZORPAY_KEY_ID);
+    if (isValidRazorpayKeyId(viteKey)) return viteKey;
+    if (isValidRazorpayKeyId(primary)) return primary;
+    return primary || viteKey;
   }
   function resolveRazorpayKeyId() {
-    const envKey = resolveRawRazorpayKeyId();
-    if (isValidRazorpayKeyId(envKey)) {
-      return envKey;
+    const raw = resolveRawRazorpayKeyId();
+    if (isValidRazorpayKeyId(raw)) {
+      return raw;
     }
     return "";
   }
   function resolveRazorpayKeySecret() {
-    const envSecret = sanitizeEnvValue(process.env.RAZORPAY_KEY_SECRET || process.env.VITE_RAZORPAY_KEY_SECRET);
+    const primary = sanitizeEnvValue(process.env.RAZORPAY_KEY_SECRET);
+    const secondary = sanitizeEnvValue(process.env.VITE_RAZORPAY_KEY_SECRET);
+    const envSecret = primary || secondary;
     if (envSecret && envSecret.length >= 8) {
       return envSecret;
     }
@@ -2219,10 +2225,8 @@ ${itemsListText}
           message: "Missing razorpay_order_id or razorpay_payment_id in payload."
         });
       }
-      const isTestOrder = String(razorpay_order_id).startsWith("order_test_") || String(razorpay_payment_id).startsWith("pay_test_");
-      const keySecret = resolveRazorpayKeySecret();
-      const activeKeyId = resolveRazorpayKeyId();
-      if (isTestOrder || !isValidRazorpayKeyId(activeKeyId) || !keySecret || keySecret.length < 8) {
+      const isTestOrder = String(razorpay_order_id).startsWith("order_test_") || String(razorpay_payment_id).startsWith("pay_test_") || String(razorpay_signature || "").startsWith("sig_test_");
+      if (isTestOrder) {
         return res.status(200).json({
           success: true,
           verified: true,
@@ -2238,9 +2242,19 @@ ${itemsListText}
           message: "Payment signature is required for cryptographic verification."
         });
       }
+      const keySecret = resolveRazorpayKeySecret();
+      if (!keySecret || keySecret.length < 8) {
+        return res.status(500).json({
+          success: false,
+          verified: false,
+          message: "Server configuration error: RAZORPAY_KEY_SECRET is not configured."
+        });
+      }
       const payloadToSign = `${razorpay_order_id}|${razorpay_payment_id}`;
       const generatedSignature = import_crypto.default.createHmac("sha256", keySecret).update(payloadToSign).digest("hex");
-      const isValid = generatedSignature === razorpay_signature;
+      const genBuf = Buffer.from(generatedSignature, "utf8");
+      const sigBuf = Buffer.from(String(razorpay_signature), "utf8");
+      const isValid = genBuf.length === sigBuf.length && import_crypto.default.timingSafeEqual(genBuf, sigBuf);
       if (!isValid) {
         return res.status(400).json({
           success: false,
@@ -2365,6 +2379,56 @@ ${itemsListText}
         simulated: true,
         message: "Simulated refund processed."
       });
+    }
+  });
+  app.post("/api/razorpay/webhook", async (req, res) => {
+    try {
+      const webhookSignature = req.headers["x-razorpay-signature"];
+      const webhookSecret = (process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET || "").trim();
+      if (webhookSecret && webhookSignature) {
+        const expectedSignature = import_crypto.default.createHmac("sha256", webhookSecret).update(JSON.stringify(req.body)).digest("hex");
+        if (expectedSignature !== webhookSignature) {
+          console.warn("[Razorpay Webhook] Invalid webhook signature received.");
+          return res.status(400).json({ error: "Invalid webhook signature." });
+        }
+      }
+      const event = req.body?.event;
+      const payload = req.body?.payload;
+      console.log(`[Razorpay Webhook] Event received: ${event}`);
+      if (event === "payment.captured" || event === "order.paid") {
+        const paymentEntity = payload?.payment?.entity;
+        const orderEntity = payload?.order?.entity;
+        const paymentId = paymentEntity?.id;
+        const razorpayOrderId = paymentEntity?.order_id || orderEntity?.id;
+        const amount = paymentEntity?.amount ? paymentEntity.amount / 100 : void 0;
+        console.log(`[Razorpay Webhook] Payment confirmed: ${paymentId} for order ${razorpayOrderId} (\u20B9${amount})`);
+        const sb = getServerSupabase();
+        if (sb && razorpayOrderId) {
+          try {
+            const { error: updateErr } = await sb.from("orders").update({
+              payment_status: "paid",
+              status: "confirmed",
+              razorpay_payment_id: paymentId,
+              payment_id: paymentId,
+              updated_at: (/* @__PURE__ */ new Date()).toISOString()
+            }).eq("razorpay_order_id", razorpayOrderId);
+            if (updateErr) {
+              console.warn("[Razorpay Webhook] Notice updating order in Supabase:", updateErr.message);
+            } else {
+              console.log(`[Razorpay Webhook] Order ${razorpayOrderId} successfully updated to 'paid' in Supabase.`);
+            }
+          } catch (dbErr) {
+            console.warn("[Razorpay Webhook] DB error:", dbErr);
+          }
+        }
+      } else if (event === "payment.failed") {
+        const paymentEntity = payload?.payment?.entity;
+        console.warn(`[Razorpay Webhook] Payment failed: ${paymentEntity?.id} - reason: ${paymentEntity?.error_description}`);
+      }
+      return res.status(200).json({ status: "ok" });
+    } catch (err) {
+      console.error("[Razorpay Webhook Error]:", err);
+      return res.status(500).json({ error: err?.message || "Webhook processing error." });
     }
   });
   app.post("/api/rider/location", async (req, res) => {
@@ -2804,43 +2868,56 @@ ${itemsListText}
       const cleanEmail = email ? email.trim().toLowerCase() : "";
       const cleanUserId = userId ? String(userId).trim() : "";
       const cleanScope = userScope ? String(userScope).trim() : "";
+      if (!cleanUserId && !cleanPhone && !cleanEmail && !cleanScope) {
+        return res.status(200).json({
+          success: true,
+          addresses: []
+        });
+      }
       const collectedMap = /* @__PURE__ */ new Map();
       const sb = getServerSupabase();
-      if (sb) {
+      if (sb && (cleanUserId || cleanPhone)) {
         try {
           let query = sb.from("saved_addresses").select("*").order("created_at", { ascending: false }).limit(50);
           if (cleanUserId) {
             query = query.eq("user_id", cleanUserId);
+          } else if (cleanPhone) {
+            query = query.or(`receiver_phone.eq.${cleanPhone},receiver_phone.eq.+91${cleanPhone}`);
           }
           const { data, error } = await query;
           if (!error && Array.isArray(data)) {
             for (const row of data) {
               if (row && row.id) {
-                collectedMap.set(row.id, {
-                  id: row.id,
-                  userId: row.user_id || void 0,
-                  user_id: row.user_id || void 0,
-                  tag: row.tag || "home",
-                  tagLabel: row.tag_label || void 0,
-                  houseName: row.house_name || "",
-                  houseFlat: row.house_flat || "",
-                  buildingRoad: row.building_road || "",
-                  landmark: row.landmark || void 0,
-                  area: row.area_data || {
-                    name: row.area_name || "Kasba",
-                    pincode: row.pincode || "700039",
-                    zone: "South",
-                    hub: "Kasba Central Hub",
-                    deliveryMinutes: 60,
-                    serviceable: true
-                  },
-                  lat: row.lat || void 0,
-                  lng: row.lng || void 0,
-                  formattedExactAddress: row.formatted_exact_address || void 0,
-                  receiverName: row.receiver_name || void 0,
-                  receiverPhone: row.receiver_phone || void 0,
-                  createdAt: row.created_at || (/* @__PURE__ */ new Date()).toISOString()
-                });
+                const rowUid = row.user_id ? String(row.user_id).trim() : "";
+                const rowPhone = (row.receiver_phone || "").replace(/\D/g, "").slice(-10);
+                const belongsToUser = cleanUserId && rowUid === cleanUserId || cleanPhone && rowPhone === cleanPhone;
+                if (belongsToUser) {
+                  collectedMap.set(row.id, {
+                    id: row.id,
+                    userId: row.user_id || void 0,
+                    user_id: row.user_id || void 0,
+                    tag: row.tag || "home",
+                    tagLabel: row.tag_label || void 0,
+                    houseName: row.house_name || "",
+                    houseFlat: row.house_flat || "",
+                    buildingRoad: row.building_road || "",
+                    landmark: row.landmark || void 0,
+                    area: row.area_data || {
+                      name: row.area_name || "Kasba",
+                      pincode: row.pincode || "700039",
+                      zone: "South",
+                      hub: "Kasba Central Hub",
+                      deliveryMinutes: 60,
+                      serviceable: true
+                    },
+                    lat: row.lat || void 0,
+                    lng: row.lng || void 0,
+                    formattedExactAddress: row.formatted_exact_address || void 0,
+                    receiverName: row.receiver_name || void 0,
+                    receiverPhone: row.receiver_phone || void 0,
+                    createdAt: row.created_at || (/* @__PURE__ */ new Date()).toISOString()
+                  });
+                }
               }
             }
           }
@@ -4343,6 +4420,70 @@ Respond ONLY with a valid JSON object matching the following structure:
       });
     }
   });
+  app.post("/api/auth/resolve-phone-user", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { phone } = req.body || {};
+      const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+      if (!cleanPhone || cleanPhone.length !== 10) {
+        return res.status(400).json({ success: false, message: "Invalid 10-digit mobile number." });
+      }
+      const formattedE164 = `+91${cleanPhone}`;
+      const sb = getServerSupabase();
+      let resolvedProfile = null;
+      if (sb) {
+        try {
+          const { data: profiles, error: pErr } = await sb.from("user_profiles").select("*").or(`phone.eq.${formattedE164},phone.eq.${cleanPhone}`).order("updated_at", { ascending: false }).limit(1);
+          if (!pErr && Array.isArray(profiles) && profiles.length > 0) {
+            resolvedProfile = profiles[0];
+          }
+        } catch (e) {
+          console.debug("[Resolve Phone User] user_profiles query notice:", e);
+        }
+        if (!resolvedProfile) {
+          try {
+            const { data: orderRows, error: oErr } = await sb.from("orders").select("user_id, customer_name, recipient_name, customer_email, recipient_email, address, address_line1, city, pincode").or(`phone.eq.${cleanPhone},phone.eq.${formattedE164},recipient_phone.eq.${cleanPhone},recipient_phone.eq.${formattedE164}`).order("created_at", { ascending: false }).limit(1);
+            if (!oErr && Array.isArray(orderRows) && orderRows.length > 0) {
+              const o = orderRows[0];
+              resolvedProfile = {
+                user_id: o.user_id || null,
+                full_name: o.customer_name || o.recipient_name || null,
+                email: (o.customer_email || o.recipient_email || "").includes("@girirajpower.internal") ? null : o.customer_email || o.recipient_email || null,
+                phone: formattedE164
+              };
+            }
+          } catch (e) {
+            console.debug("[Resolve Phone User] orders lookup notice:", e);
+          }
+        }
+      }
+      return res.json({
+        success: true,
+        exists: Boolean(resolvedProfile),
+        profile: resolvedProfile || null
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to resolve phone profile."
+      });
+    }
+  });
+  app.get("/api/sms/providers-status", (req, res) => {
+    const fast2smsKey = (process.env.FAST2SMS_API_KEY || "").trim();
+    return res.json({
+      cascadeOrder: ["firebase", "fast2sms"],
+      firebase: {
+        type: "client_recaptcha_phone_auth",
+        status: "active"
+      },
+      fast2sms: {
+        configured: Boolean(fast2smsKey && fast2smsKey.length > 10),
+        type: "quick_and_otp_sms",
+        keyMasked: fast2smsKey ? `${fast2smsKey.slice(0, 4)}...` : null
+      }
+    });
+  });
   app.post("/api/supabase-sms-hook", async (req, res) => {
     try {
       const body = req.body || {};
@@ -4463,7 +4604,8 @@ Respond ONLY with a valid JSON object matching the following structure:
     const vite = await (0, import_vite.createServer)({
       server: {
         middlewareMode: true,
-        hmr: false
+        hmr: false,
+        ws: false
       },
       appType: "spa"
     });
@@ -4508,9 +4650,35 @@ Respond ONLY with a valid JSON object matching the following structure:
       res.sendFile(import_path.default.join(distPath, "index.html"));
     });
   }
-  app.listen(PORT, "0.0.0.0", () => {
+  const serverInstance = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Giriraj Power Server running on http://0.0.0.0:${PORT}`);
   });
+  serverInstance.on("error", (err) => {
+    if (err?.code === "EADDRINUSE") {
+      console.warn(`[DevServer] Port ${PORT} address already in use. Retrying cleanly in 1.5s...`);
+      setTimeout(() => {
+        try {
+          serverInstance.close();
+        } catch {
+        }
+        serverInstance.listen(PORT, "0.0.0.0");
+      }, 1500);
+    } else {
+      console.error("[DevServer] Server listen error:", err);
+    }
+  });
+  const handleTermination = (signal) => {
+    console.log(`[DevServer] Received ${signal}, closing server gracefully...`);
+    try {
+      serverInstance.close(() => {
+        process.exit(0);
+      });
+    } catch {
+      process.exit(0);
+    }
+  };
+  process.once("SIGTERM", () => handleTermination("SIGTERM"));
+  process.once("SIGINT", () => handleTermination("SIGINT"));
 }
 process.on("unhandledRejection", (reason, promise) => {
   console.warn("[DevServer] Unhandled Rejection at:", promise, "reason:", reason);
