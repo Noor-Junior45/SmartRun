@@ -354,6 +354,36 @@ export async function launchRazorpayCheckout(
             color: '#ff3252', // SmartRun brand red matching the application theme
             backdrop_color: 'rgba(15, 23, 42, 0.75)'
           },
+          // Ensure UPI (Intent, QR code, and VPA) and Cards are explicitly displayed in Android WebView
+          config: {
+            display: {
+              blocks: {
+                upi: {
+                  name: 'Pay via UPI / QR',
+                  instruments: [
+                    {
+                      method: 'upi'
+                    }
+                  ]
+                },
+                other: {
+                  name: 'Cards & NetBanking',
+                  instruments: [
+                    {
+                      method: 'card'
+                    },
+                    {
+                      method: 'netbanking'
+                    }
+                  ]
+                }
+              },
+              sequence: ['block.upi', 'block.other'],
+              preferences: {
+                show_default_blocks: true
+              }
+            }
+          },
           handler: handleApproved,
           modal: {
             ondismiss: function () {

@@ -82,4 +82,31 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Android 11+ (API 30+) Package Visibility Queries for Razorpay UPI & Banking Apps -->
+    <queries>
+        <!-- Generic UPI payment scheme query (enables detecting any installed UPI app) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="credpay" />
+        </intent>
+
+        <!-- Popular Indian UPI & Banking Apps so Razorpay can detect and display them -->
+        <package android:name="com.google.android.apps.nbu.paisa.user" /> <!-- Google Pay -->
+        <package android:name="net.one97.paytm" />                        <!-- Paytm -->
+        <package android:name="com.phonepe.app" />                       <!-- PhonePe -->
+        <package android:name="in.amazon.mShop.android.shopping" />      <!-- Amazon Pay -->
+        <package android:name="in.org.npci.upiapp" />                    <!-- BHIM UPI -->
+        <package android:name="com.whatsapp" />                          <!-- WhatsApp Pay -->
+        <package android:name="com.csam.icici.bank.imobile" />           <!-- iMobile Pay (ICICI) -->
+        <package android:name="com.msf.kfa" />                           <!-- Kotak 811 -->
+        <package android:name="com.sbi.upi" />                           <!-- BHIM SBI Pay -->
+        <package android:name="com.axis.mobile" />                       <!-- Axis Mobile -->
+        <package android:name="com.dreamplug.androidapp" />              <!-- CRED -->
+        <package android:name="com.mobikwik_new" />                      <!-- MobiKwik -->
+    </queries>
 </manifest>

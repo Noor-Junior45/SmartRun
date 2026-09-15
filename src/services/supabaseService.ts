@@ -198,6 +198,9 @@ let activeUserScope: string | null = null;
 
 export function setActiveUserScope(scope: string | null): void {
   activeUserScope = scope;
+  if (typeof window !== 'undefined') {
+    notifyUpiListeners(getStoredUpiIds(scope || undefined));
+  }
 }
 
 export function getActiveUserScope(): string | null {
@@ -252,6 +255,7 @@ export function purgeLegacyUnscopedStorage(): void {
       'giriraj_order_ratings',
       'giriraj_cart_items',
       'giriraj_user_saved_upi',
+      'giriraj_saved_addresses',
       'giriraj_orders_v2',
       'giriraj_customer_orders',
       'giriraj_orders_cache',
@@ -501,6 +505,9 @@ export async function signInWithGoogle(): Promise<{ error: Error | null; url?: s
       } else if (isWv) {
         // In Android WebView / TWA wrapper, open via external browser to avoid Google 403 disallowed_useragent
         window.open(data.url, '_system', 'noopener,noreferrer') || (window.location.href = data.url);
+      } else {
+        // Standard website in browser
+        window.location.href = data.url;
       }
     }
 
@@ -2739,17 +2746,32 @@ export function getStoredAddresses(userScopeOverride?: string): SavedAddress[] {
       } catch {}
     }
 
-    // 3. Fallback across linked scopes (e.g. phone scope <-> uid scope)
-    if (collected.length === 0) {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith('giriraj_addrs_phone_') || key.startsWith('giriraj_addrs_uid_'))) {
-          try {
-            const extra = JSON.parse(localStorage.getItem(key) || '[]');
-            addAddresses(extra);
-          } catch {}
+    // 3. Fallback strictly to this specific user's known linked scope (never loop across other users)
+    if (collected.length === 0 && scope) {
+      try {
+        if (scope.startsWith('uid_')) {
+          const cachedProf = getSavedUserProfile(scope);
+          if (cachedProf?.phone) {
+            const cleanPhone = cachedProf.phone.replace(/\D/g, '').slice(-10);
+            if (cleanPhone.length === 10) {
+              const linkedKey = `giriraj_addrs_phone_${cleanPhone}`;
+              const linkedData = localStorage.getItem(linkedKey);
+              if (linkedData) {
+                try { addAddresses(JSON.parse(linkedData)); } catch {}
+              }
+            }
+          }
+        } else if (scope.startsWith('phone_')) {
+          const cachedProf = getSavedUserProfile(scope);
+          if (cachedProf?.id) {
+            const linkedKey = `giriraj_addrs_uid_${cachedProf.id}`;
+            const linkedData = localStorage.getItem(linkedKey);
+            if (linkedData) {
+              try { addAddresses(JSON.parse(linkedData)); } catch {}
+            }
+          }
         }
-      }
+      } catch {}
     }
 
     // If local storage was cleared / empty, trigger server fetch asynchronously to restore addresses
@@ -2892,10 +2914,9 @@ export async function fetchUserAddresses(): Promise<SavedAddress[]> {
       }
       
       const activeKey = getActiveAddressStorageKey(scope);
-      const activeRaw = safeGetItem(activeKey) || safeGetItem(ACTIVE_SAVED_ADDRESS_KEY);
+      const activeRaw = safeGetItem(activeKey);
       if (!activeRaw && list.length > 0) {
         safeSetItem(activeKey, JSON.stringify(list[0]));
-        safeSetItem(ACTIVE_SAVED_ADDRESS_KEY, JSON.stringify(list[0]));
       }
     }
 
@@ -3035,7 +3056,6 @@ export async function saveAddressToFirestore(address: SavedAddress): Promise<{ s
   }
   const activeKey = getActiveAddressStorageKey(scope);
   safeSetItem(activeKey, JSON.stringify(address));
-  safeSetItem(ACTIVE_SAVED_ADDRESS_KEY, JSON.stringify(address));
   notifyAddressListeners(updated);
   broadcastAddressUpdate(updated, userId || undefined);
 
@@ -3138,20 +3158,17 @@ export async function deleteAddressFromFirestore(id: string): Promise<{ success:
   if (scope) {
     safeSetItem(`giriraj_addrs_${scope}`, JSON.stringify(updated));
   }
-  safeSetItem('giriraj_saved_addresses', JSON.stringify(updated));
 
   const activeKey = getActiveAddressStorageKey(scope);
-  const activeRaw = safeGetItem(activeKey) || safeGetItem(ACTIVE_SAVED_ADDRESS_KEY);
+  const activeRaw = safeGetItem(activeKey);
   if (activeRaw) {
     try {
       const activeObj = JSON.parse(activeRaw);
       if (activeObj?.id === id) {
         if (updated.length > 0) {
           safeSetItem(activeKey, JSON.stringify(updated[0]));
-          safeSetItem(ACTIVE_SAVED_ADDRESS_KEY, JSON.stringify(updated[0]));
         } else {
           safeRemoveItem(activeKey);
-          safeRemoveItem(ACTIVE_SAVED_ADDRESS_KEY);
         }
       }
     } catch {}

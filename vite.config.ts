@@ -49,6 +49,7 @@ export default defineConfig(({ command }) => {
     },
     server: {
       hmr: false,
+      ws: false,
       watch: {
         ignored: ['**/ios/**', '**/android/**', '**/dist/**'],
       },

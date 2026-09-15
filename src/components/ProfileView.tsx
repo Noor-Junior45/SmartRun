@@ -171,7 +171,7 @@ export const ProfileView = ({
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [userProfile?.id]);
 
   // Wallet State
   const refundBalance = userProfile?.refundBalance ?? 0;

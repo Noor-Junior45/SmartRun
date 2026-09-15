@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+*.jks
+*.keystore
+*.p12
+*.key
+smartrun-release-key.jks

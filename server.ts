@@ -3517,45 +3517,64 @@ async function startServer() {
       const cleanUserId = userId ? String(userId).trim() : "";
       const cleanScope = userScope ? String(userScope).trim() : "";
 
+      // Strictly isolate user data: if no user identifier is provided, return empty array immediately
+      if (!cleanUserId && !cleanPhone && !cleanEmail && !cleanScope) {
+        return res.status(200).json({
+          success: true,
+          addresses: []
+        });
+      }
+
       const collectedMap = new Map<string, any>();
 
-      // 1. Fetch from Supabase `saved_addresses` table if client is available
+      // 1. Fetch from Supabase `saved_addresses` table ONLY for this user
       const sb = getServerSupabase();
-      if (sb) {
+      if (sb && (cleanUserId || cleanPhone)) {
         try {
           let query = sb.from("saved_addresses").select("*").order("created_at", { ascending: false }).limit(50);
           if (cleanUserId) {
             query = query.eq("user_id", cleanUserId);
+          } else if (cleanPhone) {
+            query = query.or(`receiver_phone.eq.${cleanPhone},receiver_phone.eq.+91${cleanPhone}`);
           }
           const { data, error } = await query;
           if (!error && Array.isArray(data)) {
             for (const row of data) {
               if (row && row.id) {
-                collectedMap.set(row.id, {
-                  id: row.id,
-                  userId: row.user_id || undefined,
-                  user_id: row.user_id || undefined,
-                  tag: row.tag || "home",
-                  tagLabel: row.tag_label || undefined,
-                  houseName: row.house_name || "",
-                  houseFlat: row.house_flat || "",
-                  buildingRoad: row.building_road || "",
-                  landmark: row.landmark || undefined,
-                  area: row.area_data || {
-                    name: row.area_name || "Kasba",
-                    pincode: row.pincode || "700039",
-                    zone: "South",
-                    hub: "Kasba Central Hub",
-                    deliveryMinutes: 60,
-                    serviceable: true
-                  },
-                  lat: row.lat || undefined,
-                  lng: row.lng || undefined,
-                  formattedExactAddress: row.formatted_exact_address || undefined,
-                  receiverName: row.receiver_name || undefined,
-                  receiverPhone: row.receiver_phone || undefined,
-                  createdAt: row.created_at || new Date().toISOString()
-                });
+                // Strict check: row must belong strictly to this user
+                const rowUid = row.user_id ? String(row.user_id).trim() : "";
+                const rowPhone = (row.receiver_phone || "").replace(/\D/g, "").slice(-10);
+                const belongsToUser =
+                  (cleanUserId && rowUid === cleanUserId) ||
+                  (cleanPhone && rowPhone === cleanPhone);
+
+                if (belongsToUser) {
+                  collectedMap.set(row.id, {
+                    id: row.id,
+                    userId: row.user_id || undefined,
+                    user_id: row.user_id || undefined,
+                    tag: row.tag || "home",
+                    tagLabel: row.tag_label || undefined,
+                    houseName: row.house_name || "",
+                    houseFlat: row.house_flat || "",
+                    buildingRoad: row.building_road || "",
+                    landmark: row.landmark || undefined,
+                    area: row.area_data || {
+                      name: row.area_name || "Kasba",
+                      pincode: row.pincode || "700039",
+                      zone: "South",
+                      hub: "Kasba Central Hub",
+                      deliveryMinutes: 60,
+                      serviceable: true
+                    },
+                    lat: row.lat || undefined,
+                    lng: row.lng || undefined,
+                    formattedExactAddress: row.formatted_exact_address || undefined,
+                    receiverName: row.receiver_name || undefined,
+                    receiverPhone: row.receiver_phone || undefined,
+                    createdAt: row.created_at || new Date().toISOString()
+                  });
+                }
               }
             }
           }
@@ -5587,6 +5606,7 @@ Respond ONLY with a valid JSON object matching the following structure:
       server: {
         middlewareMode: true,
         hmr: false,
+        ws: false,
       },
       appType: "spa",
     });
@@ -5640,9 +5660,39 @@ Respond ONLY with a valid JSON object matching the following structure:
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const serverInstance = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Giriraj Power Server running on http://0.0.0.0:${PORT}`);
   });
+
+  serverInstance.on("error", (err: any) => {
+    if (err?.code === "EADDRINUSE") {
+      console.warn(`[DevServer] Port ${PORT} address already in use. Retrying cleanly in 1.5s...`);
+      setTimeout(() => {
+        try {
+          serverInstance.close();
+        } catch {
+          // ignore
+        }
+        serverInstance.listen(PORT, "0.0.0.0");
+      }, 1500);
+    } else {
+      console.error("[DevServer] Server listen error:", err);
+    }
+  });
+
+  const handleTermination = (signal: string) => {
+    console.log(`[DevServer] Received ${signal}, closing server gracefully...`);
+    try {
+      serverInstance.close(() => {
+        process.exit(0);
+      });
+    } catch {
+      process.exit(0);
+    }
+  };
+
+  process.once("SIGTERM", () => handleTermination("SIGTERM"));
+  process.once("SIGINT", () => handleTermination("SIGINT"));
 }
 
 // Global crash-prevention handlers to keep dev server running smoothly in AI Studio
