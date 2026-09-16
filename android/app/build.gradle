@@ -83,6 +83,7 @@ configurations.all {
         force "androidx.core:core:1.15.0"
         force "androidx.activity:activity:1.10.1"
         force "androidx.appcompat:appcompat:1.7.0"
+        force "androidx.browser:browser:1.8.0"
     }
 }
 
