@@ -1310,6 +1310,39 @@ async function startServer() {
     }
   });
 
+  // SEO: Explicit Sitemap & Robots routes to ensure direct 200 responses with correct Content-Type
+  app.get("/sitemap.xml", (req, res) => {
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    const candidates = [
+      path.join(process.cwd(), "public", "sitemap.xml"),
+      path.join(process.cwd(), "dist", "sitemap.xml"),
+      path.join(__dirnameResolved, "public", "sitemap.xml")
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        return res.sendFile(p);
+      }
+    }
+    res.status(404).send("Sitemap not found");
+  });
+
+  app.get("/robots.txt", (req, res) => {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    const candidates = [
+      path.join(process.cwd(), "public", "robots.txt"),
+      path.join(process.cwd(), "dist", "robots.txt"),
+      path.join(__dirnameResolved, "public", "robots.txt")
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        return res.sendFile(p);
+      }
+    }
+    res.status(404).send("Robots.txt not found");
+  });
+
   // =========================================================================
   // VERSION CHECK & DEPLOYMENT SYNCHRONIZATION ENDPOINTS
   // =========================================================================

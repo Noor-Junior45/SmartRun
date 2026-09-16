@@ -74,7 +74,20 @@ export const SEOHead = ({
       metaKey.setAttribute('content', keywords || defaultKeywords);
     }
 
-    // 4. Update OpenGraph Tags
+    // 4. Update OpenGraph Tags & Canonical URL
+    const canonicalUrl = `https://www.smartrun.in${location.pathname === '/' ? '/' : location.pathname}`;
+
+    let canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (!canonicalLink) {
+      canonicalLink = document.createElement('link');
+      canonicalLink.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonicalLink);
+    }
+    canonicalLink.setAttribute('href', canonicalUrl);
+
+    const ogUrl = document.querySelector('meta[property="og:url"]');
+    if (ogUrl) ogUrl.setAttribute('content', canonicalUrl);
+
     const ogTitle = document.querySelector('meta[property="og:title"]');
     if (ogTitle) ogTitle.setAttribute('content', computedTitle);
 
@@ -82,7 +95,7 @@ export const SEOHead = ({
     if (ogDesc) ogDesc.setAttribute('content', description || defaultDesc);
 
     const ogImg = document.querySelector('meta[property="og:image"]');
-    if (ogImg) ogImg.setAttribute('content', image || 'https://smartrun.in/smartrun.jpeg');
+    if (ogImg) ogImg.setAttribute('content', image || 'https://www.smartrun.in/smartrun.jpeg');
 
     // 5. Inject Dynamic Product Schema if on a product page
     let productScriptTag = document.getElementById('dynamic-product-jsonld');

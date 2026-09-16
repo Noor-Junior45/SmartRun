@@ -1099,6 +1099,36 @@ async function startServer() {
       ]);
     }
   });
+  app.get("/sitemap.xml", (req, res) => {
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    const candidates = [
+      import_path.default.join(process.cwd(), "public", "sitemap.xml"),
+      import_path.default.join(process.cwd(), "dist", "sitemap.xml"),
+      import_path.default.join(__dirnameResolved, "public", "sitemap.xml")
+    ];
+    for (const p of candidates) {
+      if (import_fs.default.existsSync(p)) {
+        return res.sendFile(p);
+      }
+    }
+    res.status(404).send("Sitemap not found");
+  });
+  app.get("/robots.txt", (req, res) => {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    const candidates = [
+      import_path.default.join(process.cwd(), "public", "robots.txt"),
+      import_path.default.join(process.cwd(), "dist", "robots.txt"),
+      import_path.default.join(__dirnameResolved, "public", "robots.txt")
+    ];
+    for (const p of candidates) {
+      if (import_fs.default.existsSync(p)) {
+        return res.sendFile(p);
+      }
+    }
+    res.status(404).send("Robots.txt not found");
+  });
   const SERVER_BOOT_TIME = (/* @__PURE__ */ new Date()).toISOString();
   function getActiveVersionInfo() {
     try {
@@ -1155,7 +1185,6 @@ async function startServer() {
     const versionInfo = getActiveVersionInfo();
     res.json(versionInfo);
   });
-  const DEFAULT_GOOGLE_MAPS_KEY = "AIzaSyAl3I8BhuJ2MwVWzoB5Ov3_-FHJuY6FBeA";
   app.get("/api/maps/google/rev-geocode", async (req, res) => {
     try {
       const lat = parseFloat(req.query.lat);
@@ -1163,60 +1192,61 @@ async function startServer() {
       if (isNaN(lat) || isNaN(lng)) {
         return res.status(400).json({ success: false, message: "Invalid latitude/longitude" });
       }
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_GOOGLE_MAPS_KEY).trim();
-      if (apiKey && apiKey !== "YOUR_API_KEY") {
-        try {
-          const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-          const gRes = await fetch(googleUrl);
-          if (gRes.ok) {
-            const data = await gRes.json();
-            if (data.status === "OK" && Array.isArray(data.results) && data.results.length > 0) {
-              const first = data.results[0];
-              let street = "";
-              let locality = "";
-              let city = "Kolkata";
-              let state = "West Bengal";
-              let pincode = "";
-              if (Array.isArray(first.address_components)) {
-                for (const comp of first.address_components) {
-                  if (comp.types.includes("route") || comp.types.includes("street_address")) {
-                    street = comp.long_name;
-                  }
-                  if (comp.types.includes("sublocality") || comp.types.includes("neighborhood")) {
-                    locality = comp.long_name;
-                  }
-                  if (comp.types.includes("locality") || comp.types.includes("administrative_area_level_2")) {
-                    city = comp.long_name;
-                  }
-                  if (comp.types.includes("administrative_area_level_1")) {
-                    state = comp.long_name;
-                  }
-                  if (comp.types.includes("postal_code")) {
-                    pincode = comp.long_name;
-                  }
+      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      if (!apiKey || apiKey === "YOUR_API_KEY") {
+        return res.status(500).json({ success: false, message: "GOOGLE_MAPS_API_KEY is not configured" });
+      }
+      try {
+        const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+        const gRes = await fetch(googleUrl);
+        if (gRes.ok) {
+          const data = await gRes.json();
+          if (data.status === "OK" && Array.isArray(data.results) && data.results.length > 0) {
+            const first = data.results[0];
+            let street = "";
+            let locality = "";
+            let city = "Kolkata";
+            let state = "West Bengal";
+            let pincode = "";
+            if (Array.isArray(first.address_components)) {
+              for (const comp of first.address_components) {
+                if (comp.types.includes("route") || comp.types.includes("street_address")) {
+                  street = comp.long_name;
+                }
+                if (comp.types.includes("sublocality") || comp.types.includes("neighborhood")) {
+                  locality = comp.long_name;
+                }
+                if (comp.types.includes("locality") || comp.types.includes("administrative_area_level_2")) {
+                  city = comp.long_name;
+                }
+                if (comp.types.includes("administrative_area_level_1")) {
+                  state = comp.long_name;
+                }
+                if (comp.types.includes("postal_code")) {
+                  pincode = comp.long_name;
                 }
               }
-              const resolvedStreet = street || first.formatted_address?.split(",")[0] || locality || "Kolkata";
-              return res.json({
-                success: true,
-                source: "google-maps",
-                result: {
-                  formattedAddress: first.formatted_address,
-                  street: resolvedStreet,
-                  locality: locality || city,
-                  suburb: locality,
-                  city,
-                  state,
-                  pincode: pincode || "700001",
-                  lat,
-                  lng
-                }
-              });
             }
+            const resolvedStreet = street || first.formatted_address?.split(",")[0] || locality || "Kolkata";
+            return res.json({
+              success: true,
+              source: "google-maps",
+              result: {
+                formattedAddress: first.formatted_address,
+                street: resolvedStreet,
+                locality: locality || city,
+                suburb: locality,
+                city,
+                state,
+                pincode: pincode || "700001",
+                lat,
+                lng
+              }
+            });
           }
-        } catch (gErr) {
-          console.warn("[Google Rev Geocode Notice]:", gErr);
         }
+      } catch (gErr) {
+        console.warn("[Google Rev Geocode Notice]:", gErr);
       }
       const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
       const osmRes = await fetch(osmUrl, {
@@ -1252,52 +1282,53 @@ async function startServer() {
       if (!query) {
         return res.json({ success: true, results: [] });
       }
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_GOOGLE_MAPS_KEY).trim();
-      if (apiKey && apiKey !== "YOUR_API_KEY") {
-        try {
-          const gmpRes = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Goog-Api-Key": apiKey,
-              "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.structuredFormat,suggestions.placePrediction.text"
-            },
-            body: JSON.stringify({
-              input: query,
-              locationBias: {
-                circle: {
-                  center: { latitude: 22.5726, longitude: 88.3639 },
-                  radius: 45e3
-                }
-              },
-              includedRegionCodes: ["in"]
-            })
-          });
-          if (gmpRes.ok) {
-            const data = await gmpRes.json();
-            const suggestions = data.suggestions || [];
-            if (suggestions.length > 0) {
-              const googleResults = suggestions.map((s) => {
-                const pred = s.placePrediction;
-                if (!pred) return null;
-                const mainText = pred.structuredFormat?.mainText?.text || pred.text?.text || "";
-                const secondaryText = pred.structuredFormat?.secondaryText?.text || "Kolkata, West Bengal";
-                return {
-                  id: pred.placeId ? `gmp-${pred.placeId}` : `gmp-${Math.random()}`,
-                  placeId: pred.placeId,
-                  name: mainText,
-                  secondaryText,
-                  source: "google-maps-platform"
-                };
-              }).filter(Boolean);
-              if (googleResults.length > 0) {
-                return res.json({ success: true, source: "google-maps-platform", results: googleResults });
+      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      if (!apiKey || apiKey === "YOUR_API_KEY") {
+        return res.status(500).json({ success: false, message: "GOOGLE_MAPS_API_KEY is not configured" });
+      }
+      try {
+        const gmpRes = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.structuredFormat,suggestions.placePrediction.text"
+          },
+          body: JSON.stringify({
+            input: query,
+            locationBias: {
+              circle: {
+                center: { latitude: 22.5726, longitude: 88.3639 },
+                radius: 45e3
               }
+            },
+            includedRegionCodes: ["in"]
+          })
+        });
+        if (gmpRes.ok) {
+          const data = await gmpRes.json();
+          const suggestions = data.suggestions || [];
+          if (suggestions.length > 0) {
+            const googleResults = suggestions.map((s) => {
+              const pred = s.placePrediction;
+              if (!pred) return null;
+              const mainText = pred.structuredFormat?.mainText?.text || pred.text?.text || "";
+              const secondaryText = pred.structuredFormat?.secondaryText?.text || "Kolkata, West Bengal";
+              return {
+                id: pred.placeId ? `gmp-${pred.placeId}` : `gmp-${Math.random()}`,
+                placeId: pred.placeId,
+                name: mainText,
+                secondaryText,
+                source: "google-maps-platform"
+              };
+            }).filter(Boolean);
+            if (googleResults.length > 0) {
+              return res.json({ success: true, source: "google-maps-platform", results: googleResults });
             }
           }
-        } catch (gmpErr) {
-          console.warn("[Google Maps API Autocomplete fallback notice]:", gmpErr);
         }
+      } catch (gmpErr) {
+        console.warn("[Google Maps API Autocomplete fallback notice]:", gmpErr);
       }
       const queryWithKolkata = query.toLowerCase().includes("kolkata") || query.toLowerCase().includes("howrah") || /^\d{6}$/.test(query) ? query : `${query}, Kolkata`;
       const osmRes = await fetch(
@@ -1346,41 +1377,42 @@ async function startServer() {
       if (!placeId) {
         return res.status(400).json({ success: false, message: "Place ID is required" });
       }
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_GOOGLE_MAPS_KEY).trim();
-      if (apiKey && apiKey !== "YOUR_API_KEY") {
-        try {
-          const gmpRes = await fetch(
-            `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
-            {
-              headers: {
-                "Content-Type": "application/json",
-                "X-Goog-Api-Key": apiKey,
-                "X-Goog-FieldMask": "id,displayName,formattedAddress,location,addressComponents"
-              }
+      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      if (!apiKey || apiKey === "YOUR_API_KEY") {
+        return res.status(500).json({ success: false, message: "GOOGLE_MAPS_API_KEY is not configured" });
+      }
+      try {
+        const gmpRes = await fetch(
+          `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": apiKey,
+              "X-Goog-FieldMask": "id,displayName,formattedAddress,location,addressComponents"
             }
-          );
-          if (gmpRes.ok) {
-            const data = await gmpRes.json();
-            const lat = data.location?.latitude;
-            const lng = data.location?.longitude;
-            let pincode = "";
-            if (Array.isArray(data.addressComponents)) {
-              const pinComp = data.addressComponents.find((c) => c.types?.includes("postal_code"));
-              if (pinComp) pincode = pinComp.longText || pinComp.shortText || "";
-            }
-            return res.json({
-              success: true,
-              placeId,
-              name: data.displayName?.text || "",
-              formattedAddress: data.formattedAddress || "",
-              lat,
-              lng,
-              pincode
-            });
           }
-        } catch (gmpErr) {
-          console.warn("[Google Maps Place Details error]:", gmpErr);
+        );
+        if (gmpRes.ok) {
+          const data = await gmpRes.json();
+          const lat = data.location?.latitude;
+          const lng = data.location?.longitude;
+          let pincode = "";
+          if (Array.isArray(data.addressComponents)) {
+            const pinComp = data.addressComponents.find((c) => c.types?.includes("postal_code"));
+            if (pinComp) pincode = pinComp.longText || pinComp.shortText || "";
+          }
+          return res.json({
+            success: true,
+            placeId,
+            name: data.displayName?.text || "",
+            formattedAddress: data.formattedAddress || "",
+            lat,
+            lng,
+            pincode
+          });
         }
+      } catch (gmpErr) {
+        console.warn("[Google Maps Place Details error]:", gmpErr);
       }
       return res.json({ success: false, message: "Place details not available from API" });
     } catch (err) {
@@ -2050,7 +2082,6 @@ ${itemsListText}
       });
     }
   });
-  const DEFAULT_RAZORPAY_KEY_ID = "rzp_test_TZw5E2BUHZrnOU";
   function sanitizeEnvValue(val) {
     if (!val) return "";
     return val.trim().replace(/^["']|["']$/g, "").trim();
@@ -2113,18 +2144,32 @@ ${itemsListText}
     let diagnostic = "";
     if (!isValidRazorpayKeyId(rawKeyId)) {
       if (!rawKeyId) {
-        diagnostic = "RAZORPAY_KEY_ID is missing. Please set your Razorpay Key ID (starts with rzp_live_ or rzp_test_).";
+        diagnostic = "RAZORPAY_KEY_ID is missing. In Settings > Environment Variables, please add your Razorpay Key ID (starts with 'rzp_live_' or 'rzp_test_').";
       } else {
-        diagnostic = `RAZORPAY_KEY_ID '${rawKeyId}' is invalid. It must start with rzp_live_ or rzp_test_ and be at least 14 characters.`;
+        diagnostic = `RAZORPAY_KEY_ID in Settings > Environment Variables is currently '${rawKeyId}'. It must start with 'rzp_live_' or 'rzp_test_' from your Razorpay Dashboard (API Keys section).`;
+        if (activeSecret) {
+          diagnostic += " Your Key Secret is set, but please replace '" + rawKeyId + "' in RAZORPAY_KEY_ID with the public Key ID.";
+        }
       }
     } else if (!activeSecret) {
-      diagnostic = "RAZORPAY_KEY_SECRET is missing or too short.";
+      diagnostic = "RAZORPAY_KEY_SECRET is missing or too short. In Settings > Environment Variables, please add your Razorpay Key Secret.";
+    }
+    if (!isConfigured) {
+      return res.status(200).json({
+        success: false,
+        keyId: "",
+        isConfigured: false,
+        diagnostic: diagnostic || "RAZORPAY_KEY_ID is not configured",
+        error: diagnostic || "RAZORPAY_KEY_ID is not configured",
+        merchantName: "SmartRun",
+        currency: "INR"
+      });
     }
     res.json({
       success: true,
-      keyId: activeKeyId || "rzp_test_sandbox",
-      isConfigured,
-      diagnostic: diagnostic || void 0,
+      keyId: activeKeyId,
+      isConfigured: true,
+      diagnostic: void 0,
       merchantName: "SmartRun",
       currency: "INR"
     });
@@ -2142,75 +2187,56 @@ ${itemsListText}
       }
       const amountInPaise = Math.round(parsedAmount * 100);
       const activeKeyId = resolveRazorpayKeyId();
+      const rawKeyId = resolveRawRazorpayKeyId();
+      if (!isValidRazorpayKeyId(activeKeyId)) {
+        const errorDetail = !rawKeyId ? "RAZORPAY_KEY_ID is missing in Settings > Environment Variables. Please set your Razorpay Key ID (starts with 'rzp_live_' or 'rzp_test_')." : `RAZORPAY_KEY_ID in Settings > Environment Variables is currently set to '${rawKeyId}', which is not a valid Razorpay Key ID. Please replace it with your Key ID from Razorpay (starts with 'rzp_live_' or 'rzp_test_').`;
+        return res.status(400).json({
+          success: false,
+          error: "RAZORPAY_KEY_ID is not configured",
+          message: errorDetail
+        });
+      }
       const razorpay = getRazorpayClient();
-      if (razorpay) {
-        try {
-          const orderOptions = {
-            amount: amountInPaise,
-            currency: "INR",
-            receipt: receipt || `rcpt_${Date.now()}`,
-            payment_capture: 1,
-            notes: notes || {}
-          };
-          const order = await razorpay.orders.create(orderOptions);
-          return res.status(200).json({
-            success: true,
-            orderId: order.id,
-            amount: order.amount,
-            currency: order.currency,
-            keyId: activeKeyId,
-            isLive: true
-          });
-        } catch (apiErr) {
-          const errMsg = apiErr?.error?.description || apiErr?.message || "Authentication error";
-          if (!authNoticeLogged) {
-            authNoticeLogged = true;
-            console.warn(`[Razorpay Notice]: ${errMsg}. Check that RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET match in environment settings. Falling back to sandbox test gateway.`);
-          }
-          razorpayClientInstance = null;
-          const mockOrderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-          return res.status(200).json({
-            success: true,
-            orderId: mockOrderId,
-            amount: amountInPaise,
-            currency: "INR",
-            keyId: activeKeyId || "rzp_test_sandbox",
-            isLive: false,
-            isSimulated: true,
-            warning: `Razorpay credentials could not be authenticated (${errMsg}). Sandbox test gateway active.`
-          });
-        }
-      } else {
-        const rawKeyId = resolveRawRazorpayKeyId();
-        const activeSecret = resolveRazorpayKeySecret();
-        let reason = "Razorpay credentials not fully configured.";
-        if (activeSecret && !isValidRazorpayKeyId(rawKeyId)) {
-          reason = `RAZORPAY_KEY_SECRET is set, but RAZORPAY_KEY_ID is missing or invalid (current: '${rawKeyId || "empty"}'). Real keys start with 'rzp_live_' or 'rzp_test_'.`;
-        }
-        const mockOrderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        return res.status(200).json({
-          success: true,
-          orderId: mockOrderId,
+      if (!razorpay) {
+        return res.status(400).json({
+          success: false,
+          error: "RAZORPAY_KEY_SECRET is not configured",
+          message: "Payment gateway credentials are incomplete. Please set RAZORPAY_KEY_SECRET in Settings > Environment Variables."
+        });
+      }
+      try {
+        const orderOptions = {
           amount: amountInPaise,
           currency: "INR",
-          keyId: activeKeyId || "rzp_test_sandbox",
-          isLive: false,
-          isSimulated: true,
-          note: reason
+          receipt: receipt || `rcpt_${Date.now()}`,
+          payment_capture: 1,
+          notes: notes || {}
+        };
+        const order = await razorpay.orders.create(orderOptions);
+        return res.status(200).json({
+          success: true,
+          orderId: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          keyId: activeKeyId,
+          isLive: true
+        });
+      } catch (apiErr) {
+        const errMsg = apiErr?.error?.description || apiErr?.message || "Authentication error";
+        console.warn(`[Razorpay Notice]: ${errMsg}. Check that RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET match in environment settings.`);
+        razorpayClientInstance = null;
+        return res.status(500).json({
+          success: false,
+          error: errMsg,
+          message: `Razorpay order creation failed: ${errMsg}`
         });
       }
     } catch (err) {
       console.error("Razorpay order creation unexpected error:", err);
-      const amountInPaise = Math.round(Number(req.body?.amount || 100) * 100);
-      return res.status(200).json({
-        success: true,
-        orderId: `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        amount: amountInPaise,
-        currency: "INR",
-        keyId: "rzp_test_sandbox",
-        isLive: false,
-        isSimulated: true,
-        warning: "Fallback test gateway initialized."
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Internal server error during order creation",
+        message: "Failed to create payment order."
       });
     }
   });
@@ -3204,12 +3230,23 @@ ${itemsListText}
       return res.status(500).json({ success: false, message: err.message || "Failed to save review" });
     }
   });
+  const isValidGeminiApiKey = (key) => {
+    if (!key) return false;
+    const trimmed = key.trim();
+    if (trimmed.length < 20) return false;
+    if (!trimmed.startsWith("AIzaSy")) return false;
+    const lower = trimmed.toLowerCase();
+    if (lower.includes("your_") || lower.includes("dummy") || lower.includes("placeholder") || lower.includes("example") || lower === "undefined" || lower === "null") {
+      return false;
+    }
+    return true;
+  };
   app.post("/api/technicians/generate-description", async (req, res) => {
     try {
       const { name, title, primarySector, subSectors, experienceYears, skills, about } = req.body || {};
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
       const fallbackDesc = `${experienceYears || 5}+ years experienced ${title || "Electrical Specialist"} specialized in ${subSectors && subSectors[0] || primarySector || "electrical installations"} with verified field expertise across Kolkata.`;
-      if (!apiKey) {
+      if (!isValidGeminiApiKey(apiKey)) {
         return res.json({
           success: true,
           description: fallbackDesc,
@@ -3901,80 +3938,88 @@ ${(order.rainFee || 0) > 0 ? `\u{1F327}\uFE0F *Rain Surcharge:* \u20B9${order.ra
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
       const { prompt, userArea, pincode } = req.body;
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
+      const defaultMapsSources = [
+        {
+          uri: "https://share.google/EWHvo68Oi2DsChWWV",
+          title: "Giriraj Power Kasba Hub, Kolkata"
+        }
+      ];
+      const fallbackText = `Electrical Recommendation for ${userArea || "Kolkata"} (PIN: ${pincode || "700039"}):
+\u2022 Lighting & Fan circuits: 1.5 sq mm Polycab FR-LSH Copper Wire (10A MCB).
+\u2022 Air Conditioners (up to 1.5 Ton) & Geysers: 2.5 sq mm Havells HRFR Wire + 16A/20A MCB.
+\u2022 Main Distribution: 4.0 sq mm pure copper wire + 32A DP Isolator.
+\u2022 Heavy loads: 6.0 sq mm for entire home mains.
+Express delivery is available across Kolkata within ~60 minutes!`;
+      if (!isValidGeminiApiKey(apiKey)) {
         return res.json({
-          text: `For ${userArea || "Kolkata"} (PIN: ${pincode || "700039"}):
-\u2022 1.5 sq mm Wires (Polycab/Havells): Recommended for lighting circuits & 6A switchboards (10A MCB protection).
-\u2022 2.5 sq mm Wires: Recommended for Air Conditioners (up to 1.5 Ton), geysers, and kitchen power plugs (16A/20A MCB).
-\u2022 4.0 sq mm Wires: Mains sub-meter feeder & heavy induction loads.
-\u2022 Construction: UltraTech Cement & Tata Tiscon 550D TMT bars are in stock for 60-min delivery from Giriraj Power Kasba Central Hub.`,
-          mapsSources: [
-            {
-              uri: "https://share.google/EWHvo68Oi2DsChWWV",
-              title: "Giriraj Power Kasba Hub, Kolkata"
-            }
-          ]
+          text: fallbackText,
+          mapsSources: defaultMapsSources
         });
       }
-      const ai = new import_genai.GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            "User-Agent": "aistudio-build"
+      try {
+        const ai = new import_genai.GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              "User-Agent": "aistudio-build"
+            }
           }
-        }
-      });
-      const systemPrompt = `You are the expert Electrical Engineer, Construction Estimator & Store Advisor for Giriraj Power in Kolkata, India.
+        });
+        const systemPrompt = `You are the expert Electrical Engineer, Construction Estimator & Store Advisor for Giriraj Power in Kolkata, India.
 Customer is located in ${userArea || "Kolkata Metropolitan Area"} (PIN: ${pincode || "700039"}).
 Provide concise, practical electrical advice (wire gauges, MCB ratings, CESC/WBSEDCL standards, conduit sizing, cement and TMT recommendations) and reference Kolkata locations like Kasba, Nator Park, Salt Lake Sector V, New Town, Park Street, or Gariahat where relevant.`;
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `${systemPrompt}
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: `${systemPrompt}
 
 Customer question: ${prompt}`,
-        config: {
-          tools: [{ googleMaps: {} }],
-          toolConfig: {
-            retrievalConfig: {
-              latLng: {
-                latitude: 22.5145,
-                // Kasba Kolkata coordinates
-                longitude: 88.3882
+          config: {
+            tools: [{ googleMaps: {} }],
+            toolConfig: {
+              retrievalConfig: {
+                latLng: {
+                  latitude: 22.5145,
+                  // Kasba Kolkata coordinates
+                  longitude: 88.3882
+                }
               }
             }
           }
+        });
+        const responseText = response.text || fallbackText;
+        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const mapsSources = [];
+        for (const chunk of groundingChunks) {
+          if (chunk.maps?.uri) {
+            mapsSources.push({
+              uri: chunk.maps.uri,
+              title: chunk.maps.title || "View on Google Maps"
+            });
+          } else if (chunk.web?.uri) {
+            mapsSources.push({
+              uri: chunk.web.uri,
+              title: chunk.web.title || "Kolkata Hub Info"
+            });
+          }
         }
-      });
-      const responseText = response.text || "Here is the guidance for Kolkata electrical & hardware needs.";
-      const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-      const mapsSources = [];
-      for (const chunk of groundingChunks) {
-        if (chunk.maps?.uri) {
-          mapsSources.push({
-            uri: chunk.maps.uri,
-            title: chunk.maps.title || "View on Google Maps"
-          });
-        } else if (chunk.web?.uri) {
-          mapsSources.push({
-            uri: chunk.web.uri,
-            title: chunk.web.title || "Kolkata Hub Info"
-          });
+        if (mapsSources.length === 0) {
+          mapsSources.push(...defaultMapsSources);
         }
-      }
-      if (mapsSources.length === 0) {
-        mapsSources.push({
-          uri: "https://share.google/EWHvo68Oi2DsChWWV",
-          title: "Giriraj Power Kasba Hub, Kolkata"
+        return res.json({
+          text: responseText,
+          mapsSources
+        });
+      } catch (apiErr) {
+        console.warn("AI Assistant model fallback activated:", apiErr?.message || apiErr);
+        return res.json({
+          text: fallbackText,
+          mapsSources: defaultMapsSources
         });
       }
-      res.json({
-        text: responseText,
-        mapsSources
-      });
     } catch (err) {
-      console.error("AI Assistant API error:", err);
-      res.json({
+      console.warn("AI Assistant API error caught:", err);
+      return res.json({
         text: `Electrical Recommendation for Kolkata:
 \u2022 Lighting & Fan circuits: 1.5 sq mm Polycab FR-LSH Copper Wire.
 \u2022 Air Conditioners (1.5 Ton) & Geysers: 2.5 sq mm Havells HRFR Wire + 16A/20A MCB.
@@ -3989,79 +4034,163 @@ Express delivery is available across Kolkata within ~60 minutes!`,
       });
     }
   });
+  function getMayraSmartResponse(query, customerName = "Customer") {
+    const lower = (query || "").toLowerCase();
+    let needsEscalation = false;
+    let text = "";
+    if (lower.includes("human") || lower.includes("call") || lower.includes("phone") || lower.includes("speak") || lower.includes("agent") || lower.includes("representative") || lower.includes("operator") || lower.includes("talk to someone") || lower.includes("real person")) {
+      text = `I can connect you directly with our specialized human support and contractor desk! \u{1F91D}
+
+Please select your preferred way to reach us below:
+\u2022 **1. WhatsApp**: Instant chat with our Kasba dispatch desk
+\u2022 **2. Official Email**: Send your inquiry to team@girirajpower.in
+\u2022 **3. Support Helpline**: Call our customer helpline directly`;
+      needsEscalation = true;
+    } else if (lower.includes("thank") || lower.includes("thanks") || lower.includes("nice answer") || lower.includes("good answer") || lower.includes("like your answer") || lower.includes("like the answer") || lower.includes("great job") || lower.includes("awesome") || lower.includes("helpful")) {
+      const gratitudePool = [
+        `Nice to hear that you liked the answer, ${customerName}! \u{1F60A} Feel free to ask if you have any other questions about wiring, orders, or delivery.`,
+        `You're very welcome, ${customerName}! Glad I could be of help. I'm always here 24/7 whenever you need assistance!`,
+        `So glad that was helpful! It's always my absolute pleasure to assist with your electrical and hardware questions.`,
+        `Awesome, happy to hear that! Reach out anytime if you need more recommendations or quotes.`
+      ];
+      text = gratitudePool[Math.floor(Math.random() * gratitudePool.length)];
+    } else if (lower === "hi" || lower === "hello" || lower === "hey" || lower.startsWith("hi ") || lower.startsWith("hello ") || lower.startsWith("hey ") || lower.includes("good morning") || lower.includes("good afternoon") || lower.includes("good evening")) {
+      const greetingPool = [
+        `How can I help you today, ${customerName}? \u{1F60A} Ask me anything about our 60-min Kolkata delivery, wire gauge calculations, GST invoices, or your account orders!`,
+        `Hello ${customerName} \u{1F44B}! Great to hear from you. What can I get sorted for your electrical or construction supplies right now?`,
+        `Hi ${customerName}! Nice to see you. Mayra here, your 24/7 AI Support Specialist. What's on your mind today?`,
+        `Welcome back ${customerName}! How may I assist you with your project today \u2014 need wire sizing advice, order tracking, or an electrician booking?`
+      ];
+      text = greetingPool[Math.floor(Math.random() * greetingPool.length)];
+    } else if (lower.includes("delivery") || lower.includes("track") || lower.includes("time") || lower.includes("speed") || lower.includes("dispatch") || lower.includes("rider") || lower.includes("status") || lower.includes("when will") || lower.includes("how long")) {
+      text = `\u{1F680} **60-Minute Express Kolkata Delivery**:
+
+\u2022 **Speed**: All orders are packed and dispatched within 10\u201315 minutes from our central Kasba warehouse.
+\u2022 **Coverage**: Kasba, Salt Lake, New Town, Gariahat, Ballygunge, Park Street, Ruby, Jadavpur, Behala, Howrah, and greater Kolkata.
+\u2022 **Live Tracking**: You receive live rider tracking alerts directly on your registered WhatsApp number upon dispatch.
+\u2022 **Same-day guarantee**: Order anytime between 8 AM and 9 PM for lightning-fast doorstep arrival!`;
+    } else if (lower.includes("wire") || lower.includes("gauge") || lower.includes("sq mm") || lower.includes("sqmm") || lower.includes("cable") || lower.includes("polycab") || lower.includes("havells") || lower.includes("finolex") || lower.includes("size") || lower.includes("ac") || lower.includes("geyser") || lower.includes("heater")) {
+      text = `\u26A1 **Technical Wire Gauge & Load Sizing Guide**:
+
+\u2022 **1.5 sq mm** (Polycab FR-LSH / Havells): Recommended for lighting, ceiling fans, and LED fixtures (paired with 10A MCB).
+\u2022 **2.5 sq mm**: Essential for 1.5 Ton ACs, storage/instant geysers, refrigerators, and 16A kitchen power sockets (paired with 16A/20A MCB).
+\u2022 **4.0 sq mm**: Required for 2.0 Ton ACs, microwave circuits, and heavy power runs (paired with 25A/32A MCB).
+\u2022 **6.0 sq mm**: Used for main electrical incoming feeds from the energy meter to the distribution board.
+
+All wires in our catalog are 100% genuine, pure electrolytic copper with ISI and FR-LSH fire-retardant certification.`;
+    } else if (lower.includes("invoice") || lower.includes("gst") || lower.includes("bill") || lower.includes("tax") || lower.includes("input credit") || lower.includes("b2b")) {
+      text = `\u{1F4C4} **GST Tax Invoices & ITC Benefits**:
+
+\u2022 Every single order is accompanied by a compliant GST Tax Invoice with our registered GSTIN.
+\u2022 **For Business & Contractors**: Enter your company GSTIN during checkout to claim full Input Tax Credit (ITC).
+\u2022 **Instant PDF Download**: You can view, print, or download invoices anytime from your **Profile > Order History** screen.`;
+    } else if (lower.includes("electrician") || lower.includes("technician") || lower.includes("book") || lower.includes("install") || lower.includes("fitting") || lower.includes("repair") || lower.includes("wiring")) {
+      text = `\u{1F527} **Verified Licensed Electrician Booking**:
+
+\u2022 We provide licensed, background-verified technicians across all Kolkata neighborhoods.
+\u2022 **Services Offered**: Full house rewiring, MCB distribution board installation, ceiling fan and chandelier mounting, switchboard replacements, and electrical fault detection.
+\u2022 **Transparent Pricing**: Fixed upfront labor rates with guaranteed satisfaction.
+\u2022 You can book a technician directly via the **Book Electrician** tab in the app!`;
+    } else if (lower.includes("return") || lower.includes("replace") || lower.includes("cancel") || lower.includes("refund") || lower.includes("exchange") || lower.includes("damaged") || lower.includes("wrong item")) {
+      text = `\u{1F504} **Hassle-Free 7-Day Return & Replacement Policy**:
+
+\u2022 **Eligibility**: Unused items in original packaging, factory-sealed goods, and intact uncut wire coils can be exchanged or returned within 7 days of delivery.
+\u2022 **Defective or Damaged Goods**: Instant doorstep replacement arranged within 24 hours at zero additional cost.
+\u2022 **Refunds**: Processed back to your original payment method (or UPI) within 24\u201348 hours of item pickup.`;
+    } else if (lower.includes("cement") || lower.includes("steel") || lower.includes("tmt") || lower.includes("ultratech") || lower.includes("tiscon") || lower.includes("construction") || lower.includes("sand") || lower.includes("stone")) {
+      text = `\u{1F3D7}\uFE0F **Civil & Construction Supplies**:
+
+\u2022 **UltraTech Cement**: Fresh 53 Grade & Super Cement bags directly from manufacturer depots.
+\u2022 **Tata Tiscon 550D TMT Rebars**: Certified primary steel with test certificates and exact weighbridge receipts.
+\u2022 **Site Delivery**: Dispatched via mini-trucks directly to your construction site across Kolkata with optional ground-floor unloading.
+\u2022 Tap below to contact our wholesale contractor desk for project volume pricing!`;
+    } else if (lower.includes("payment") || lower.includes("pay") || lower.includes("upi") || lower.includes("cod") || lower.includes("cash") || lower.includes("razorpay") || lower.includes("credit card")) {
+      text = `\u{1F4B3} **Payment Methods & Security**:
+
+\u2022 We accept **UPI** (Google Pay, PhonePe, Paytm, BHIM), **Credit/Debit Cards**, **Net Banking**, and **Cash on Delivery (COD)**.
+\u2022 All online transactions are 100% secure, protected by 256-bit bank-grade encryption.
+\u2022 COD is available for orders within Kolkata express delivery zones.`;
+    } else if (lower.includes("hello") || lower.includes("hi") || lower.includes("hey") || lower.includes("morning") || lower.includes("evening") || lower.includes("mayra") || lower.includes("who are you") || lower.includes("help")) {
+      text = `Hello ${customerName || "there"} \u{1F44B}, I am Mayra your 24/7 AI support specialist.
+
+I can help you with Kolkata 60-min delivery updates, technical wire/MCB sizing recommendations, GST invoices, electrician bookings, and store policies. How may I assist you today?`;
+    } else {
+      text = `I have noted your query regarding "${query}".
+
+At BuildNow Electricals (Kasba, Kolkata), we provide 60-minute express delivery, 100% genuine ISI certified electricals (Polycab, Havells, Schneider, Anchor), verified electrician services, and official GST invoices.
+
+If you need specific assistance or customized contractor quotes, please ask or tap below to speak directly with our desk.`;
+    }
+    return { text, needsEscalation };
+  }
   app.post("/api/gemini/support-chat", aiAssistantLimiter, async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
       const { messages = [], customerName = "Valued Customer", customerEmail = "", customerArea = "Kolkata" } = req.body;
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
       const userLatestMessage = messages.length > 0 ? messages[messages.length - 1]?.content : "";
-      if (!apiKey) {
-        const lower = (userLatestMessage || "").toLowerCase();
-        let fallbackText = "Hello! I am Mayra, your 24/7 AI Support Specialist. How can I assist you with your electrical order, 60-min delivery, wire sizes, or electrician booking today?";
-        let needsEscalation2 = false;
-        if (lower.includes("delivery") || lower.includes("track") || lower.includes("time") || lower.includes("speed")) {
-          fallbackText = "\u{1F680} **60-Minute Express Delivery**: We deliver across Kasba, Salt Lake, New Town, Gariahat, Ballygunge, Park Street, and all Kolkata zones directly from our central Kasba warehouse. You will receive live rider updates on WhatsApp!";
-        } else if (lower.includes("wire") || lower.includes("gauge") || lower.includes("sq mm") || lower.includes("size") || lower.includes("ac") || lower.includes("geyser")) {
-          fallbackText = "\u26A1 **Wire Gauge Recommendations**:\n\u2022 **1.5 sq mm** (Polycab/Havells): Ideal for lighting & fan points (10A MCB).\n\u2022 **2.5 sq mm**: Required for ACs (up to 1.5 Ton), geysers & 16A power sockets.\n\u2022 **4.0 sq mm**: Recommended for 2 Ton ACs and main distribution boards.\nAll wires are 100% genuine ISI certified copper!";
-        } else if (lower.includes("invoice") || lower.includes("gst") || lower.includes("bill") || lower.includes("tax")) {
-          fallbackText = "\u{1F4C4} **GST Tax Invoices**: Every order is shipped with an official GST-compliant tax invoice. You can also view and download invoices directly from your Profile > Order History section.";
-        } else if (lower.includes("electrician") || lower.includes("technician") || lower.includes("book") || lower.includes("install")) {
-          fallbackText = "\u{1F527} **Electrician Booking**: Our verified licensed technicians are available across Kolkata for wiring, switchboard setup, MCB repairs, and appliance fittings.";
-        } else if (lower.includes("return") || lower.includes("replace") || lower.includes("cancel") || lower.includes("refund")) {
-          fallbackText = "\u{1F504} **Return & Replacement Policy**: We offer a hassle-free 7-day replacement for unused sealed electrical goods and un-cut wire coils with the original GST bill.";
-        } else if (lower.includes("human") || lower.includes("call") || lower.includes("phone") || lower.includes("speak") || lower.includes("agent") || lower.includes("whatsapp") || lower.includes("contact")) {
-          fallbackText = "I can connect you directly with our specialized support lines or dispatch team. You can reach our team via official email, or tap below to open your phone dialer or WhatsApp directly.";
-          needsEscalation2 = true;
-        }
-        return res.json({
-          text: fallbackText,
-          needsEscalation: needsEscalation2
-        });
-      }
-      const ai = new import_genai.GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            "User-Agent": "aistudio-build"
-          }
-        }
-      });
-      const systemPrompt = `You are Mayra, the friendly, expert 24/7 AI Customer Support Specialist for BuildNow Electricals & Construction Supplies, located at Kasba, Kolkata 700039.
+      let responseText = "";
+      let needsEscalation = false;
+      if (isValidGeminiApiKey(apiKey)) {
+        try {
+          const ai = new import_genai.GoogleGenAI({
+            apiKey,
+            httpOptions: {
+              headers: {
+                "User-Agent": "aistudio-build"
+              }
+            }
+          });
+          const systemPrompt = `You are Mayra, the friendly, expert 24/7 AI Customer Support Specialist for BuildNow Electricals & Construction Supplies, located at Kasba, Kolkata 700039.
 Customer Name: ${customerName || "Customer"}
 Customer Email: ${customerEmail || "Not specified"}
 Customer Area: ${customerArea || "Kolkata"}
 
-Knowledge Base & Service Details:
-1. 60-Minute Express Delivery: Shipped directly across Kolkata (Kasba, Nator Park, Salt Lake, New Town, Gariahat, Ballygunge, Park Street, Ruby, Jadavpur, etc.) from Kasba central warehouse.
-2. Brands in Stock: Polycab, Havells, Anchor by Panasonic, Finolex, Schneider, Legrand, Philips, UltraTech Cement, Tata Tiscon 550D TMT. 100% genuine with ISI marks & GST invoices.
-3. Wire sizing guidance: 1.5 sq mm for lighting/fans, 2.5 sq mm for ACs/geysers/kitchen sockets, 4.0 sq mm for mains & heavy loads, 6.0 sq mm for full-home mains.
-4. Electrician Booking: Verified electricians available for on-site wiring, MCB troubleshooting, and lighting installations.
-5. Invoicing: GST invoices generated with GSTIN on all orders for input tax credit.
-6. Returns: 7-day return/exchange on factory-sealed items and intact wire coils.
-7. Escalation Policy:
-   - If the customer has an urgent live order issue, dispatch dispute, bulk contractor quote negotiation, or explicitly requests to speak to a human or call the support line, provide a clear, helpful resolution and politely state that they can connect with our specialized contractor/support desk or email us at team@girirajpower.in.
-   - Format responses cleanly with bold bullet points or short paragraphs for great mobile readability. Avoid verbose fluff.`;
-      const formattedContents = [
-        `${systemPrompt}
+Personality & Style:
+- Speak warmly, conversationally, and naturally like a real helpful customer support representative. Avoid robotic or identical repetitive responses.
+- If the customer compliments you, expresses gratitude ("thank you", "nice answer", "great"), respond with genuine warmth (e.g. "So nice to hear that you liked the answer, ${customerName}! \u{1F60A}", "Always my pleasure to help!").
+- If the customer says hello or greets you, vary your greeting naturally (e.g. "How can I help you today?", "Great to hear from you!", "What can I get sorted for your electrical project?").
 
-User Question: ${userLatestMessage}`
-      ];
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: formattedContents
-      });
-      const responseText = response.text || "I am here to help you with your BuildNow orders, delivery, wire technical questions, and store support.";
-      const lowerResp = responseText.toLowerCase();
-      const needsEscalation = lowerResp.includes("dialer") || lowerResp.includes("contractor desk") || lowerResp.includes("human") || lowerResp.includes("escalate") || lowerResp.includes("team@girirajpower.in");
-      res.json({
+Knowledge Base & Service Details:
+1. 60-Minute Express Delivery: Shipped directly across Kolkata (Kasba, Nator Park, Salt Lake, New Town, Gariahat, Ballygunge, Park Street, Ruby, Jadavpur, Behala, Howrah, etc.) from Kasba central warehouse.
+2. Brands in Stock: Polycab, Havells, Anchor by Panasonic, Finolex, Schneider, Legrand, Philips, UltraTech Cement, Tata Tiscon 550D TMT. 100% genuine with ISI marks & GST invoices.
+3. Wire sizing guidance: 1.5 sq mm for lighting/fans (10A MCB), 2.5 sq mm for ACs/geysers/kitchen sockets (16A/20A MCB), 4.0 sq mm for mains & heavy loads (25A/32A MCB), 6.0 sq mm for full-home mains.
+4. Electrician Booking: Verified licensed electricians available for on-site wiring, MCB troubleshooting, and lighting installations.
+5. Invoicing: GST invoices generated with registered GSTIN on all orders for input tax credit.
+6. Returns: 7-day return/exchange on factory-sealed items and intact uncut wire coils.
+7. Escalation Policy:
+   - If the customer asks to speak to a real person, call, or talk to human support, warmly let them know they can connect directly with our human team via: 1. WhatsApp, 2. Email (team@girirajpower.in), and 3. Support Helpline (+91 90071 68561).
+   - Format responses cleanly with bold bullet points or short paragraphs for great mobile readability. Avoid verbose fluff.`;
+          const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [`${systemPrompt}
+
+User Question: ${userLatestMessage}`]
+          });
+          responseText = response.text || "";
+        } catch (apiErr) {
+          console.warn("Support chat AI model unavailable or key invalid, using Mayra knowledge engine:", apiErr?.message || apiErr);
+        }
+      }
+      if (!responseText) {
+        const smart = getMayraSmartResponse(userLatestMessage, customerName);
+        responseText = smart.text;
+        needsEscalation = smart.needsEscalation;
+      } else {
+        const lowerResp = responseText.toLowerCase();
+        const lowerReq = (userLatestMessage || "").toLowerCase();
+        needsEscalation = lowerResp.includes("dialer") || lowerResp.includes("contractor desk") || lowerResp.includes("human") || lowerResp.includes("escalate") || lowerResp.includes("team@girirajpower.in") || lowerResp.includes("whatsapp") || lowerReq.includes("human") || lowerReq.includes("real person") || lowerReq.includes("call") || lowerReq.includes("agent") || lowerReq.includes("representative") || lowerReq.includes("operator") || lowerReq.includes("speak to");
+      }
+      return res.json({
         text: responseText,
         needsEscalation
       });
     } catch (err) {
-      console.error("Support Chat API error:", err);
-      res.json({
-        text: "I am ready to help! You can ask about our 60-minute Kolkata express delivery, wire sizing specifications (Polycab/Havells), GST invoices, or electrician booking. For direct inquiries, tap the Official Email button or open our support dialer.",
-        needsEscalation: false
+      console.warn("Support Chat handled error:", err);
+      const fallback = getMayraSmartResponse(req.body?.messages?.[req.body?.messages?.length - 1]?.content || "", req.body?.customerName);
+      return res.json({
+        text: fallback.text,
+        needsEscalation: fallback.needsEscalation
       });
     }
   });
@@ -4094,62 +4223,64 @@ User Question: ${userLatestMessage}`
       const calcSteel = Math.max(150, Math.round(totalEffectiveSqFt * (projectScope === "construction" ? 3.5 : 0.6)));
       const calcWaterproofing = Math.max(4, Math.round(totalEffectiveSqFt * 0.012));
       const calcPutty = Math.max(2, Math.round(totalEffectiveSqFt * 5e-3));
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        const wireLightTotal = calcWireCoilsLight * 3600;
-        const wirePowerTotal = calcWireCoilsPower * 4200;
-        const switchesTotal = calcSwitches * 140;
-        const mcbTotal = calcMcbBoxes * 1250;
-        const conduitsTotal = calcConduits * 120;
-        const electricalTotal = wireLightTotal + wirePowerTotal + switchesTotal + mcbTotal + conduitsTotal;
-        const cementTotal = calcCement * 385;
-        const steelTotal = calcSteel * 62;
-        const wpTotal = calcWaterproofing * 135;
-        const puttyTotal = calcPutty * 690;
-        const constructionTotal = cementTotal + steelTotal + wpTotal + puttyTotal;
-        const grandTotal = projectScope === "electrical" ? electricalTotal : projectScope === "construction" ? constructionTotal : electricalTotal + constructionTotal;
-        return res.json({
-          success: true,
-          aiPowered: false,
-          summary: `Wholesale Estimate for ${propertyType} (${totalEffectiveSqFt} sq.ft total built-up) in ${area}, Kolkata.`,
-          sanctionedLoadRecommendation: `${Math.max(3, Math.min(12, Math.ceil(totalEffectiveSqFt / 250)))} kW (CESC / WBSEDCL Standard)`,
-          electrical: {
-            wireCoilsLight: { qty: calcWireCoilsLight, spec: "1.0 & 1.5 sq.mm Polycab/RR Kabel FR", rate: 3600, amount: wireLightTotal },
-            wireCoilsPower: { qty: calcWireCoilsPower, spec: "2.5 & 4.0 sq.mm Heavy Copper Cables", rate: 4200, amount: wirePowerTotal },
-            modularSwitches: { qty: calcSwitches, spec: "Schneider Opale / Havells Modular Points", rate: 140, amount: switchesTotal },
-            mcbDistribution: { qty: calcMcbBoxes, spec: "SPN/TPN Double Door Enclosure + MCBs", rate: 1250, amount: mcbTotal },
-            pvcConduits: { qty: calcConduits, spec: "20mm/25mm Heavy Duty PVC Pipes (3m)", rate: 120, amount: conduitsTotal },
-            subtotal: electricalTotal
-          },
-          construction: {
-            cementBags: { qty: calcCement, spec: "UltraTech OPC 53 Grade Fresh 50kg Bags", rate: 385, amount: cementTotal },
-            tmtSteelKg: { qty: calcSteel, spec: "Tata Tiscon 550D Primary Fe Rebars (kg)", rate: 62, amount: steelTotal },
-            waterproofingLiters: { qty: calcWaterproofing, spec: "Dr. Fixit 101 LW+ Integral Compound (L)", rate: 135, amount: wpTotal },
-            wallPuttyBags: { qty: calcPutty, spec: "Asian Paints TruCare 20kg Polymer Putty", rate: 690, amount: puttyTotal },
-            subtotal: constructionTotal
-          },
-          grandTotal,
-          laborDaysEstimate: {
-            electricianDays: Math.max(3, Math.round(totalEffectiveSqFt / 180)),
-            masonDays: Math.max(4, Math.round(totalEffectiveSqFt / 150)),
-            approxLaborCost: Math.round(totalEffectiveSqFt * 28)
-          },
-          engineeringAdvice: [
-            `For ${area}, ensure all circuit neutrals are kept independent to prevent MCB nuisance tripping during high-humidity monsoons.`,
-            `Dedicated 4.0 sq.mm copper wire runs are strongly recommended for master bedroom 1.5 Ton AC units and instant water geysers.`,
-            `UltraTech cement bags are dispatched fresh from Giriraj Power Kasba warehouse with guaranteed manufacturing within 15 days.`
-          ]
-        });
+      const wireLightTotal = calcWireCoilsLight * 3600;
+      const wirePowerTotal = calcWireCoilsPower * 4200;
+      const switchesTotal = calcSwitches * 140;
+      const mcbTotal = calcMcbBoxes * 1250;
+      const conduitsTotal = calcConduits * 120;
+      const electricalTotal = wireLightTotal + wirePowerTotal + switchesTotal + mcbTotal + conduitsTotal;
+      const cementTotal = calcCement * 385;
+      const steelTotal = calcSteel * 62;
+      const wpTotal = calcWaterproofing * 135;
+      const puttyTotal = calcPutty * 690;
+      const constructionTotal = cementTotal + steelTotal + wpTotal + puttyTotal;
+      const grandTotal = projectScope === "electrical" ? electricalTotal : projectScope === "construction" ? constructionTotal : electricalTotal + constructionTotal;
+      const heuristicResult = {
+        success: true,
+        aiPowered: false,
+        summary: `Wholesale Estimate for ${propertyType} (${totalEffectiveSqFt} sq.ft total built-up) in ${area}, Kolkata.`,
+        sanctionedLoadRecommendation: `${Math.max(3, Math.min(12, Math.ceil(totalEffectiveSqFt / 250)))} kW (CESC / WBSEDCL Standard)`,
+        electrical: {
+          wireCoilsLight: { qty: calcWireCoilsLight, spec: "1.0 & 1.5 sq.mm Polycab/RR Kabel FR", rate: 3600, amount: wireLightTotal },
+          wireCoilsPower: { qty: calcWireCoilsPower, spec: "2.5 & 4.0 sq.mm Heavy Copper Cables", rate: 4200, amount: wirePowerTotal },
+          modularSwitches: { qty: calcSwitches, spec: "Schneider Opale / Havells Modular Points", rate: 140, amount: switchesTotal },
+          mcbDistribution: { qty: calcMcbBoxes, spec: "SPN/TPN Double Door Enclosure + MCBs", rate: 1250, amount: mcbTotal },
+          pvcConduits: { qty: calcConduits, spec: "20mm/25mm Heavy Duty PVC Pipes (3m)", rate: 120, amount: conduitsTotal },
+          subtotal: electricalTotal
+        },
+        construction: {
+          cementBags: { qty: calcCement, spec: "UltraTech OPC 53 Grade Fresh 50kg Bags", rate: 385, amount: cementTotal },
+          tmtSteelKg: { qty: calcSteel, spec: "Tata Tiscon 550D Primary Fe Rebars (kg)", rate: 62, amount: steelTotal },
+          waterproofingLiters: { qty: calcWaterproofing, spec: "Dr. Fixit 101 LW+ Integral Compound (L)", rate: 135, amount: wpTotal },
+          wallPuttyBags: { qty: calcPutty, spec: "Asian Paints TruCare 20kg Polymer Putty", rate: 690, amount: puttyTotal },
+          subtotal: constructionTotal
+        },
+        grandTotal,
+        laborDaysEstimate: {
+          electricianDays: Math.max(3, Math.round(totalEffectiveSqFt / 180)),
+          masonDays: Math.max(4, Math.round(totalEffectiveSqFt / 150)),
+          approxLaborCost: Math.round(totalEffectiveSqFt * 28)
+        },
+        engineeringAdvice: [
+          `For ${area}, ensure all circuit neutrals are kept independent to prevent MCB nuisance tripping during high-humidity monsoons.`,
+          `Dedicated 4.0 sq.mm copper wire runs are strongly recommended for master bedroom 1.5 Ton AC units and instant water geysers.`,
+          `UltraTech cement bags are dispatched fresh from Giriraj Power Kasba warehouse with guaranteed manufacturing within 15 days.`
+        ]
+      };
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
+      if (!isValidGeminiApiKey(apiKey)) {
+        return res.json(heuristicResult);
       }
-      const ai = new import_genai.GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            "User-Agent": "aistudio-build"
+      try {
+        const ai = new import_genai.GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              "User-Agent": "aistudio-build"
+            }
           }
-        }
-      });
-      const prompt = `You are the Principal Chief Electrical Engineer and Civil Construction Quantity Estimator for Giriraj Power, located at Kasba Hub, Kolkata.
+        });
+        const prompt = `You are the Principal Chief Electrical Engineer and Civil Construction Quantity Estimator for Giriraj Power, located at Kasba Hub, Kolkata.
 Calculate a realistic, wholesale Bill of Materials (BOM) for the following project:
 - Client Name: ${clientName}
 - Location: ${area}, Kolkata (PIN: ${pincode})
@@ -4189,66 +4320,66 @@ Respond ONLY with a valid JSON object matching the following structure:
     "Expert advice 3 regarding cement hydration and TMT rebars"
   ]
 }`;
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.2
-        }
-      });
-      const responseText = response.text || "{}";
-      let parsedData = {};
-      try {
-        parsedData = JSON.parse(responseText);
-      } catch (parseErr) {
-        console.warn("Could not parse JSON from Gemini, falling back to heuristic data:", parseErr);
-      }
-      if (parsedData && parsedData.electrical && parsedData.construction) {
-        return res.json({
-          success: true,
-          aiPowered: true,
-          ...parsedData
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.2
+          }
         });
+        const responseText = response.text || "{}";
+        let parsedData = {};
+        try {
+          parsedData = JSON.parse(responseText);
+        } catch (parseErr) {
+          console.warn("Could not parse JSON from Gemini, falling back to heuristic data:", parseErr);
+        }
+        if (parsedData && parsedData.electrical && parsedData.construction) {
+          return res.json({
+            success: true,
+            aiPowered: true,
+            ...parsedData
+          });
+        }
+        return res.json(heuristicResult);
+      } catch (apiErr) {
+        console.warn("Gemini estimate call failed, returning deterministic calculation:", apiErr?.message || apiErr);
+        return res.json(heuristicResult);
       }
+    } catch (err) {
+      console.warn("Estimation endpoint handled error:", err);
       return res.json({
         success: true,
-        aiPowered: true,
-        summary: `AI Wholesale Estimate for ${propertyType} (${totalEffectiveSqFt} sq.ft) in ${area}, Kolkata.`,
-        sanctionedLoadRecommendation: `${Math.max(3, Math.ceil(totalEffectiveSqFt / 250))} kW (CESC)`,
+        aiPowered: false,
+        summary: "Wholesale Material Estimate (Standard Kolkata Baseline)",
+        sanctionedLoadRecommendation: "5 kW (CESC Standard)",
         electrical: {
-          wireCoilsLight: { qty: calcWireCoilsLight, spec: "1.0/1.5 sq.mm Polycab FR-LSH", rate: 3600, amount: calcWireCoilsLight * 3600 },
-          wireCoilsPower: { qty: calcWireCoilsPower, spec: "2.5/4.0 sq.mm Heavy Flame Retardant", rate: 4200, amount: calcWireCoilsPower * 4200 },
-          modularSwitches: { qty: calcSwitches, spec: "Schneider / Havells Modular Points", rate: 140, amount: calcSwitches * 140 },
-          mcbDistribution: { qty: calcMcbBoxes, spec: "Double Door DB + Isolator & MCBs", rate: 1250, amount: calcMcbBoxes * 1250 },
-          pvcConduits: { qty: calcConduits, spec: "20mm/25mm Heavy Conduit 3m", rate: 120, amount: calcConduits * 120 },
-          subtotal: calcWireCoilsLight * 3600 + calcWireCoilsPower * 4200 + calcSwitches * 140 + calcMcbBoxes * 1250 + calcConduits * 120
+          wireCoilsLight: { qty: 4, spec: "1.0 & 1.5 sq.mm Polycab FR", rate: 3600, amount: 14400 },
+          wireCoilsPower: { qty: 3, spec: "2.5 & 4.0 sq.mm Heavy Copper", rate: 4200, amount: 12600 },
+          modularSwitches: { qty: 28, spec: "Modular Points", rate: 140, amount: 3920 },
+          mcbDistribution: { qty: 1, spec: "Double Door Enclosure + MCBs", rate: 1250, amount: 1250 },
+          pvcConduits: { qty: 14, spec: "Heavy Duty PVC Pipes", rate: 120, amount: 1680 },
+          subtotal: 33850
         },
         construction: {
-          cementBags: { qty: calcCement, spec: "UltraTech 53 Grade Fresh 50kg", rate: 385, amount: calcCement * 385 },
-          tmtSteelKg: { qty: calcSteel, spec: "Tata Tiscon 550D TMT Steel (kg)", rate: 62, amount: calcSteel * 62 },
-          waterproofingLiters: { qty: calcWaterproofing, spec: "Dr. Fixit 101 LW+ (L)", rate: 135, amount: calcWaterproofing * 135 },
-          wallPuttyBags: { qty: calcPutty, spec: "Asian Paints TruCare 20kg Putty", rate: 690, amount: calcPutty * 690 },
-          subtotal: calcCement * 385 + calcSteel * 62 + calcWaterproofing * 135 + calcPutty * 690
+          cementBags: { qty: 50, spec: "UltraTech 53 Grade Fresh", rate: 385, amount: 19250 },
+          tmtSteelKg: { qty: 350, spec: "Tata Tiscon 550D TMT (kg)", rate: 62, amount: 21700 },
+          waterproofingLiters: { qty: 10, spec: "Dr. Fixit 101 LW+", rate: 135, amount: 1350 },
+          wallPuttyBags: { qty: 5, spec: "20kg Polymer Putty", rate: 690, amount: 3450 },
+          subtotal: 45750
         },
-        grandTotal: calcWireCoilsLight * 3600 + calcWireCoilsPower * 4200 + calcSwitches * 140 + calcMcbBoxes * 1250 + calcConduits * 120 + calcCement * 385 + calcSteel * 62 + calcWaterproofing * 135 + calcPutty * 690,
+        grandTotal: 79600,
         laborDaysEstimate: {
-          electricianDays: Math.max(3, Math.round(totalEffectiveSqFt / 180)),
-          masonDays: Math.max(4, Math.round(totalEffectiveSqFt / 150)),
-          approxLaborCost: Math.round(totalEffectiveSqFt * 28)
+          electricianDays: 5,
+          masonDays: 6,
+          approxLaborCost: 26e3
         },
         engineeringAdvice: [
-          `For ${area} properties, 2.5 sq.mm Polycab FR-LSH is strictly required for kitchen induction & 16A microwave outlets.`,
-          `Main distribution board should feature an RCCB/ELCB (30mA) for complete electrocution protection.`,
-          `Cement bags will be dispatched via mini-truck with ground-floor site unloading.`
+          "Ensure circuit neutrals are kept independent to prevent MCB tripping during monsoons.",
+          "Dedicated 4.0 sq.mm copper wire runs recommended for 1.5 Ton ACs.",
+          "All materials dispatched directly from Kasba warehouse."
         ]
-      });
-    } catch (err) {
-      console.error("Gemini estimation error:", err);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to generate AI material estimate.",
-        error: String(err)
       });
     }
   });

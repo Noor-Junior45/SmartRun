@@ -7,58 +7,58 @@
 
   <!-- Homepage -->
   <url>
-    <loc>https://smartrun.in/</loc>
-    <lastmod>2026-09-06</lastmod>
+    <loc>https://www.smartrun.in/</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
 
   <!-- Electrical Supplies & Wiring -->
   <url>
-    <loc>https://smartrun.in/electrical</loc>
-    <lastmod>2026-09-06</lastmod>
+    <loc>https://www.smartrun.in/electrical</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
 
   <!-- Construction Materials & Bulk Building Supplies -->
   <url>
-    <loc>https://smartrun.in/construction</loc>
-    <lastmod>2026-09-06</lastmod>
+    <loc>https://www.smartrun.in/construction</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
 
   <!-- Real Estate Wiring & Electrical Contractor Services -->
   <url>
-    <loc>https://smartrun.in/services</loc>
-    <lastmod>2026-09-06</lastmod>
+    <loc>https://www.smartrun.in/services</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
 
   <!-- Legal & Policies -->
   <url>
-    <loc>https://smartrun.in/terms/shipping</loc>
-    <lastmod>2026-09-06</lastmod>
+    <loc>https://www.smartrun.in/terms/shipping</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://smartrun.in/terms/returns</loc>
-    <lastmod>2026-09-06</lastmod>
+    <loc>https://www.smartrun.in/terms/returns</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://smartrun.in/terms/privacy</loc>
-    <lastmod>2026-09-06</lastmod>
+    <loc>https://www.smartrun.in/terms/privacy</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://smartrun.in/terms/service</loc>
-    <lastmod>2026-09-06</lastmod>
+    <loc>https://www.smartrun.in/terms/service</loc>
+    <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>

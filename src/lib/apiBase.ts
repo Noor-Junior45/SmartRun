@@ -36,7 +36,7 @@ export const API_BASE_URL: string = (() => {
     hostname === '10.0.2.2';
 
   if (isCapacitorNative) {
-    return 'https://smartrun.in';
+    return 'https://www.smartrun.in';
   }
 
   return '';

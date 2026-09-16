@@ -616,11 +616,11 @@ export default function App() {
         ) {
           // Normalize URL for parsing (support smartrun://, in.smartrun.app://, and legacy buildnow://)
           const normalizedUrl = urlStr.startsWith('smartrun://')
-            ? urlStr.replace('smartrun://', 'https://smartrun.in/')
+            ? urlStr.replace('smartrun://', 'https://www.smartrun.in/')
             : urlStr.startsWith('in.smartrun.app://')
-            ? urlStr.replace('in.smartrun.app://', 'https://smartrun.in/')
+            ? urlStr.replace('in.smartrun.app://', 'https://www.smartrun.in/')
             : urlStr.startsWith('buildnow://')
-            ? urlStr.replace('buildnow://', 'https://smartrun.in/')
+            ? urlStr.replace('buildnow://', 'https://www.smartrun.in/')
             : urlStr;
 
           try {

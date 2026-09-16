@@ -1,5 +1,5 @@
 # Robots.txt for SmartRun (operating with Giriraj Power)
-# Primary: https://smartrun.in | Partner: https://girirajpower.in
+# Primary: https://www.smartrun.in | Partner: https://www.girirajpower.in
 
 User-agent: *
 Allow: /
@@ -18,4 +18,4 @@ Disallow: /order-success
 Crawl-delay: 1
 
 # Sitemaps
-Sitemap: https://smartrun.in/sitemap.xml
+Sitemap: https://www.smartrun.in/sitemap.xml

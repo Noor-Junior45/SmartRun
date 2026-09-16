@@ -36,7 +36,7 @@ export function buildTrackedShareUrl(options: ShareProductOptions): string {
   const baseFullUrl = options.url || `${origin}${basePath}`;
 
   try {
-    const urlObj = new URL(baseFullUrl, origin || 'https://smartrun.in');
+    const urlObj = new URL(baseFullUrl, origin || 'https://www.smartrun.in');
     urlObj.searchParams.set('utm_source', 'native_share');
     urlObj.searchParams.set('utm_medium', 'referral_share');
     urlObj.searchParams.set('utm_campaign', 'product_share');
