@@ -1376,7 +1376,6 @@ async function startServer() {
   // =========================================================================
   // GOOGLE MAPS PLATFORM PROXY ENDPOINTS (PRIMARY)
   // =========================================================================
-  const DEFAULT_GOOGLE_MAPS_KEY = "AIzaSyAl3I8BhuJ2MwVWzoB5Ov3_-FHJuY6FBeA";
 
   // Google Maps Reverse Geocoding Proxy
   app.get("/api/maps/google/rev-geocode", async (req, res) => {
@@ -1388,10 +1387,13 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Invalid latitude/longitude" });
       }
 
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_GOOGLE_MAPS_KEY).trim();
-      if (apiKey && apiKey !== "YOUR_API_KEY") {
-        try {
-          const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      if (!apiKey || apiKey === "YOUR_API_KEY") {
+        return res.status(500).json({ success: false, message: "GOOGLE_MAPS_API_KEY is not configured" });
+      }
+
+      try {
+        const googleUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
           const gRes = await fetch(googleUrl);
           if (gRes.ok) {
             const data = await gRes.json();
@@ -1445,7 +1447,6 @@ async function startServer() {
         } catch (gErr) {
           console.warn("[Google Rev Geocode Notice]:", gErr);
         }
-      }
 
       // Nominatim Fallback
       const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
@@ -1488,11 +1489,13 @@ async function startServer() {
         return res.json({ success: true, results: [] });
       }
 
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_GOOGLE_MAPS_KEY).trim();
+      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      if (!apiKey || apiKey === "YOUR_API_KEY") {
+        return res.status(500).json({ success: false, message: "GOOGLE_MAPS_API_KEY is not configured" });
+      }
 
       // 1. If Google Maps Platform API Key is configured, use Google Places API (New)
-      if (apiKey && apiKey !== "YOUR_API_KEY") {
-        try {
+      try {
           const gmpRes = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
             method: "POST",
             headers: {
@@ -1540,7 +1543,6 @@ async function startServer() {
         } catch (gmpErr) {
           console.warn("[Google Maps API Autocomplete fallback notice]:", gmpErr);
         }
-      }
 
       // 2. High-precision Geocoding Fallback for Kolkata & West Bengal (Sanitized to Localities/Streets)
       const queryWithKolkata =
@@ -1613,44 +1615,45 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Place ID is required" });
       }
 
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || DEFAULT_GOOGLE_MAPS_KEY).trim();
+      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      if (!apiKey || apiKey === "YOUR_API_KEY") {
+        return res.status(500).json({ success: false, message: "GOOGLE_MAPS_API_KEY is not configured" });
+      }
 
-      if (apiKey && apiKey !== "YOUR_API_KEY") {
-        try {
-          const gmpRes = await fetch(
-            `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
-            {
-              headers: {
-                "Content-Type": "application/json",
-                "X-Goog-Api-Key": apiKey,
-                "X-Goog-FieldMask": "id,displayName,formattedAddress,location,addressComponents",
-              },
-            }
-          );
-
-          if (gmpRes.ok) {
-            const data = await gmpRes.json();
-            const lat = data.location?.latitude;
-            const lng = data.location?.longitude;
-            let pincode = "";
-            if (Array.isArray(data.addressComponents)) {
-              const pinComp = data.addressComponents.find((c: any) => c.types?.includes("postal_code"));
-              if (pinComp) pincode = pinComp.longText || pinComp.shortText || "";
-            }
-
-            return res.json({
-              success: true,
-              placeId,
-              name: data.displayName?.text || "",
-              formattedAddress: data.formattedAddress || "",
-              lat,
-              lng,
-              pincode,
-            });
+      try {
+        const gmpRes = await fetch(
+          `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": apiKey,
+              "X-Goog-FieldMask": "id,displayName,formattedAddress,location,addressComponents",
+            },
           }
-        } catch (gmpErr) {
-          console.warn("[Google Maps Place Details error]:", gmpErr);
+        );
+
+        if (gmpRes.ok) {
+          const data = await gmpRes.json();
+          const lat = data.location?.latitude;
+          const lng = data.location?.longitude;
+          let pincode = "";
+          if (Array.isArray(data.addressComponents)) {
+            const pinComp = data.addressComponents.find((c: any) => c.types?.includes("postal_code"));
+            if (pinComp) pincode = pinComp.longText || pinComp.shortText || "";
+          }
+
+          return res.json({
+            success: true,
+            placeId,
+            name: data.displayName?.text || "",
+            formattedAddress: data.formattedAddress || "",
+            lat,
+            lng,
+            pincode,
+          });
         }
+      } catch (gmpErr) {
+        console.warn("[Google Maps Place Details error]:", gmpErr);
       }
 
       return res.json({ success: false, message: "Place details not available from API" });
@@ -2520,7 +2523,6 @@ async function startServer() {
   // =========================================================================
   // RAZORPAY PAYMENT GATEWAY & REFUND ENDPOINTS
   // =========================================================================
-  const DEFAULT_RAZORPAY_KEY_ID = "rzp_test_TZw5E2BUHZrnOU";
 
   function sanitizeEnvValue(val?: string): string {
     if (!val) return "";
@@ -2601,19 +2603,34 @@ async function startServer() {
     let diagnostic = "";
     if (!isValidRazorpayKeyId(rawKeyId)) {
       if (!rawKeyId) {
-        diagnostic = "RAZORPAY_KEY_ID is missing. Please set your Razorpay Key ID (starts with rzp_live_ or rzp_test_).";
+        diagnostic = "RAZORPAY_KEY_ID is missing. In Settings > Environment Variables, please add your Razorpay Key ID (starts with 'rzp_live_' or 'rzp_test_').";
       } else {
-        diagnostic = `RAZORPAY_KEY_ID '${rawKeyId}' is invalid. It must start with rzp_live_ or rzp_test_ and be at least 14 characters.`;
+        diagnostic = `RAZORPAY_KEY_ID in Settings > Environment Variables is currently '${rawKeyId}'. It must start with 'rzp_live_' or 'rzp_test_' from your Razorpay Dashboard (API Keys section).`;
+        if (activeSecret) {
+          diagnostic += " Your Key Secret is set, but please replace '" + rawKeyId + "' in RAZORPAY_KEY_ID with the public Key ID.";
+        }
       }
     } else if (!activeSecret) {
-      diagnostic = "RAZORPAY_KEY_SECRET is missing or too short.";
+      diagnostic = "RAZORPAY_KEY_SECRET is missing or too short. In Settings > Environment Variables, please add your Razorpay Key Secret.";
+    }
+
+    if (!isConfigured) {
+      return res.status(200).json({
+        success: false,
+        keyId: "",
+        isConfigured: false,
+        diagnostic: diagnostic || "RAZORPAY_KEY_ID is not configured",
+        error: diagnostic || "RAZORPAY_KEY_ID is not configured",
+        merchantName: "SmartRun",
+        currency: "INR"
+      });
     }
 
     res.json({
       success: true,
-      keyId: activeKeyId || "rzp_test_sandbox",
-      isConfigured,
-      diagnostic: diagnostic || undefined,
+      keyId: activeKeyId,
+      isConfigured: true,
+      diagnostic: undefined,
       merchantName: "SmartRun",
       currency: "INR"
     });
@@ -2634,81 +2651,61 @@ async function startServer() {
 
       const amountInPaise = Math.round(parsedAmount * 100);
       const activeKeyId = resolveRazorpayKeyId();
+      const rawKeyId = resolveRawRazorpayKeyId();
+
+      if (!isValidRazorpayKeyId(activeKeyId)) {
+        const errorDetail = !rawKeyId
+          ? "RAZORPAY_KEY_ID is missing in Settings > Environment Variables. Please set your Razorpay Key ID (starts with 'rzp_live_' or 'rzp_test_')."
+          : `RAZORPAY_KEY_ID in Settings > Environment Variables is currently set to '${rawKeyId}', which is not a valid Razorpay Key ID. Please replace it with your Key ID from Razorpay (starts with 'rzp_live_' or 'rzp_test_').`;
+        return res.status(400).json({
+          success: false,
+          error: "RAZORPAY_KEY_ID is not configured",
+          message: errorDetail
+        });
+      }
+
       const razorpay = getRazorpayClient();
+      if (!razorpay) {
+        return res.status(400).json({
+          success: false,
+          error: "RAZORPAY_KEY_SECRET is not configured",
+          message: "Payment gateway credentials are incomplete. Please set RAZORPAY_KEY_SECRET in Settings > Environment Variables."
+        });
+      }
 
-      if (razorpay) {
-        try {
-          const orderOptions = {
-            amount: amountInPaise,
-            currency: "INR",
-            receipt: receipt || `rcpt_${Date.now()}`,
-            payment_capture: 1,
-            notes: notes || {}
-          };
-          const order = await razorpay.orders.create(orderOptions);
-          return res.status(200).json({
-            success: true,
-            orderId: order.id,
-            amount: order.amount,
-            currency: order.currency,
-            keyId: activeKeyId,
-            isLive: true
-          });
-        } catch (apiErr: any) {
-          const errMsg = apiErr?.error?.description || apiErr?.message || "Authentication error";
-          if (!authNoticeLogged) {
-            authNoticeLogged = true;
-            console.warn(`[Razorpay Notice]: ${errMsg}. Check that RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET match in environment settings. Falling back to sandbox test gateway.`);
-          }
-          // Invalidate cached client if authentication failed
-          razorpayClientInstance = null;
-
-          const mockOrderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-          return res.status(200).json({
-            success: true,
-            orderId: mockOrderId,
-            amount: amountInPaise,
-            currency: "INR",
-            keyId: activeKeyId || "rzp_test_sandbox",
-            isLive: false,
-            isSimulated: true,
-            warning: `Razorpay credentials could not be authenticated (${errMsg}). Sandbox test gateway active.`
-          });
-        }
-      } else {
-        // Safe development simulation fallback when live credentials are not set or invalid
-        const rawKeyId = resolveRawRazorpayKeyId();
-        const activeSecret = resolveRazorpayKeySecret();
-        let reason = "Razorpay credentials not fully configured.";
-        if (activeSecret && !isValidRazorpayKeyId(rawKeyId)) {
-          reason = `RAZORPAY_KEY_SECRET is set, but RAZORPAY_KEY_ID is missing or invalid (current: '${rawKeyId || "empty"}'). Real keys start with 'rzp_live_' or 'rzp_test_'.`;
-        }
-
-        const mockOrderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        return res.status(200).json({
-          success: true,
-          orderId: mockOrderId,
+      try {
+        const orderOptions = {
           amount: amountInPaise,
           currency: "INR",
-          keyId: activeKeyId || "rzp_test_sandbox",
-          isLive: false,
-          isSimulated: true,
-          note: reason
+          receipt: receipt || `rcpt_${Date.now()}`,
+          payment_capture: 1,
+          notes: notes || {}
+        };
+        const order = await razorpay.orders.create(orderOptions);
+        return res.status(200).json({
+          success: true,
+          orderId: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          keyId: activeKeyId,
+          isLive: true
+        });
+      } catch (apiErr: any) {
+        const errMsg = apiErr?.error?.description || apiErr?.message || "Authentication error";
+        console.warn(`[Razorpay Notice]: ${errMsg}. Check that RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET match in environment settings.`);
+        razorpayClientInstance = null;
+        return res.status(500).json({
+          success: false,
+          error: errMsg,
+          message: `Razorpay order creation failed: ${errMsg}`
         });
       }
     } catch (err: any) {
       console.error("Razorpay order creation unexpected error:", err);
-      // Even on unexpected error, return fallback so checkout does not block
-      const amountInPaise = Math.round(Number(req.body?.amount || 100) * 100);
-      return res.status(200).json({
-        success: true,
-        orderId: `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        amount: amountInPaise,
-        currency: "INR",
-        keyId: "rzp_test_sandbox",
-        isLive: false,
-        isSimulated: true,
-        warning: "Fallback test gateway initialized."
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Internal server error during order creation",
+        message: "Failed to create payment order."
       });
     }
   });

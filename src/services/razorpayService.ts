@@ -20,6 +20,8 @@ export interface RazorpayConfigResponse {
   isConfigured: boolean;
   merchantName: string;
   currency: string;
+  diagnostic?: string;
+  error?: string;
 }
 
 export interface RazorpayCreateOrderResponse {
@@ -92,16 +94,26 @@ export function loadRazorpayScript(): Promise<boolean> {
 export async function getRazorpayConfig(): Promise<RazorpayConfigResponse> {
   try {
     const res = await fetch(`${API_BASE_URL}/api/razorpay/config`);
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(`Config request returned status ${res.status}`);
+      return {
+        success: false,
+        keyId: '',
+        isConfigured: false,
+        diagnostic: data?.diagnostic || data?.message || `Config request returned status ${res.status}`,
+        error: data?.error,
+        merchantName: 'SmartRun',
+        currency: 'INR'
+      };
     }
-    return await res.json();
-  } catch (err) {
+    return data;
+  } catch (err: any) {
     console.warn('Could not fetch Razorpay config, using fallback:', err);
     return {
       success: false,
-      keyId: (import.meta.env.VITE_RAZORPAY_KEY_ID as string) || 'rzp_test_demo',
+      keyId: (import.meta.env.VITE_RAZORPAY_KEY_ID as string) || '',
       isConfigured: false,
+      diagnostic: err?.message,
       merchantName: 'SmartRun',
       currency: 'INR'
     };
@@ -255,10 +267,11 @@ export async function launchRazorpayCheckout(
     );
   }
 
-  const config = await getRazorpayConfig().catch(() => ({
+  const config: RazorpayConfigResponse = await getRazorpayConfig().catch(() => ({
     success: false,
     keyId: '',
     isConfigured: false,
+    diagnostic: undefined,
     merchantName: 'SmartRun',
     currency: 'INR'
   }));
@@ -276,11 +289,10 @@ export async function launchRazorpayCheckout(
   const candidateKeys = [
     serverOrder?.keyId,
     config.keyId,
-    import.meta.env.VITE_RAZORPAY_KEY_ID as string,
-    'rzp_live_TaSabydnxpQcJ0'
+    import.meta.env.VITE_RAZORPAY_KEY_ID as string
   ];
 
-  const effectiveKeyId = candidateKeys.find(isValidKey) || candidateKeys.find(Boolean) || 'rzp_live_TaSabydnxpQcJ0';
+  const effectiveKeyId = candidateKeys.find(isValidKey) || candidateKeys.find(Boolean) || '';
 
   const isRealRazorpayKey = isValidKey(effectiveKeyId);
 
@@ -288,6 +300,18 @@ export async function launchRazorpayCheckout(
     serverOrder?.orderId || generateSecureToken('order_rcpt', 8);
 
   return new Promise<RazorpayCheckoutResult>((resolve, reject) => {
+    // If no valid key is configured, do not open Razorpay checkout and return clear error
+    if (!effectiveKeyId || !isRealRazorpayKey) {
+      const diagMessage =
+        config.diagnostic ||
+        (serverOrder as any)?.message ||
+        'Razorpay Key ID is not configured. Please add your Razorpay Live Key ID (starts with rzp_live_) in Settings > Environment Variables.';
+      const configError = new Error(diagMessage);
+      console.warn('[Razorpay]', configError.message);
+      if (onFailure) onFailure(configError);
+      reject(configError);
+      return;
+    }
     const handleApproved = async (response: RazorpayPaymentResponse) => {
       try {
         let isVerified = false;
@@ -343,7 +367,12 @@ export async function launchRazorpayCheckout(
             name: customerName,
             contact: customerPhone.replace(/\D/g, '').slice(-10),
             email: customerEmail || '',
-            ...(params.preferredMethod ? { method: params.preferredMethod } : {}),
+            // Do NOT force method: 'upi' in prefill because Razorpay auto-jumps straight
+            // into the QR code section. Leaving it open lets the user choose any UPI app
+            // (Google Pay, PhonePe, Paytm, BHIM, etc.) or QR code.
+            ...(params.preferredMethod && params.preferredMethod !== 'upi'
+              ? { method: params.preferredMethod }
+              : {}),
             ...(params.vpa ? { vpa: params.vpa } : {})
           },
           notes: {
@@ -353,36 +382,6 @@ export async function launchRazorpayCheckout(
           theme: {
             color: '#ff3252', // SmartRun brand red matching the application theme
             backdrop_color: 'rgba(15, 23, 42, 0.75)'
-          },
-          // Ensure UPI (Intent, QR code, and VPA) and Cards are explicitly displayed in Android WebView
-          config: {
-            display: {
-              blocks: {
-                upi: {
-                  name: 'Pay via UPI / QR',
-                  instruments: [
-                    {
-                      method: 'upi'
-                    }
-                  ]
-                },
-                other: {
-                  name: 'Cards & NetBanking',
-                  instruments: [
-                    {
-                      method: 'card'
-                    },
-                    {
-                      method: 'netbanking'
-                    }
-                  ]
-                }
-              },
-              sequence: ['block.upi', 'block.other'],
-              preferences: {
-                show_default_blocks: true
-              }
-            }
           },
           handler: handleApproved,
           modal: {

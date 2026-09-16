@@ -33,13 +33,11 @@ import {
   Receipt,
   X,
   Building2,
-  Lock,
-  Copy,
-  QrCode
+  Lock
 } from 'lucide-react';
 import { CartItem, KolkataArea, Order, SavedAddress, Product, UserProfile, FeePolicySettings } from '../types';
 import { SwipeableItem } from './SwipeableItem';
-import { createFirestoreOrder, getStoredAddresses, cleanPhoneAutofill, generateUUID, ACTIVE_SAVED_ADDRESS_KEY, getActiveAddressStorageKey, safeGetItem, subscribeToUpiIds, saveUpiToFirestore } from '../services/supabaseService';
+import { createFirestoreOrder, getStoredAddresses, cleanPhoneAutofill, generateUUID, ACTIVE_SAVED_ADDRESS_KEY, getActiveAddressStorageKey, safeGetItem } from '../services/supabaseService';
 import { generateSecureOrderNumber } from '../utils/cryptoHelper';
 import { notifyOrderPlaced } from '../services/emailService';
 import { getFeeSettings, calculateOrderFees, DEFAULT_FEE_SETTINGS } from '../services/feeService';
@@ -225,28 +223,6 @@ export const CartView = ({
   const [couponSuccess, setCouponSuccess] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [stockWarning, setStockWarning] = useState<string | null>(null);
-
-  // Saved & Direct UPI Payment States
-  const [savedUpiList, setSavedUpiList] = useState<string[]>([]);
-  const [selectedUpi, setSelectedUpi] = useState<string>('');
-  const [customUpi, setCustomUpi] = useState<string>('');
-  const [saveCustomUpi, setSaveCustomUpi] = useState<boolean>(true);
-  const [showUpiDirectModal, setShowUpiDirectModal] = useState<boolean>(false);
-  const [pendingUpiOrder, setPendingUpiOrder] = useState<Order | null>(null);
-  const [upiUtr, setUpiUtr] = useState<string>('');
-  const [isConfirmingUpi, setIsConfirmingUpi] = useState<boolean>(false);
-  const [copiedUpi, setCopiedUpi] = useState<boolean>(false);
-
-  // Subscribe to real-time user saved UPI IDs
-  useEffect(() => {
-    const unsub = subscribeToUpiIds((upis) => {
-      setSavedUpiList(upis);
-      if (upis.length > 0 && !selectedUpi) {
-        setSelectedUpi(upis[0]);
-      }
-    });
-    return () => unsub();
-  }, [userProfile?.id]);
 
   // Synchronize address updates if effectiveAddress or userProfile prop changes
   useEffect(() => {
@@ -503,22 +479,13 @@ export const CartView = ({
   };
 
   const finishOrderCreation = async (
-    orderToCreate: Order,
-    isUpiDirect: boolean = false
+    orderToCreate: Order
   ) => {
     const orderItems = checkoutMode === 'single' && singleCheckoutItem ? [singleCheckoutItem] : items;
     try {
       setIsSubmitting(true);
-      if (isUpiDirect) {
-        setIsConfirmingUpi(true);
-      }
 
-      // Step 1: Save custom UPI to user's saved UPI list if requested
-      if (saveCustomUpi && customUpi.trim() && customUpi.includes('@')) {
-        saveUpiToFirestore(customUpi.trim().toLowerCase()).catch(() => {});
-      }
-
-      // Step 2: Insert order and order_items into Supabase
+      // Step 1: Insert order and order_items into Supabase
       const created = await createFirestoreOrder(orderToCreate);
 
       // Step 3: Only after successful insertion of both order & all order_items, clear cart
@@ -558,7 +525,6 @@ export const CartView = ({
         // Safe fallback
       }
 
-      setShowUpiDirectModal(false);
       setIsCheckoutOpen(false);
       onOrderPlaced(created);
     } catch (err: any) {
@@ -567,7 +533,6 @@ export const CartView = ({
       setCheckoutError(err?.message || 'An error occurred while placing your order. Please try again.');
     } finally {
       setIsSubmitting(false);
-      setIsConfirmingUpi(false);
     }
   };
 
@@ -648,24 +613,6 @@ export const CartView = ({
       ? 'card'
       : 'upi';
 
-    const chosenVpa =
-      activeOption === 'online'
-        ? selectedUpi === 'custom'
-          ? customUpi.trim()
-          : selectedUpi && selectedUpi !== 'apps'
-          ? selectedUpi
-          : undefined
-        : undefined;
-
-    if (activeOption === 'online' && selectedUpi === 'custom') {
-      if (!customUpi.trim() || !customUpi.includes('@')) {
-        hapticError();
-        setIsSubmitting(false);
-        setCheckoutError('Please enter a valid UPI ID (e.g. name@okhdfcbank or 98300xxxxx@upi).');
-        return;
-      }
-    }
-
     // If online or card payment, launch Razorpay standard checkout
     if (!isCod) {
       try {
@@ -675,69 +622,17 @@ export const CartView = ({
           customerPhone: resolvedPhone.replace(/[^0-9]/g, '').slice(-10),
           customerEmail: recipientEmail,
           description: `Order ${humanOrderNumber} (${orderItems.length} items)`,
-          preferredMethod: activeOption === 'card' ? 'card' : 'upi',
-          vpa: chosenVpa
+          preferredMethod: activeOption === 'card' ? 'card' : undefined
         });
         paymentId = paymentRes.paymentId;
         razorpayOrderId = paymentRes.orderId;
         razorpaySignature = paymentRes.signature;
         isPaymentVerified = Boolean(paymentRes.verified);
       } catch (payErr: any) {
-        // If user chose online/UPI and Razorpay is not configured or in test mode, open Direct UPI payment
-        if (activeOption === 'online') {
-          const upiOrder: Order = {
-            id: orderUuid,
-            userId: userProfile?.id || undefined,
-            user_id: userProfile?.id || undefined,
-            trackingNumber: humanOrderNumber,
-            customerName: recipientName,
-            recipientName,
-            phone: recipientPhone,
-            recipientPhone,
-            customerEmail: recipientEmail,
-            recipientEmail,
-            address: [addressLine1, addressLine2, landmark.trim()].filter(Boolean).join(', '),
-            addressLine1,
-            addressLine2,
-            city,
-            state,
-            area: currentArea.name,
-            pincode,
-            addressLabel,
-            landmark: deliveryNotes,
-            deliveryNotes,
-            items: [...orderItems],
-            itemTotal: subtotal,
-            subtotal,
-            deliveryFee,
-            handlingFee,
-            rainFee,
-            surgeFee,
-            productHandlingFee,
-            fees,
-            feeBreakdown,
-            discount: discountAmount,
-            discountAmount,
-            couponCode,
-            totalAmount: finalTotalAmount,
-            paymentMethod: 'upi',
-            paymentStatus: 'paid',
-            paymentId: `upi_${Date.now()}`,
-            status: 'pending',
-            createdAt: new Date().toISOString(),
-            estimatedDeliveryTimestamp: Date.now() + currentArea.deliveryMinutes * 60 * 1000,
-            deliveryPartner: undefined
-          };
-          setPendingUpiOrder(upiOrder);
-          setShowUpiDirectModal(true);
-          setIsSubmitting(false);
-          return;
-        }
-
         hapticError();
         setIsSubmitting(false);
         setCheckoutError(
-          payErr?.message || 'Payment was cancelled or could not be completed. Please try again or select Cash on Delivery.'
+          payErr?.message || 'Razorpay checkout could not be opened or payment was cancelled. Please check your network and Razorpay configuration, or select Cash on Delivery.'
         );
         return;
       }
@@ -1709,92 +1604,6 @@ export const CartView = ({
                   </div>
                 </div>
 
-                {paymentMethod === 'online' && (
-                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3 animate-in fade-in duration-150">
-                    {savedUpiList.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                          Your Saved UPI Handles
-                        </div>
-                        <div className="space-y-1">
-                          {savedUpiList.map((vpa) => (
-                            <label
-                              key={vpa}
-                              className={`flex items-center justify-between p-2.5 rounded-xl border text-xs cursor-pointer transition ${
-                                selectedUpi === vpa
-                                  ? 'border-indigo-500 bg-indigo-50/70 font-bold text-indigo-950'
-                                  : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="radio"
-                                  name="cart_upi_handle"
-                                  checked={selectedUpi === vpa}
-                                  onChange={() => setSelectedUpi(vpa)}
-                                  className="accent-[#ff3252]"
-                                />
-                                <span className="font-mono">{vpa}</span>
-                              </div>
-                              <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100/70 px-1.5 py-0.5 rounded">
-                                Saved
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedUpi('apps')}
-                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition flex items-center gap-1.5 ${
-                          selectedUpi === 'apps' || (!selectedUpi && savedUpiList.length === 0)
-                            ? 'border-indigo-600 bg-indigo-50 text-indigo-900 shadow-2xs'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                        }`}
-                      >
-                        <QrCode className="w-3.5 h-3.5" />
-                        <span>UPI Apps &amp; QR Code</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedUpi('custom')}
-                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition ${
-                          selectedUpi === 'custom'
-                            ? 'border-indigo-600 bg-indigo-50 text-indigo-900 shadow-2xs'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                        }`}
-                      >
-                        <span>+ Enter Other UPI ID</span>
-                      </button>
-                    </div>
-
-                    {selectedUpi === 'custom' && (
-                      <div className="space-y-2 pt-1">
-                        <input
-                          type="text"
-                          placeholder="e.g. mobile@upi or name@okhdfcbank"
-                          value={customUpi}
-                          onChange={(e) => setCustomUpi(e.target.value)}
-                          className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:border-[#ff3252] focus:ring-1 focus:ring-[#ff3252] outline-none bg-white font-mono"
-                        />
-                        <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={saveCustomUpi}
-                            onChange={(e) => setSaveCustomUpi(e.target.checked)}
-                            className="accent-[#ff3252] rounded"
-                          />
-                          <span>Save this UPI handle to my account for 1-click checkout</span>
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 {/* 3. Card (Debit / Credit Cards) */}
                 <div
                   id="payment-option-card"
@@ -2054,163 +1863,7 @@ export const CartView = ({
       )}
 
       {/* ========================================================================== */}
-      {/* 2. DIRECT UPI PAYMENT MODAL (Instant QR & App Intent) */}
-      {/* ========================================================================== */}
-      {showUpiDirectModal && pendingUpiOrder && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200 overflow-y-auto">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl flex flex-col text-center border border-slate-100 my-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2 text-left">
-                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
-                  ₹
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900">Pay via UPI</h3>
-                  <p className="text-[11px] text-slate-500 font-mono">Order #{pendingUpiOrder.trackingNumber}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowUpiDirectModal(false)}
-                className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Total Amount Badge */}
-            <div className="my-4 py-3 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl">
-              <span className="text-xs text-emerald-800 font-semibold uppercase tracking-wider block mb-0.5">
-                Amount to Pay
-              </span>
-              <span className="text-2xl font-black text-emerald-950">
-                ₹{pendingUpiOrder.totalAmount.toLocaleString('en-IN')}
-              </span>
-            </div>
-
-            {/* Direct UPI Apps Quick Intent Buttons */}
-            <div className="space-y-2 mb-4 text-left">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                Tap to Pay with App:
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                <a
-                  href={`upi://pay?pa=girirajpower@icici&pn=Giriraj%20Power%20Kolkata&am=${pendingUpiOrder.totalAmount}&cu=INR&tn=Order%20${pendingUpiOrder.trackingNumber}`}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-xs font-bold text-slate-800 flex items-center gap-2 shadow-2xs transition"
-                >
-                  <span className="w-6 h-6 rounded-full bg-blue-500 text-white font-black text-[10px] flex items-center justify-center">G</span>
-                  <span>Google Pay</span>
-                </a>
-
-                <a
-                  href={`upi://pay?pa=girirajpower@icici&pn=Giriraj%20Power%20Kolkata&am=${pendingUpiOrder.totalAmount}&cu=INR&tn=Order%20${pendingUpiOrder.trackingNumber}`}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-xs font-bold text-slate-800 flex items-center gap-2 shadow-2xs transition"
-                >
-                  <span className="w-6 h-6 rounded-full bg-purple-600 text-white font-black text-[10px] flex items-center justify-center">P</span>
-                  <span>PhonePe</span>
-                </a>
-
-                <a
-                  href={`upi://pay?pa=girirajpower@icici&pn=Giriraj%20Power%20Kolkata&am=${pendingUpiOrder.totalAmount}&cu=INR&tn=Order%20${pendingUpiOrder.trackingNumber}`}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-xs font-bold text-slate-800 flex items-center gap-2 shadow-2xs transition"
-                >
-                  <span className="w-6 h-6 rounded-full bg-cyan-600 text-white font-black text-[10px] flex items-center justify-center">Pt</span>
-                  <span>Paytm</span>
-                </a>
-
-                <a
-                  href={`upi://pay?pa=girirajpower@icici&pn=Giriraj%20Power%20Kolkata&am=${pendingUpiOrder.totalAmount}&cu=INR&tn=Order%20${pendingUpiOrder.trackingNumber}`}
-                  className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 text-xs font-bold text-emerald-900 flex items-center gap-2 shadow-2xs transition"
-                >
-                  <Smartphone className="w-4 h-4 text-emerald-700" />
-                  <span>Any UPI App</span>
-                </a>
-              </div>
-            </div>
-
-            {/* Dynamic QR Code */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center mb-4">
-              <span className="text-[11px] font-bold text-slate-600 mb-2">Or Scan QR from any UPI App</span>
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-                  `upi://pay?pa=girirajpower@icici&pn=Giriraj%20Power%20Kolkata&am=${pendingUpiOrder.totalAmount}&cu=INR&tn=Order%20${pendingUpiOrder.trackingNumber}`
-                )}`}
-                alt="UPI QR Code"
-                className="w-40 h-40 rounded-xl bg-white p-2 border border-slate-200 shadow-2xs"
-              />
-              <div className="mt-2.5 flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] font-mono text-slate-700">
-                <span>girirajpower@icici</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText('girirajpower@icici');
-                    setCopiedUpi(true);
-                    setTimeout(() => setCopiedUpi(false), 2000);
-                  }}
-                  className="text-slate-400 hover:text-slate-700 cursor-pointer"
-                  title="Copy UPI ID"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </button>
-                {copiedUpi && <span className="text-emerald-600 font-sans font-bold text-[10px]">Copied!</span>}
-              </div>
-            </div>
-
-            {/* UTR Reference input & Confirm Button */}
-            <div className="space-y-3 text-left">
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                  UPI Reference / UTR Number (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="12-digit UPI transaction number"
-                  value={upiUtr}
-                  onChange={(e) => setUpiUtr(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:border-[#ff3252] focus:ring-1 focus:ring-[#ff3252] outline-none font-mono"
-                />
-              </div>
-
-              <button
-                type="button"
-                disabled={isConfirmingUpi}
-                onClick={() => {
-                  const finalUpiOrder: Order = {
-                    ...pendingUpiOrder,
-                    paymentId: upiUtr ? `utr_${upiUtr}` : pendingUpiOrder.paymentId,
-                    paymentStatus: 'paid'
-                  };
-                  finishOrderCreation(finalUpiOrder, true);
-                }}
-                className="w-full bg-[#ff3252] hover:bg-[#e02644] text-white font-black py-3.5 px-6 rounded-2xl shadow-md transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer text-sm"
-              >
-                {isConfirmingUpi ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Confirming Order...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-                    <span>I Have Paid ₹{pendingUpiOrder.totalAmount} (Place Order)</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowUpiDirectModal(false)}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl transition cursor-pointer text-xs text-center block"
-              >
-                Change Payment Method
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================== */}
-      {/* 3. CHOOSE DELIVERY ADDRESS MODAL (Gated Checkout) */}
+      {/* 2. CHOOSE DELIVERY ADDRESS MODAL (Gated Checkout) */}
       {/* ========================================================================== */}
       {showAddressRequiredModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">

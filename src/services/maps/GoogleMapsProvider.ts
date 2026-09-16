@@ -3,8 +3,6 @@ import { IMapProvider, IMapInstance, MapCoordinates, MapInitOptions, MapSearchRe
 import { API_BASE_URL } from '../../lib/apiBase';
 import { generateSecureToken } from '../../utils/cryptoHelper';
 
-const DEFAULT_GOOGLE_MAPS_KEY = 'AIzaSyAl3I8BhuJ2MwVWzoB5Ov3_-FHJuY6FBeA';
-
 let googleMapsScriptLoadingPromise: Promise<boolean> | null = null;
 let googleMapsAuthFailed = false;
 
@@ -67,13 +65,10 @@ function loadGoogleMapsScript(apiKey: string): Promise<boolean> {
 export class GoogleMapsProvider implements IMapProvider {
   readonly name = 'google' as const;
 
-  private getApiKey(): string {
-    const key = (
-      import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
-      DEFAULT_GOOGLE_MAPS_KEY
-    ).trim();
-    if (!key || key === 'YOUR_API_KEY') {
-      return DEFAULT_GOOGLE_MAPS_KEY;
+  private getApiKey(): string | null {
+    const key = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
+    if (!key || key === 'YOUR_API_KEY' || key.includes('placeholder')) {
+      return null;
     }
     return key;
   }
@@ -85,6 +80,16 @@ export class GoogleMapsProvider implements IMapProvider {
   async initialize(container: HTMLElement, options: MapInitOptions): Promise<IMapInstance> {
     container.innerHTML = '';
     const apiKey = this.getApiKey();
+
+    if (!apiKey) {
+      container.innerHTML = `
+        <div class="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-600 p-4 text-center rounded-lg">
+          <p class="font-semibold text-sm">Google Maps not configured</p>
+          <p class="text-xs text-slate-500 mt-1">VITE_GOOGLE_MAPS_API_KEY is missing.</p>
+        </div>
+      `;
+      throw new Error('Google Maps is not configured. Missing VITE_GOOGLE_MAPS_API_KEY.');
+    }
 
     // 1. Try Native Google Maps JavaScript API
     if (!googleMapsAuthFailed) {
