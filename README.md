@@ -168,3 +168,15 @@ In Firestore or Supabase (`orders` collection / table):
 ```
 
 When `rider_location` or `/api/orders/:id/rider-location` is present, the live tracking view displays the green "Live GPS" status badge and moves the rider marker smoothly on the map canvas.
+
+---
+
+## 5. Android Build (Native Capacitor)
+
+The official Android application is built using **Capacitor 8** in the `android/` directory.
+
+- **App ID (Application ID)**: `in.smartrun.app`
+- **Build System**: Android Studio / Gradle (`android/`)
+- **Build Guide**: See `ANDROID_STUDIO_AAB_GUIDE.md` for step-by-step instructions to generate signed `.aab` / `.apk` files.
+- **Sync Command**: `npm run cap:build` or `npx cap sync android`
+- **Archived TWA**: Previous Bubblewrap / TWA artifacts have been quarantined in `twa-archive/` and are no longer used.

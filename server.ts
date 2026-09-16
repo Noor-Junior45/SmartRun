@@ -3900,17 +3900,37 @@ async function startServer() {
     }
   });
 
+  const isValidGeminiApiKey = (key?: string): boolean => {
+    if (!key) return false;
+    const trimmed = key.trim();
+    if (trimmed.length < 20) return false;
+    // Standard Google Gemini API keys start with AIzaSy
+    if (!trimmed.startsWith("AIzaSy")) return false;
+    const lower = trimmed.toLowerCase();
+    if (
+      lower.includes("your_") ||
+      lower.includes("dummy") ||
+      lower.includes("placeholder") ||
+      lower.includes("example") ||
+      lower === "undefined" ||
+      lower === "null"
+    ) {
+      return false;
+    }
+    return true;
+  };
+
   // Gemini AI endpoint for generating short technician descriptions
   app.post("/api/technicians/generate-description", async (req, res) => {
     try {
       const { name, title, primarySector, subSectors, experienceYears, skills, about } = req.body || {};
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
 
       const fallbackDesc = `${experienceYears || 5}+ years experienced ${title || "Electrical Specialist"} specialized in ${
         (subSectors && subSectors[0]) || primarySector || "electrical installations"
       } with verified field expertise across Kolkata.`;
 
-      if (!apiKey) {
+      if (!isValidGeminiApiKey(apiKey)) {
         return res.json({
           success: true,
           description: fallbackDesc,
@@ -3919,7 +3939,7 @@ async function startServer() {
       }
 
       const ai = new GoogleGenAI({
-        apiKey,
+        apiKey: apiKey!,
         httpOptions: { headers: { "User-Agent": "aistudio-build" } }
       });
 
@@ -4736,90 +4756,98 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
       const { prompt, userArea, pincode } = req.body;
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
 
-      if (!apiKey) {
-        // Provide intelligent electrical fallback if key is not configured
+      const defaultMapsSources = [
+        {
+          uri: "https://share.google/EWHvo68Oi2DsChWWV",
+          title: "Giriraj Power Kasba Hub, Kolkata"
+        }
+      ];
+
+      const fallbackText = `Electrical Recommendation for ${userArea || 'Kolkata'} (PIN: ${pincode || '700039'}):
+• Lighting & Fan circuits: 1.5 sq mm Polycab FR-LSH Copper Wire (10A MCB).
+• Air Conditioners (up to 1.5 Ton) & Geysers: 2.5 sq mm Havells HRFR Wire + 16A/20A MCB.
+• Main Distribution: 4.0 sq mm pure copper wire + 32A DP Isolator.
+• Heavy loads: 6.0 sq mm for entire home mains.
+Express delivery is available across Kolkata within ~60 minutes!`;
+
+      if (!isValidGeminiApiKey(apiKey)) {
         return res.json({
-          text: `For ${userArea || 'Kolkata'} (PIN: ${pincode || '700039'}):
-• 1.5 sq mm Wires (Polycab/Havells): Recommended for lighting circuits & 6A switchboards (10A MCB protection).
-• 2.5 sq mm Wires: Recommended for Air Conditioners (up to 1.5 Ton), geysers, and kitchen power plugs (16A/20A MCB).
-• 4.0 sq mm Wires: Mains sub-meter feeder & heavy induction loads.
-• Construction: UltraTech Cement & Tata Tiscon 550D TMT bars are in stock for 60-min delivery from Giriraj Power Kasba Central Hub.`,
-          mapsSources: [
-            {
-              uri: "https://share.google/EWHvo68Oi2DsChWWV",
-              title: "Giriraj Power Kasba Hub, Kolkata"
-            }
-          ]
+          text: fallbackText,
+          mapsSources: defaultMapsSources
         });
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build'
+      try {
+        const ai = new GoogleGenAI({
+          apiKey: apiKey!,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build'
+            }
           }
-        }
-      });
+        });
 
-      const systemPrompt = `You are the expert Electrical Engineer, Construction Estimator & Store Advisor for Giriraj Power in Kolkata, India.
+        const systemPrompt = `You are the expert Electrical Engineer, Construction Estimator & Store Advisor for Giriraj Power in Kolkata, India.
 Customer is located in ${userArea || 'Kolkata Metropolitan Area'} (PIN: ${pincode || '700039'}).
 Provide concise, practical electrical advice (wire gauges, MCB ratings, CESC/WBSEDCL standards, conduit sizing, cement and TMT recommendations) and reference Kolkata locations like Kasba, Nator Park, Salt Lake Sector V, New Town, Park Street, or Gariahat where relevant.`;
 
-      // Call Gemini 2.5 Flash with Google Maps tool
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `${systemPrompt}\n\nCustomer question: ${prompt}`,
-        config: {
-          tools: [{ googleMaps: {} }],
-          toolConfig: {
-            retrievalConfig: {
-              latLng: {
-                latitude: 22.5145, // Kasba Kolkata coordinates
-                longitude: 88.3882
+        // Call Gemini 2.5 Flash with Google Maps tool
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: `${systemPrompt}\n\nCustomer question: ${prompt}`,
+          config: {
+            tools: [{ googleMaps: {} }],
+            toolConfig: {
+              retrievalConfig: {
+                latLng: {
+                  latitude: 22.5145, // Kasba Kolkata coordinates
+                  longitude: 88.3882
+                }
               }
             }
           }
+        });
+
+        const responseText = response.text || fallbackText;
+        
+        // Extract Google Maps grounding sources
+        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const mapsSources: Array<{ uri: string; title?: string }> = [];
+
+        for (const chunk of groundingChunks as Array<{ maps?: { uri?: string; title?: string }; web?: { uri?: string; title?: string } }>) {
+          if (chunk.maps?.uri) {
+            mapsSources.push({
+              uri: chunk.maps.uri,
+              title: chunk.maps.title || "View on Google Maps"
+            });
+          } else if (chunk.web?.uri) {
+            mapsSources.push({
+              uri: chunk.web.uri,
+              title: chunk.web.title || "Kolkata Hub Info"
+            });
+          }
         }
-      });
 
-      const responseText = response.text || "Here is the guidance for Kolkata electrical & hardware needs.";
-      
-      // Extract Google Maps grounding sources
-      const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-      const mapsSources: Array<{ uri: string; title?: string }> = [];
-
-      for (const chunk of groundingChunks as Array<{ maps?: { uri?: string; title?: string }; web?: { uri?: string; title?: string } }>) {
-        if (chunk.maps?.uri) {
-          mapsSources.push({
-            uri: chunk.maps.uri,
-            title: chunk.maps.title || "View on Google Maps"
-          });
-        } else if (chunk.web?.uri) {
-          mapsSources.push({
-            uri: chunk.web.uri,
-            title: chunk.web.title || "Kolkata Hub Info"
-          });
+        if (mapsSources.length === 0) {
+          mapsSources.push(...defaultMapsSources);
         }
-      }
 
-      // Always ensure Google Business link is provided
-      if (mapsSources.length === 0) {
-        mapsSources.push({
-          uri: "https://share.google/EWHvo68Oi2DsChWWV",
-          title: "Giriraj Power Kasba Hub, Kolkata"
+        return res.json({
+          text: responseText,
+          mapsSources
+        });
+      } catch (apiErr: any) {
+        console.warn("AI Assistant model fallback activated:", apiErr?.message || apiErr);
+        return res.json({
+          text: fallbackText,
+          mapsSources: defaultMapsSources
         });
       }
-
-      res.json({
-        text: responseText,
-        mapsSources
-      });
     } catch (err: unknown) {
-      console.error("AI Assistant API error:", err);
-      res.json({
+      console.warn("AI Assistant API error caught:", err);
+      return res.json({
         text: `Electrical Recommendation for Kolkata:
 • Lighting & Fan circuits: 1.5 sq mm Polycab FR-LSH Copper Wire.
 • Air Conditioners (1.5 Ton) & Geysers: 2.5 sq mm Havells HRFR Wire + 16A/20A MCB.
@@ -4835,91 +4863,243 @@ Express delivery is available across Kolkata within ~60 minutes!`,
     }
   });
 
+  // Intelligent domain response generator for Mayra (BuildNow AI Support Specialist)
+  function getMayraSmartResponse(query: string, customerName: string = "Customer"): { text: string; needsEscalation: boolean } {
+    const lower = (query || "").toLowerCase();
+    let needsEscalation = false;
+    let text = "";
+
+    if (
+      lower.includes("human") ||
+      lower.includes("call") ||
+      lower.includes("phone") ||
+      lower.includes("speak") ||
+      lower.includes("agent") ||
+      lower.includes("representative") ||
+      lower.includes("operator") ||
+      lower.includes("talk to someone") ||
+      lower.includes("real person")
+    ) {
+      text = `I can connect you directly with our specialized human support and contractor desk! 🤝\n\nPlease select your preferred way to reach us below:\n• **1. WhatsApp**: Instant chat with our Kasba dispatch desk\n• **2. Official Email**: Send your inquiry to team@girirajpower.in\n• **3. Support Helpline**: Call our customer helpline directly`;
+      needsEscalation = true;
+    } else if (
+      lower.includes("thank") ||
+      lower.includes("thanks") ||
+      lower.includes("nice answer") ||
+      lower.includes("good answer") ||
+      lower.includes("like your answer") ||
+      lower.includes("like the answer") ||
+      lower.includes("great job") ||
+      lower.includes("awesome") ||
+      lower.includes("helpful")
+    ) {
+      const gratitudePool = [
+        `Nice to hear that you liked the answer, ${customerName}! 😊 Feel free to ask if you have any other questions about wiring, orders, or delivery.`,
+        `You're very welcome, ${customerName}! Glad I could be of help. I'm always here 24/7 whenever you need assistance!`,
+        `So glad that was helpful! It's always my absolute pleasure to assist with your electrical and hardware questions.`,
+        `Awesome, happy to hear that! Reach out anytime if you need more recommendations or quotes.`
+      ];
+      text = gratitudePool[Math.floor(Math.random() * gratitudePool.length)];
+    } else if (
+      lower === "hi" ||
+      lower === "hello" ||
+      lower === "hey" ||
+      lower.startsWith("hi ") ||
+      lower.startsWith("hello ") ||
+      lower.startsWith("hey ") ||
+      lower.includes("good morning") ||
+      lower.includes("good afternoon") ||
+      lower.includes("good evening")
+    ) {
+      const greetingPool = [
+        `How can I help you today, ${customerName}? 😊 Ask me anything about our 60-min Kolkata delivery, wire gauge calculations, GST invoices, or your account orders!`,
+        `Hello ${customerName} 👋! Great to hear from you. What can I get sorted for your electrical or construction supplies right now?`,
+        `Hi ${customerName}! Nice to see you. Mayra here, your 24/7 AI Support Specialist. What's on your mind today?`,
+        `Welcome back ${customerName}! How may I assist you with your project today — need wire sizing advice, order tracking, or an electrician booking?`
+      ];
+      text = greetingPool[Math.floor(Math.random() * greetingPool.length)];
+    } else if (
+      lower.includes("delivery") ||
+      lower.includes("track") ||
+      lower.includes("time") ||
+      lower.includes("speed") ||
+      lower.includes("dispatch") ||
+      lower.includes("rider") ||
+      lower.includes("status") ||
+      lower.includes("when will") ||
+      lower.includes("how long")
+    ) {
+      text = `🚀 **60-Minute Express Kolkata Delivery**:\n\n• **Speed**: All orders are packed and dispatched within 10–15 minutes from our central Kasba warehouse.\n• **Coverage**: Kasba, Salt Lake, New Town, Gariahat, Ballygunge, Park Street, Ruby, Jadavpur, Behala, Howrah, and greater Kolkata.\n• **Live Tracking**: You receive live rider tracking alerts directly on your registered WhatsApp number upon dispatch.\n• **Same-day guarantee**: Order anytime between 8 AM and 9 PM for lightning-fast doorstep arrival!`;
+    } else if (
+      lower.includes("wire") ||
+      lower.includes("gauge") ||
+      lower.includes("sq mm") ||
+      lower.includes("sqmm") ||
+      lower.includes("cable") ||
+      lower.includes("polycab") ||
+      lower.includes("havells") ||
+      lower.includes("finolex") ||
+      lower.includes("size") ||
+      lower.includes("ac") ||
+      lower.includes("geyser") ||
+      lower.includes("heater")
+    ) {
+      text = `⚡ **Technical Wire Gauge & Load Sizing Guide**:\n\n• **1.5 sq mm** (Polycab FR-LSH / Havells): Recommended for lighting, ceiling fans, and LED fixtures (paired with 10A MCB).\n• **2.5 sq mm**: Essential for 1.5 Ton ACs, storage/instant geysers, refrigerators, and 16A kitchen power sockets (paired with 16A/20A MCB).\n• **4.0 sq mm**: Required for 2.0 Ton ACs, microwave circuits, and heavy power runs (paired with 25A/32A MCB).\n• **6.0 sq mm**: Used for main electrical incoming feeds from the energy meter to the distribution board.\n\nAll wires in our catalog are 100% genuine, pure electrolytic copper with ISI and FR-LSH fire-retardant certification.`;
+    } else if (
+      lower.includes("invoice") ||
+      lower.includes("gst") ||
+      lower.includes("bill") ||
+      lower.includes("tax") ||
+      lower.includes("input credit") ||
+      lower.includes("b2b")
+    ) {
+      text = `📄 **GST Tax Invoices & ITC Benefits**:\n\n• Every single order is accompanied by a compliant GST Tax Invoice with our registered GSTIN.\n• **For Business & Contractors**: Enter your company GSTIN during checkout to claim full Input Tax Credit (ITC).\n• **Instant PDF Download**: You can view, print, or download invoices anytime from your **Profile > Order History** screen.`;
+    } else if (
+      lower.includes("electrician") ||
+      lower.includes("technician") ||
+      lower.includes("book") ||
+      lower.includes("install") ||
+      lower.includes("fitting") ||
+      lower.includes("repair") ||
+      lower.includes("wiring")
+    ) {
+      text = `🔧 **Verified Licensed Electrician Booking**:\n\n• We provide licensed, background-verified technicians across all Kolkata neighborhoods.\n• **Services Offered**: Full house rewiring, MCB distribution board installation, ceiling fan and chandelier mounting, switchboard replacements, and electrical fault detection.\n• **Transparent Pricing**: Fixed upfront labor rates with guaranteed satisfaction.\n• You can book a technician directly via the **Book Electrician** tab in the app!`;
+    } else if (
+      lower.includes("return") ||
+      lower.includes("replace") ||
+      lower.includes("cancel") ||
+      lower.includes("refund") ||
+      lower.includes("exchange") ||
+      lower.includes("damaged") ||
+      lower.includes("wrong item")
+    ) {
+      text = `🔄 **Hassle-Free 7-Day Return & Replacement Policy**:\n\n• **Eligibility**: Unused items in original packaging, factory-sealed goods, and intact uncut wire coils can be exchanged or returned within 7 days of delivery.\n• **Defective or Damaged Goods**: Instant doorstep replacement arranged within 24 hours at zero additional cost.\n• **Refunds**: Processed back to your original payment method (or UPI) within 24–48 hours of item pickup.`;
+    } else if (
+      lower.includes("cement") ||
+      lower.includes("steel") ||
+      lower.includes("tmt") ||
+      lower.includes("ultratech") ||
+      lower.includes("tiscon") ||
+      lower.includes("construction") ||
+      lower.includes("sand") ||
+      lower.includes("stone")
+    ) {
+      text = `🏗️ **Civil & Construction Supplies**:\n\n• **UltraTech Cement**: Fresh 53 Grade & Super Cement bags directly from manufacturer depots.\n• **Tata Tiscon 550D TMT Rebars**: Certified primary steel with test certificates and exact weighbridge receipts.\n• **Site Delivery**: Dispatched via mini-trucks directly to your construction site across Kolkata with optional ground-floor unloading.\n• Tap below to contact our wholesale contractor desk for project volume pricing!`;
+    } else if (
+      lower.includes("payment") ||
+      lower.includes("pay") ||
+      lower.includes("upi") ||
+      lower.includes("cod") ||
+      lower.includes("cash") ||
+      lower.includes("razorpay") ||
+      lower.includes("credit card")
+    ) {
+      text = `💳 **Payment Methods & Security**:\n\n• We accept **UPI** (Google Pay, PhonePe, Paytm, BHIM), **Credit/Debit Cards**, **Net Banking**, and **Cash on Delivery (COD)**.\n• All online transactions are 100% secure, protected by 256-bit bank-grade encryption.\n• COD is available for orders within Kolkata express delivery zones.`;
+    } else if (
+      lower.includes("hello") ||
+      lower.includes("hi") ||
+      lower.includes("hey") ||
+      lower.includes("morning") ||
+      lower.includes("evening") ||
+      lower.includes("mayra") ||
+      lower.includes("who are you") ||
+      lower.includes("help")
+    ) {
+      text = `Hello ${customerName || 'there'} 👋, I am Mayra your 24/7 AI support specialist.\n\nI can help you with Kolkata 60-min delivery updates, technical wire/MCB sizing recommendations, GST invoices, electrician bookings, and store policies. How may I assist you today?`;
+    } else {
+      text = `I have noted your query regarding "${query}".\n\nAt BuildNow Electricals (Kasba, Kolkata), we provide 60-minute express delivery, 100% genuine ISI certified electricals (Polycab, Havells, Schneider, Anchor), verified electrician services, and official GST invoices.\n\nIf you need specific assistance or customized contractor quotes, please ask or tap below to speak directly with our desk.`;
+    }
+
+    return { text, needsEscalation };
+  }
+
   // Dedicated Gemini AI Help Center & Customer Support Desk Endpoint
   app.post("/api/gemini/support-chat", aiAssistantLimiter, async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
       const { messages = [], customerName = "Valued Customer", customerEmail = "", customerArea = "Kolkata" } = req.body;
-      const apiKey = process.env.GEMINI_API_KEY;
-
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
       const userLatestMessage = messages.length > 0 ? messages[messages.length - 1]?.content : "";
 
-      if (!apiKey) {
-        // Fallback intelligent response if API key is not configured
-        const lower = (userLatestMessage || "").toLowerCase();
-        let fallbackText = "Hello! I am your 24/7 Giriraj Power AI Help Assistant. How can I assist you with your electrical order, 60-min delivery, wire sizes, or electrician booking today?";
-        let needsEscalation = false;
+      let responseText = "";
+      let needsEscalation = false;
 
-        if (lower.includes("delivery") || lower.includes("track") || lower.includes("time") || lower.includes("speed")) {
-          fallbackText = "🚀 **60-Minute Express Delivery**: We deliver across Kasba, Salt Lake, New Town, Gariahat, Ballygunge, Park Street, and all Kolkata zones directly from our central Kasba warehouse. You will receive live rider updates on WhatsApp!";
-        } else if (lower.includes("wire") || lower.includes("gauge") || lower.includes("sq mm") || lower.includes("size") || lower.includes("ac") || lower.includes("geyser")) {
-          fallbackText = "⚡ **Wire Gauge Recommendations**:\n• **1.5 sq mm** (Polycab/Havells): Ideal for lighting & fan points (10A MCB).\n• **2.5 sq mm**: Required for ACs (up to 1.5 Ton), geysers & 16A power sockets.\n• **4.0 sq mm**: Recommended for 2 Ton ACs and main distribution boards.\nAll wires are 100% genuine ISI certified copper!";
-        } else if (lower.includes("invoice") || lower.includes("gst") || lower.includes("bill") || lower.includes("tax")) {
-          fallbackText = "📄 **GST Tax Invoices**: Every order is shipped with an official GST-compliant tax invoice. You can also view and download invoices directly from your Profile > Order History section.";
-        } else if (lower.includes("electrician") || lower.includes("technician") || lower.includes("book") || lower.includes("install")) {
-          fallbackText = "🔧 **Electrician Booking**: Our verified licensed technicians are available across Kolkata for wiring, switchboard setup, MCB repairs, and appliance fittings.";
-        } else if (lower.includes("return") || lower.includes("replace") || lower.includes("cancel") || lower.includes("refund")) {
-          fallbackText = "🔄 **Return & Replacement Policy**: We offer a hassle-free 7-day replacement for unused sealed electrical goods and un-cut wire coils with the original GST bill.";
-        } else if (lower.includes("human") || lower.includes("call") || lower.includes("phone") || lower.includes("speak") || lower.includes("agent") || lower.includes("whatsapp") || lower.includes("contact")) {
-          fallbackText = "I can connect you directly with our specialized support lines or dispatch team. You can reach our team via official email, or tap below to open your phone dialer or WhatsApp directly.";
-          needsEscalation = true;
-        }
+      if (isValidGeminiApiKey(apiKey)) {
+        try {
+          const ai = new GoogleGenAI({
+            apiKey: apiKey!,
+            httpOptions: {
+              headers: {
+                'User-Agent': 'aistudio-build'
+              }
+            }
+          });
 
-        return res.json({
-          text: fallbackText,
-          needsEscalation
-        });
-      }
-
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build'
-          }
-        }
-      });
-
-      const systemPrompt = `You are the friendly, expert 24/7 AI Customer Support Specialist for BuildNow Electricals & Construction Supplies, located at Kasba, Kolkata 700039.
+          const systemPrompt = `You are Mayra, the friendly, expert 24/7 AI Customer Support Specialist for BuildNow Electricals & Construction Supplies, located at Kasba, Kolkata 700039.
 Customer Name: ${customerName || "Customer"}
 Customer Email: ${customerEmail || "Not specified"}
 Customer Area: ${customerArea || "Kolkata"}
 
+Personality & Style:
+- Speak warmly, conversationally, and naturally like a real helpful customer support representative. Avoid robotic or identical repetitive responses.
+- If the customer compliments you, expresses gratitude ("thank you", "nice answer", "great"), respond with genuine warmth (e.g. "So nice to hear that you liked the answer, ${customerName}! 😊", "Always my pleasure to help!").
+- If the customer says hello or greets you, vary your greeting naturally (e.g. "How can I help you today?", "Great to hear from you!", "What can I get sorted for your electrical project?").
+
 Knowledge Base & Service Details:
-1. 60-Minute Express Delivery: Shipped directly across Kolkata (Kasba, Nator Park, Salt Lake, New Town, Gariahat, Ballygunge, Park Street, Ruby, Jadavpur, etc.) from Kasba central warehouse.
+1. 60-Minute Express Delivery: Shipped directly across Kolkata (Kasba, Nator Park, Salt Lake, New Town, Gariahat, Ballygunge, Park Street, Ruby, Jadavpur, Behala, Howrah, etc.) from Kasba central warehouse.
 2. Brands in Stock: Polycab, Havells, Anchor by Panasonic, Finolex, Schneider, Legrand, Philips, UltraTech Cement, Tata Tiscon 550D TMT. 100% genuine with ISI marks & GST invoices.
-3. Wire sizing guidance: 1.5 sq mm for lighting/fans, 2.5 sq mm for ACs/geysers/kitchen sockets, 4.0 sq mm for mains & heavy loads, 6.0 sq mm for full-home mains.
-4. Electrician Booking: Verified electricians available for on-site wiring, MCB troubleshooting, and lighting installations.
-5. Invoicing: GST invoices generated with GSTIN on all orders for input tax credit.
-6. Returns: 7-day return/exchange on factory-sealed items and intact wire coils.
+3. Wire sizing guidance: 1.5 sq mm for lighting/fans (10A MCB), 2.5 sq mm for ACs/geysers/kitchen sockets (16A/20A MCB), 4.0 sq mm for mains & heavy loads (25A/32A MCB), 6.0 sq mm for full-home mains.
+4. Electrician Booking: Verified licensed electricians available for on-site wiring, MCB troubleshooting, and lighting installations.
+5. Invoicing: GST invoices generated with registered GSTIN on all orders for input tax credit.
+6. Returns: 7-day return/exchange on factory-sealed items and intact uncut wire coils.
 7. Escalation Policy:
-   - If the customer has an urgent live order issue, dispatch dispute, bulk contractor quote negotiation, or explicitly requests to speak to a human or call the support line, provide a clear, helpful resolution and politely state that they can connect with our specialized contractor/support desk or email us at team@girirajpower.in.
+   - If the customer asks to speak to a real person, call, or talk to human support, warmly let them know they can connect directly with our human team via: 1. WhatsApp, 2. Email (team@girirajpower.in), and 3. Support Helpline (+91 90071 68561).
    - Format responses cleanly with bold bullet points or short paragraphs for great mobile readability. Avoid verbose fluff.`;
 
-      // Build conversation history
-      const formattedContents = [
-        `${systemPrompt}\n\nUser Question: ${userLatestMessage}`
-      ];
+          const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [`${systemPrompt}\n\nUser Question: ${userLatestMessage}`],
+          });
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: formattedContents,
-      });
+          responseText = response.text || "";
+        } catch (apiErr: any) {
+          console.warn("Support chat AI model unavailable or key invalid, using Mayra knowledge engine:", apiErr?.message || apiErr);
+        }
+      }
 
-      const responseText = response.text || "I am here to help you with your BuildNow orders, delivery, wire technical questions, and store support.";
-      
-      const lowerResp = responseText.toLowerCase();
-      const needsEscalation = lowerResp.includes("dialer") || lowerResp.includes("contractor desk") || lowerResp.includes("human") || lowerResp.includes("escalate") || lowerResp.includes("team@girirajpower.in");
+      if (!responseText) {
+        const smart = getMayraSmartResponse(userLatestMessage, customerName);
+        responseText = smart.text;
+        needsEscalation = smart.needsEscalation;
+      } else {
+        const lowerResp = responseText.toLowerCase();
+        const lowerReq = (userLatestMessage || "").toLowerCase();
+        needsEscalation =
+          lowerResp.includes("dialer") ||
+          lowerResp.includes("contractor desk") ||
+          lowerResp.includes("human") ||
+          lowerResp.includes("escalate") ||
+          lowerResp.includes("team@girirajpower.in") ||
+          lowerResp.includes("whatsapp") ||
+          lowerReq.includes("human") ||
+          lowerReq.includes("real person") ||
+          lowerReq.includes("call") ||
+          lowerReq.includes("agent") ||
+          lowerReq.includes("representative") ||
+          lowerReq.includes("operator") ||
+          lowerReq.includes("speak to");
+      }
 
-      res.json({
+      return res.json({
         text: responseText,
         needsEscalation
       });
     } catch (err: unknown) {
-      console.error("Support Chat API error:", err);
-      res.json({
-        text: "I am ready to help! You can ask about our 60-minute Kolkata express delivery, wire sizing specifications (Polycab/Havells), GST invoices, or electrician booking. For direct inquiries, tap the Official Email button or open our support dialer.",
-        needsEscalation: false
+      console.warn("Support Chat handled error:", err);
+      const fallback = getMayraSmartResponse(req.body?.messages?.[req.body?.messages?.length - 1]?.content || "", req.body?.customerName);
+      return res.json({
+        text: fallback.text,
+        needsEscalation: fallback.needsEscalation
       });
     }
   });
@@ -4946,86 +5126,86 @@ Knowledge Base & Service Details:
       const totalEffectiveSqFt = areaNum * floorsNum;
 
       // Base heuristic mathematical baseline for Kolkata construction & electrical standards
-      // 1 coil per ~200-250 sqft per floor; switch points ~1 pt per 35-40 sqft
       const calcWireCoilsLight = Math.max(2, Math.round(totalEffectiveSqFt / 250));
       const calcWireCoilsPower = Math.max(2, Math.round(totalEffectiveSqFt / 350));
       const calcSwitches = Math.max(12, Math.round(totalEffectiveSqFt / 35));
       const calcMcbBoxes = Math.max(1, Math.ceil(totalEffectiveSqFt / 900));
       const calcConduits = Math.max(8, Math.round(totalEffectiveSqFt / 70));
 
-      // Construction: ~0.06 bags cement / sqft for interior/finishing; ~0.45 bags / sqft for full civil
       const calcCement = Math.max(20, Math.round(totalEffectiveSqFt * (projectScope === 'construction' ? 0.4 : 0.08)));
       const calcSteel = Math.max(150, Math.round(totalEffectiveSqFt * (projectScope === 'construction' ? 3.5 : 0.6)));
       const calcWaterproofing = Math.max(4, Math.round(totalEffectiveSqFt * 0.012));
       const calcPutty = Math.max(2, Math.round(totalEffectiveSqFt * 0.005));
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      const wireLightTotal = calcWireCoilsLight * 3600;
+      const wirePowerTotal = calcWireCoilsPower * 4200;
+      const switchesTotal = calcSwitches * 140;
+      const mcbTotal = calcMcbBoxes * 1250;
+      const conduitsTotal = calcConduits * 120;
+      const electricalTotal = wireLightTotal + wirePowerTotal + switchesTotal + mcbTotal + conduitsTotal;
 
-      if (!apiKey) {
-        // Fallback structured estimate with high-accuracy Kolkata market pricing
-        const wireLightTotal = calcWireCoilsLight * 3600;
-        const wirePowerTotal = calcWireCoilsPower * 4200;
-        const switchesTotal = calcSwitches * 140;
-        const mcbTotal = calcMcbBoxes * 1250;
-        const conduitsTotal = calcConduits * 120;
-        const electricalTotal = wireLightTotal + wirePowerTotal + switchesTotal + mcbTotal + conduitsTotal;
+      const cementTotal = calcCement * 385;
+      const steelTotal = calcSteel * 62;
+      const wpTotal = calcWaterproofing * 135;
+      const puttyTotal = calcPutty * 690;
+      const constructionTotal = cementTotal + steelTotal + wpTotal + puttyTotal;
 
-        const cementTotal = calcCement * 385;
-        const steelTotal = calcSteel * 62;
-        const wpTotal = calcWaterproofing * 135;
-        const puttyTotal = calcPutty * 690;
-        const constructionTotal = cementTotal + steelTotal + wpTotal + puttyTotal;
+      const grandTotal = projectScope === 'electrical'
+        ? electricalTotal
+        : projectScope === 'construction'
+        ? constructionTotal
+        : electricalTotal + constructionTotal;
 
-        const grandTotal = projectScope === 'electrical'
-          ? electricalTotal
-          : projectScope === 'construction'
-          ? constructionTotal
-          : electricalTotal + constructionTotal;
+      const heuristicResult = {
+        success: true,
+        aiPowered: false,
+        summary: `Wholesale Estimate for ${propertyType} (${totalEffectiveSqFt} sq.ft total built-up) in ${area}, Kolkata.`,
+        sanctionedLoadRecommendation: `${Math.max(3, Math.min(12, Math.ceil(totalEffectiveSqFt / 250)))} kW (CESC / WBSEDCL Standard)`,
+        electrical: {
+          wireCoilsLight: { qty: calcWireCoilsLight, spec: "1.0 & 1.5 sq.mm Polycab/RR Kabel FR", rate: 3600, amount: wireLightTotal },
+          wireCoilsPower: { qty: calcWireCoilsPower, spec: "2.5 & 4.0 sq.mm Heavy Copper Cables", rate: 4200, amount: wirePowerTotal },
+          modularSwitches: { qty: calcSwitches, spec: "Schneider Opale / Havells Modular Points", rate: 140, amount: switchesTotal },
+          mcbDistribution: { qty: calcMcbBoxes, spec: "SPN/TPN Double Door Enclosure + MCBs", rate: 1250, amount: mcbTotal },
+          pvcConduits: { qty: calcConduits, spec: "20mm/25mm Heavy Duty PVC Pipes (3m)", rate: 120, amount: conduitsTotal },
+          subtotal: electricalTotal
+        },
+        construction: {
+          cementBags: { qty: calcCement, spec: "UltraTech OPC 53 Grade Fresh 50kg Bags", rate: 385, amount: cementTotal },
+          tmtSteelKg: { qty: calcSteel, spec: "Tata Tiscon 550D Primary Fe Rebars (kg)", rate: 62, amount: steelTotal },
+          waterproofingLiters: { qty: calcWaterproofing, spec: "Dr. Fixit 101 LW+ Integral Compound (L)", rate: 135, amount: wpTotal },
+          wallPuttyBags: { qty: calcPutty, spec: "Asian Paints TruCare 20kg Polymer Putty", rate: 690, amount: puttyTotal },
+          subtotal: constructionTotal
+        },
+        grandTotal,
+        laborDaysEstimate: {
+          electricianDays: Math.max(3, Math.round(totalEffectiveSqFt / 180)),
+          masonDays: Math.max(4, Math.round(totalEffectiveSqFt / 150)),
+          approxLaborCost: Math.round(totalEffectiveSqFt * 28)
+        },
+        engineeringAdvice: [
+          `For ${area}, ensure all circuit neutrals are kept independent to prevent MCB nuisance tripping during high-humidity monsoons.`,
+          `Dedicated 4.0 sq.mm copper wire runs are strongly recommended for master bedroom 1.5 Ton AC units and instant water geysers.`,
+          `UltraTech cement bags are dispatched fresh from Giriraj Power Kasba warehouse with guaranteed manufacturing within 15 days.`
+        ]
+      };
 
-        return res.json({
-          success: true,
-          aiPowered: false,
-          summary: `Wholesale Estimate for ${propertyType} (${totalEffectiveSqFt} sq.ft total built-up) in ${area}, Kolkata.`,
-          sanctionedLoadRecommendation: `${Math.max(3, Math.min(12, Math.ceil(totalEffectiveSqFt / 250)))} kW (CESC / WBSEDCL Standard)`,
-          electrical: {
-            wireCoilsLight: { qty: calcWireCoilsLight, spec: "1.0 & 1.5 sq.mm Polycab/RR Kabel FR", rate: 3600, amount: wireLightTotal },
-            wireCoilsPower: { qty: calcWireCoilsPower, spec: "2.5 & 4.0 sq.mm Heavy Copper Cables", rate: 4200, amount: wirePowerTotal },
-            modularSwitches: { qty: calcSwitches, spec: "Schneider Opale / Havells Modular Points", rate: 140, amount: switchesTotal },
-            mcbDistribution: { qty: calcMcbBoxes, spec: "SPN/TPN Double Door Enclosure + MCBs", rate: 1250, amount: mcbTotal },
-            pvcConduits: { qty: calcConduits, spec: "20mm/25mm Heavy Duty PVC Pipes (3m)", rate: 120, amount: conduitsTotal },
-            subtotal: electricalTotal
-          },
-          construction: {
-            cementBags: { qty: calcCement, spec: "UltraTech OPC 53 Grade Fresh 50kg Bags", rate: 385, amount: cementTotal },
-            tmtSteelKg: { qty: calcSteel, spec: "Tata Tiscon 550D Primary Fe Rebars (kg)", rate: 62, amount: steelTotal },
-            waterproofingLiters: { qty: calcWaterproofing, spec: "Dr. Fixit 101 LW+ Integral Compound (L)", rate: 135, amount: wpTotal },
-            wallPuttyBags: { qty: calcPutty, spec: "Asian Paints TruCare 20kg Polymer Putty", rate: 690, amount: puttyTotal },
-            subtotal: constructionTotal
-          },
-          grandTotal,
-          laborDaysEstimate: {
-            electricianDays: Math.max(3, Math.round(totalEffectiveSqFt / 180)),
-            masonDays: Math.max(4, Math.round(totalEffectiveSqFt / 150)),
-            approxLaborCost: Math.round(totalEffectiveSqFt * 28)
-          },
-          engineeringAdvice: [
-            `For ${area}, ensure all circuit neutrals are kept independent to prevent MCB nuisance tripping during high-humidity monsoons.`,
-            `Dedicated 4.0 sq.mm copper wire runs are strongly recommended for master bedroom 1.5 Ton AC units and instant water geysers.`,
-            `UltraTech cement bags are dispatched fresh from Giriraj Power Kasba warehouse with guaranteed manufacturing within 15 days.`
-          ]
-        });
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
+
+      if (!isValidGeminiApiKey(apiKey)) {
+        return res.json(heuristicResult);
       }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build'
+      try {
+        const ai = new GoogleGenAI({
+          apiKey: apiKey!,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build'
+            }
           }
-        }
-      });
+        });
 
-      const prompt = `You are the Principal Chief Electrical Engineer and Civil Construction Quantity Estimator for Giriraj Power, located at Kasba Hub, Kolkata.
+        const prompt = `You are the Principal Chief Electrical Engineer and Civil Construction Quantity Estimator for Giriraj Power, located at Kasba Hub, Kolkata.
 Calculate a realistic, wholesale Bill of Materials (BOM) for the following project:
 - Client Name: ${clientName}
 - Location: ${area}, Kolkata (PIN: ${pincode})
@@ -5066,70 +5246,69 @@ Respond ONLY with a valid JSON object matching the following structure:
   ]
 }`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.2
-        }
-      });
-
-      const responseText = response.text || "{}";
-      let parsedData: any = {};
-      try {
-        parsedData = JSON.parse(responseText);
-      } catch (parseErr) {
-        console.warn("Could not parse JSON from Gemini, falling back to heuristic data:", parseErr);
-      }
-
-      if (parsedData && parsedData.electrical && parsedData.construction) {
-        return res.json({
-          success: true,
-          aiPowered: true,
-          ...parsedData
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.2
+          }
         });
-      }
 
-      // If parsing missed fields, calculate with heuristics
+        const responseText = response.text || "{}";
+        let parsedData: any = {};
+        try {
+          parsedData = JSON.parse(responseText);
+        } catch (parseErr) {
+          console.warn("Could not parse JSON from Gemini, falling back to heuristic data:", parseErr);
+        }
+
+        if (parsedData && parsedData.electrical && parsedData.construction) {
+          return res.json({
+            success: true,
+            aiPowered: true,
+            ...parsedData
+          });
+        }
+
+        return res.json(heuristicResult);
+      } catch (apiErr: any) {
+        console.warn("Gemini estimate call failed, returning deterministic calculation:", apiErr?.message || apiErr);
+        return res.json(heuristicResult);
+      }
+    } catch (err: unknown) {
+      console.warn("Estimation endpoint handled error:", err);
       return res.json({
         success: true,
-        aiPowered: true,
-        summary: `AI Wholesale Estimate for ${propertyType} (${totalEffectiveSqFt} sq.ft) in ${area}, Kolkata.`,
-        sanctionedLoadRecommendation: `${Math.max(3, Math.ceil(totalEffectiveSqFt / 250))} kW (CESC)`,
+        aiPowered: false,
+        summary: "Wholesale Material Estimate (Standard Kolkata Baseline)",
+        sanctionedLoadRecommendation: "5 kW (CESC Standard)",
         electrical: {
-          wireCoilsLight: { qty: calcWireCoilsLight, spec: "1.0/1.5 sq.mm Polycab FR-LSH", rate: 3600, amount: calcWireCoilsLight * 3600 },
-          wireCoilsPower: { qty: calcWireCoilsPower, spec: "2.5/4.0 sq.mm Heavy Flame Retardant", rate: 4200, amount: calcWireCoilsPower * 4200 },
-          modularSwitches: { qty: calcSwitches, spec: "Schneider / Havells Modular Points", rate: 140, amount: calcSwitches * 140 },
-          mcbDistribution: { qty: calcMcbBoxes, spec: "Double Door DB + Isolator & MCBs", rate: 1250, amount: calcMcbBoxes * 1250 },
-          pvcConduits: { qty: calcConduits, spec: "20mm/25mm Heavy Conduit 3m", rate: 120, amount: calcConduits * 120 },
-          subtotal: (calcWireCoilsLight * 3600) + (calcWireCoilsPower * 4200) + (calcSwitches * 140) + (calcMcbBoxes * 1250) + (calcConduits * 120)
+          wireCoilsLight: { qty: 4, spec: "1.0 & 1.5 sq.mm Polycab FR", rate: 3600, amount: 14400 },
+          wireCoilsPower: { qty: 3, spec: "2.5 & 4.0 sq.mm Heavy Copper", rate: 4200, amount: 12600 },
+          modularSwitches: { qty: 28, spec: "Modular Points", rate: 140, amount: 3920 },
+          mcbDistribution: { qty: 1, spec: "Double Door Enclosure + MCBs", rate: 1250, amount: 1250 },
+          pvcConduits: { qty: 14, spec: "Heavy Duty PVC Pipes", rate: 120, amount: 1680 },
+          subtotal: 33850
         },
         construction: {
-          cementBags: { qty: calcCement, spec: "UltraTech 53 Grade Fresh 50kg", rate: 385, amount: calcCement * 385 },
-          tmtSteelKg: { qty: calcSteel, spec: "Tata Tiscon 550D TMT Steel (kg)", rate: 62, amount: calcSteel * 62 },
-          waterproofingLiters: { qty: calcWaterproofing, spec: "Dr. Fixit 101 LW+ (L)", rate: 135, amount: calcWaterproofing * 135 },
-          wallPuttyBags: { qty: calcPutty, spec: "Asian Paints TruCare 20kg Putty", rate: 690, amount: calcPutty * 690 },
-          subtotal: (calcCement * 385) + (calcSteel * 62) + (calcWaterproofing * 135) + (calcPutty * 690)
+          cementBags: { qty: 50, spec: "UltraTech 53 Grade Fresh", rate: 385, amount: 19250 },
+          tmtSteelKg: { qty: 350, spec: "Tata Tiscon 550D TMT (kg)", rate: 62, amount: 21700 },
+          waterproofingLiters: { qty: 10, spec: "Dr. Fixit 101 LW+", rate: 135, amount: 1350 },
+          wallPuttyBags: { qty: 5, spec: "20kg Polymer Putty", rate: 690, amount: 3450 },
+          subtotal: 45750
         },
-        grandTotal: (calcWireCoilsLight * 3600) + (calcWireCoilsPower * 4200) + (calcSwitches * 140) + (calcMcbBoxes * 1250) + (calcConduits * 120) + (calcCement * 385) + (calcSteel * 62) + (calcWaterproofing * 135) + (calcPutty * 690),
+        grandTotal: 79600,
         laborDaysEstimate: {
-          electricianDays: Math.max(3, Math.round(totalEffectiveSqFt / 180)),
-          masonDays: Math.max(4, Math.round(totalEffectiveSqFt / 150)),
-          approxLaborCost: Math.round(totalEffectiveSqFt * 28)
+          electricianDays: 5,
+          masonDays: 6,
+          approxLaborCost: 26000
         },
         engineeringAdvice: [
-          `For ${area} properties, 2.5 sq.mm Polycab FR-LSH is strictly required for kitchen induction & 16A microwave outlets.`,
-          `Main distribution board should feature an RCCB/ELCB (30mA) for complete electrocution protection.`,
-          `Cement bags will be dispatched via mini-truck with ground-floor site unloading.`
+          "Ensure circuit neutrals are kept independent to prevent MCB tripping during monsoons.",
+          "Dedicated 4.0 sq.mm copper wire runs recommended for 1.5 Ton ACs.",
+          "All materials dispatched directly from Kasba warehouse."
         ]
-      });
-    } catch (err: unknown) {
-      console.error("Gemini estimation error:", err);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to generate AI material estimate.",
-        error: String(err)
       });
     }
   });

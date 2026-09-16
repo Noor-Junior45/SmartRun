@@ -3997,7 +3997,7 @@ Express delivery is available across Kolkata within ~60 minutes!`,
       const userLatestMessage = messages.length > 0 ? messages[messages.length - 1]?.content : "";
       if (!apiKey) {
         const lower = (userLatestMessage || "").toLowerCase();
-        let fallbackText = "Hello! I am your 24/7 Giriraj Power AI Help Assistant. How can I assist you with your electrical order, 60-min delivery, wire sizes, or electrician booking today?";
+        let fallbackText = "Hello! I am Mayra, your 24/7 AI Support Specialist. How can I assist you with your electrical order, 60-min delivery, wire sizes, or electrician booking today?";
         let needsEscalation2 = false;
         if (lower.includes("delivery") || lower.includes("track") || lower.includes("time") || lower.includes("speed")) {
           fallbackText = "\u{1F680} **60-Minute Express Delivery**: We deliver across Kasba, Salt Lake, New Town, Gariahat, Ballygunge, Park Street, and all Kolkata zones directly from our central Kasba warehouse. You will receive live rider updates on WhatsApp!";
@@ -4026,7 +4026,7 @@ Express delivery is available across Kolkata within ~60 minutes!`,
           }
         }
       });
-      const systemPrompt = `You are the friendly, expert 24/7 AI Customer Support Specialist for BuildNow Electricals & Construction Supplies, located at Kasba, Kolkata 700039.
+      const systemPrompt = `You are Mayra, the friendly, expert 24/7 AI Customer Support Specialist for BuildNow Electricals & Construction Supplies, located at Kasba, Kolkata 700039.
 Customer Name: ${customerName || "Customer"}
 Customer Email: ${customerEmail || "Not specified"}
 Customer Area: ${customerArea || "Kolkata"}

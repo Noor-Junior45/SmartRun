@@ -338,6 +338,8 @@ export const ProfileView = ({
     return (
       <HelpCenterSubPage
         userProfile={userProfile}
+        orders={orders}
+        savedAddresses={savedAddresses}
         onBack={() => setSubPage('main')}
       />
     );
