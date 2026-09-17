@@ -9,8 +9,8 @@ android {
         applicationId "in.smartrun.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
-        versionName "1.0.3"
+        versionCode 5
+        versionName "1.0.4"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Only bundle English resources (removes 80+ unused AndroidX/Google Play services locale string bloat)
         resourceConfigurations += ['en']
@@ -73,6 +73,9 @@ android {
             firebaseCrashlytics {
                 mappingFileUploadEnabled true
             }
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
         }
     }
 }
@@ -83,7 +86,7 @@ configurations.all {
         force "androidx.core:core:1.15.0"
         force "androidx.activity:activity:1.10.1"
         force "androidx.appcompat:appcompat:1.7.0"
-        force "androidx.browser:browser:1.8.0"
+        force "androidx.browser:browser:1.9.0"
     }
 }
 
