@@ -9,8 +9,8 @@ android {
         applicationId "in.smartrun.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
-        versionName "1.0.4"
+        versionCode 6
+        versionName "1.0.5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Only bundle English resources (removes 80+ unused AndroidX/Google Play services locale string bloat)
         resourceConfigurations += ['en']

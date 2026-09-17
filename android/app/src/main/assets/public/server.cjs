@@ -1080,24 +1080,34 @@ async function startServer() {
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "public, max-age=3600");
-    const assetlinksPath = import_path.default.join(process.cwd(), "public", ".well-known", "assetlinks.json");
-    if (import_fs.default.existsSync(assetlinksPath)) {
-      res.sendFile(assetlinksPath);
-    } else {
-      res.json([
-        {
-          relation: ["delegate_permission/common.handle_all_urls"],
-          target: {
-            namespace: "android_app",
-            package_name: "in.smartrun.app",
-            sha256_cert_fingerprints: [
-              "23:B9:84:0D:7F:F5:08:E9:87:61:C5:F5:9C:B6:2C:22:60:75:30:27:68:20:1B:D6:B9:A0:EA:94:C9:D4:06:8C",
-              "14:6D:E9:7D:0C:6D:77:E5:EE:DE:28:B6:F0:4B:92:47:FD:B3:36:CF:BE:0C:F0:7C:1E:58:E6:C3:FF:11:EB:7B"
-            ]
-          }
-        }
-      ]);
+    const candidates = [
+      import_path.default.join(process.cwd(), "public", ".well-known", "assetlinks.json"),
+      import_path.default.join(process.cwd(), "dist", ".well-known", "assetlinks.json"),
+      import_path.default.join(__dirnameResolved, "public", ".well-known", "assetlinks.json")
+    ];
+    for (const p of candidates) {
+      if (import_fs.default.existsSync(p)) {
+        return res.sendFile(p);
+      }
     }
+    res.json([
+      {
+        relation: [
+          "delegate_permission/common.handle_all_urls",
+          "delegate_permission/common.get_login_creds"
+        ],
+        target: {
+          namespace: "android_app",
+          package_name: "in.smartrun.app",
+          sha256_cert_fingerprints: [
+            "23:B9:84:0D:7F:F5:08:E9:87:61:C5:F5:9C:B6:2C:22:60:75:30:27:68:20:1B:D6:B9:A0:EA:94:C9:D4:06:8C",
+            "14:6D:E9:7D:0C:6D:77:E5:EE:DE:28:B6:F0:4B:92:47:FD:B3:36:CF:BE:0C:F0:7C:1E:58:E6:C3:FF:11:EB:7B",
+            "91:E1:44:1D:A9:F0:1B:BA:B7:7E:33:E5:14:7C:A6:AE:7E:5B:0A:ED:AB:EC:C2:6F:DD:0E:DF:C6:84:72:7A:E5",
+            "DB:D8:FC:92:9D:5C:47:E2:0C:1F:D3:58:EE:91:C4:85:AB:3A:CB:33:CD:09:6F:B4:7A:1D:6B:B7:64:85:00:3A"
+          ]
+        }
+      }
+    ]);
   });
   app.get("/sitemap.xml", (req, res) => {
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
