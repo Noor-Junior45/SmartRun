@@ -687,6 +687,9 @@ export async function signOutFromAll(): Promise<void> {
     await firebaseSignOut(firebaseAuth);
   } catch {}
   try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch {}
+  try {
     await supabase.auth.signOut();
   } catch {}
   resetRecaptchaVerifier();

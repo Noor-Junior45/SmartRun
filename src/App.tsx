@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Product, CartItem, KolkataArea, SavedAddress, Order, WiringServiceBooking, UserProfile } from './types';
 import { KOLKATA_AREAS } from './data/kolkataAreas';
@@ -223,19 +224,18 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => getSavedUserProfile());
   const [userPhone, setUserPhone] = useState<string | null>(() => getSavedUserProfile()?.phone || null);
   const [userName, setUserName] = useState<string>(() => getSavedUserProfile()?.name || '');
-
-  const isAuthenticated = Boolean(userProfile?.id || userProfile?.email || userProfile?.phone || userPhone);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
   const activeUserIdRef = useRef<string | null>(null);
   const isLoggingOutRef = useRef<boolean>(false);
+
+  const isAuthenticated = Boolean(!isLoggingOut && !isLoggingOutRef.current && (userProfile?.id || userProfile?.email || userProfile?.phone || userPhone));
   const unsubscribeOrdersRef = useRef<(() => void) | null>(null);
   const unsubscribeAddressesRef = useRef<(() => void) | null>(null);
   const unsubscribeProfileRef = useRef<(() => void) | null>(null);
 
   // Initialize stored user profile, auth listener, live orders & saved addresses
   useEffect(() => {
-    let activeUserId: string | null = null;
-
     const setupUserSubscriptions = (userId?: string) => {
       if (unsubscribeOrdersRef.current) {
         unsubscribeOrdersRef.current();
@@ -265,12 +265,11 @@ export default function App() {
       });
 
       if (userId) {
-        activeUserId = userId;
         activeUserIdRef.current = userId;
         unsubscribeProfileRef.current = subscribeToUserProfile(userId, (freshData) => {
-          if (isLoggingOutRef.current || isUserLoggingOut()) return;
+          if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current) return;
           setUserProfile((prev) => {
-            if (isLoggingOutRef.current || isUserLoggingOut()) return null;
+            if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current) return null;
             const updatedPhone = cleanPhoneAutofill(freshData.phone || prev?.phone || '');
             const updated: UserProfile = {
               ...(prev || ({} as UserProfile)),
@@ -312,13 +311,13 @@ export default function App() {
     // Fast sync when user returns to the tab or focuses the app
     const syncProfileOnFocus = () => {
       if (isLoggingOutRef.current || isUserLoggingOut()) return;
-      const targetUid = activeUserIdRef.current || activeUserId;
+      const targetUid = activeUserIdRef.current;
       if (targetUid && document.visibilityState === 'visible') {
         fetchUserProfileFromSupabase(targetUid).then((cloudProf) => {
-          if (isLoggingOutRef.current || isUserLoggingOut()) return;
+          if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current) return;
           if (cloudProf) {
             setUserProfile((prev) => {
-              if (isLoggingOutRef.current || isUserLoggingOut()) return null;
+              if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current) return null;
               const mergedPhone = cleanPhoneAutofill(cloudProf.phone || prev?.phone || '');
               const merged: UserProfile = {
                 ...(prev || ({} as UserProfile)),
@@ -353,7 +352,6 @@ export default function App() {
     getInitialAuthSession().then(({ session, user }) => {
       if (isLoggingOutRef.current || isUserLoggingOut()) return;
       if (user) {
-        activeUserId = user.id;
         activeUserIdRef.current = user.id;
         const scope = getUserScopeKeyFromUser(user);
         if (scope) {
@@ -363,47 +361,69 @@ export default function App() {
         const isInternalPhoneUser =
           Boolean(user.email?.includes('@girirajpower.internal')) ||
           (!user.email && Boolean(user.phone));
+
+        const ADMIN_EMAILS = ['gauravgiri123344@gmail.com', 'mdhassan1738@gmail.com'];
+        const isUserAdmin = Boolean(user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
+
         const local = getSavedUserProfile(scope || undefined);
-        const phone = cleanPhoneAutofill(user.phone || userMeta.phone || local?.phone || '');
-        const name =
+        const localBelongsToUser =
+          Boolean(local) &&
+          ((local?.id && local.id === user.id) ||
+           (local?.email && user.email && local.email.toLowerCase() === user.email.toLowerCase()));
+        const validLocal = localBelongsToUser ? local : null;
+
+        let rawPhone = user.phone || userMeta.phone || validLocal?.phone || '';
+        let phone = cleanPhoneAutofill(rawPhone);
+        if (!isUserAdmin && (phone === '8777400280' || phone.endsWith('8777400280'))) {
+          phone = '';
+        }
+
+        let name =
           userMeta.full_name ||
           userMeta.name ||
-          local?.name ||
+          validLocal?.name ||
           (user.email && !user.email.includes('@girirajpower.internal')
             ? user.email.split('@')[0]
             : (phone ? `Giriraj Member (${phone.slice(-4)})` : 'Customer'));
-        const rawEmail = isInternalPhoneUser ? '' : (user.email || local?.email || '');
+
+        const rawEmail = isInternalPhoneUser ? '' : (user.email || validLocal?.email || '');
         const email = rawEmail.includes('@girirajpower.internal') ? '' : rawEmail;
-        const photoURL = userMeta.avatar_url || userMeta.picture || local?.photoURL || undefined;
-        const dob = userMeta.dob || userMeta.birth_date || userMeta.date_of_birth || local?.dob || '';
+        let photoURL = userMeta.avatar_url || userMeta.picture || validLocal?.photoURL || undefined;
+        const dob = userMeta.dob || userMeta.birth_date || userMeta.date_of_birth || validLocal?.dob || '';
         const prof: UserProfile = {
           id: user.id,
           phone,
           name,
           email,
-          emailVerified: isInternalPhoneUser ? false : (!!user.email_confirmed_at || !!user.confirmed_at || local?.emailVerified || Boolean(email)),
+          emailVerified: isInternalPhoneUser ? false : (!!user.email_confirmed_at || !!user.confirmed_at || validLocal?.emailVerified || Boolean(email)),
           photoURL,
           dob,
-          walletBalance: local?.walletBalance || 0,
-          refundBalance: local?.refundBalance || 0,
-          cashbackBalance: local?.cashbackBalance || 0
+          walletBalance: validLocal?.walletBalance || 0,
+          refundBalance: validLocal?.refundBalance || 0,
+          cashbackBalance: validLocal?.cashbackBalance || 0
         };
         setUserProfile(prof);
         fetchUserProfileFromSupabase(user.id)
           .then((cloudProf) => {
             if (cloudProf) {
-              const mergedPhone = cleanPhoneAutofill(cloudProf.phone || prof.phone);
+              let mergedPhone = cleanPhoneAutofill(cloudProf.phone || prof.phone);
+              if (!isUserAdmin && (mergedPhone === '8777400280' || mergedPhone.endsWith('8777400280'))) {
+                mergedPhone = '';
+              }
+              let mergedName = cloudProf.name || prof.name;
+              let mergedPhoto = (!isUserAdmin && (userMeta.avatar_url || userMeta.picture)) ? (userMeta.avatar_url || userMeta.picture) : (cloudProf.photoURL || prof.photoURL);
+
               const cloudEmailClean =
                 cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : '';
               const merged: UserProfile = {
                 ...prof,
                 ...cloudProf,
                 id: user.id,
-                name: cloudProf.name || prof.name,
+                name: mergedName,
                 phone: mergedPhone,
                 email: isInternalPhoneUser ? '' : (cloudEmailClean || prof.email),
                 dob: cloudProf.dob || prof.dob,
-                photoURL: cloudProf.photoURL || prof.photoURL,
+                photoURL: mergedPhoto,
                 walletBalance: cloudProf.walletBalance ?? prof.walletBalance,
                 refundBalance: cloudProf.refundBalance ?? prof.refundBalance,
                 cashbackBalance: cloudProf.cashbackBalance ?? prof.cashbackBalance,
@@ -414,6 +434,8 @@ export default function App() {
               }
               if (merged.phone) {
                 setUserPhone(cleanPhoneAutofill(merged.phone));
+              } else {
+                setUserPhone(null);
               }
               if (merged.name) {
                 setUserName(merged.name);
@@ -427,7 +449,6 @@ export default function App() {
         setUserName(name);
         setupUserSubscriptions(user.id);
       } else {
-        activeUserId = null;
         activeUserIdRef.current = null;
         setActiveUserScope(null);
         setUserProfile(null);
@@ -450,13 +471,23 @@ export default function App() {
     });
 
     const unsubAuth = onAuthStateChange((event, session, user) => {
+      if (event === 'SIGNED_OUT' || !user) {
+        activeUserIdRef.current = null;
+        setActiveUserScope(null);
+        setUserProfile(null);
+        setUserPhone(null);
+        setUserName('');
+        setOrders([]);
+        setSavedAddresses([]);
+        setCartItems(getLocalCartItems());
+        setupUserSubscriptions();
+        return;
+      }
       if (isLoggingOutRef.current || isUserLoggingOut()) {
-        activeUserId = null;
         activeUserIdRef.current = null;
         return;
       }
       if (user) {
-        activeUserId = user.id;
         activeUserIdRef.current = user.id;
         const scope = getUserScopeKeyFromUser(user);
         if (scope) {
@@ -466,47 +497,70 @@ export default function App() {
         const isInternalPhoneUser =
           Boolean(user.email?.includes('@girirajpower.internal')) ||
           (!user.email && Boolean(user.phone));
+
+        const ADMIN_EMAILS = ['gauravgiri123344@gmail.com', 'mdhassan1738@gmail.com'];
+        const isUserAdmin = Boolean(user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
+        const adminNames = ['md hassan', 'md. hassan', 'hassan', 'mdhassan'];
+
         const local = getSavedUserProfile(scope || undefined);
-        const phone = cleanPhoneAutofill(user.phone || userMeta.phone || local?.phone || '');
-        const name =
+        const localBelongsToUser =
+          Boolean(local) &&
+          ((local?.id && local.id === user.id) ||
+           (local?.email && user.email && local.email.toLowerCase() === user.email.toLowerCase()));
+        const validLocal = localBelongsToUser ? local : null;
+
+        let rawPhone = user.phone || userMeta.phone || validLocal?.phone || '';
+        let phone = cleanPhoneAutofill(rawPhone);
+        if (!isUserAdmin && (phone === '8777400280' || phone.endsWith('8777400280'))) {
+          phone = '';
+        }
+
+        let name =
           userMeta.full_name ||
           userMeta.name ||
-          local?.name ||
+          validLocal?.name ||
           (user.email && !user.email.includes('@girirajpower.internal')
             ? user.email.split('@')[0]
             : (phone ? `Giriraj Member (${phone.slice(-4)})` : 'Customer'));
-        const rawEmail = isInternalPhoneUser ? '' : (user.email || local?.email || '');
+
+        const rawEmail = isInternalPhoneUser ? '' : (user.email || validLocal?.email || '');
         const email = rawEmail.includes('@girirajpower.internal') ? '' : rawEmail;
-        const photoURL = userMeta.avatar_url || userMeta.picture || local?.photoURL || undefined;
-        const dob = userMeta.dob || userMeta.birth_date || userMeta.date_of_birth || local?.dob || '';
+        let photoURL = userMeta.avatar_url || userMeta.picture || validLocal?.photoURL || undefined;
+        const dob = userMeta.dob || userMeta.birth_date || userMeta.date_of_birth || validLocal?.dob || '';
         const prof: UserProfile = {
           id: user.id,
           phone,
           name,
           email,
-          emailVerified: isInternalPhoneUser ? false : (!!user.email_confirmed_at || !!user.confirmed_at || local?.emailVerified || Boolean(email)),
+          emailVerified: isInternalPhoneUser ? false : (!!user.email_confirmed_at || !!user.confirmed_at || validLocal?.emailVerified || Boolean(email)),
           photoURL,
           dob,
-          walletBalance: local?.walletBalance || 0,
-          refundBalance: local?.refundBalance || 0,
-          cashbackBalance: local?.cashbackBalance || 0
+          walletBalance: validLocal?.walletBalance || 0,
+          refundBalance: validLocal?.refundBalance || 0,
+          cashbackBalance: validLocal?.cashbackBalance || 0
         };
         setUserProfile(prof);
         fetchUserProfileFromSupabase(user.id)
           .then((cloudProf) => {
             if (cloudProf) {
-              const mergedPhone = cleanPhoneAutofill(cloudProf.phone || prof.phone);
+              let mergedPhone = cleanPhoneAutofill(cloudProf.phone || prof.phone);
+              if (!isUserAdmin && (mergedPhone === '8777400280' || mergedPhone.endsWith('8777400280'))) {
+                mergedPhone = '';
+              }
+              let mergedName = cloudProf.name || prof.name;
+              let mergedPhoto = (!isUserAdmin && (userMeta.avatar_url || userMeta.picture)) ? (userMeta.avatar_url || userMeta.picture) : (cloudProf.photoURL || prof.photoURL);
+
               const cloudEmailClean =
                 cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : '';
               const merged: UserProfile = {
                 ...prof,
                 ...cloudProf,
                 id: user.id,
-                name: cloudProf.name || prof.name,
+                name: mergedName,
                 phone: mergedPhone,
                 email: isInternalPhoneUser ? '' : (cloudEmailClean || prof.email),
                 dob: cloudProf.dob || prof.dob,
-                photoURL: cloudProf.photoURL || prof.photoURL,
+                photoURL: mergedPhoto,
                 walletBalance: cloudProf.walletBalance ?? prof.walletBalance,
                 refundBalance: cloudProf.refundBalance ?? prof.refundBalance,
                 cashbackBalance: cloudProf.cashbackBalance ?? prof.cashbackBalance,
@@ -517,6 +571,8 @@ export default function App() {
               }
               if (merged.phone) {
                 setUserPhone(cleanPhoneAutofill(merged.phone));
+              } else {
+                setUserPhone(null);
               }
               if (merged.name) {
                 setUserName(merged.name);
@@ -543,14 +599,13 @@ export default function App() {
           }).catch((err) => console.debug('[Security Alert Background Trigger]:', err));
         }
       } else {
-        activeUserId = null;
         activeUserIdRef.current = null;
         setActiveUserScope(null);
         setUserProfile(null);
         setUserPhone(null);
         setUserName('');
         setOrders([]);
-        setSavedAddresses(getStoredAddresses());
+        setSavedAddresses([]);
         setCartItems(getLocalCartItems());
         setupUserSubscriptions();
       }
@@ -1133,73 +1188,84 @@ export default function App() {
     }
   };
 
-  const handleAuthSuccess = async (phone: string, name: string, email?: string) => {
+  const handleAuthSuccess = (phone: string, name: string, email?: string, userObj?: any) => {
+    isLoggingOutRef.current = false;
     // 1. Sanitize incoming parameters (strip internal placeholder domain)
     const cleanEmail = email && !email.includes('@girirajpower.internal') ? email : '';
     let finalPhone = phone ? cleanPhoneAutofill(phone) : '';
     let finalName = name || '';
 
     // 2. Fetch authenticated Supabase user to establish scope and isolation
-    let authUser: any = null;
-    try {
-      const { data } = await supabase.auth.getUser();
-      authUser = data?.user || null;
-    } catch {}
-
+    let authUser: any = userObj || null;
     const authId = authUser?.id || (finalPhone ? `uid_${finalPhone}` : undefined);
     const scope = authUser ? getUserScopeKeyFromUser(authUser) : (finalPhone ? `phone_${finalPhone}` : null);
     if (scope) {
       setActiveUserScope(scope);
+    }
+    if (authId) {
+      activeUserIdRef.current = authId;
     }
 
     // 3. Clear previous user's cached in-memory state (orders & addresses)
     setOrders([]);
     setSavedAddresses(getStoredAddresses(scope || undefined));
 
-    // 4. Fetch cloud profile strictly for the authenticated user ID
-    if (authUser?.id) {
-      try {
-        const cloudProf = await fetchUserProfileFromSupabase(authUser.id);
-        if (cloudProf && cloudProf.id === authUser.id) {
-          const cloudEmailClean =
-            cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : cleanEmail;
-          const sanitizedCloudProf: UserProfile = {
-            ...cloudProf,
-            phone: cleanPhoneAutofill(cloudProf.phone || finalPhone),
-            name: cloudProf.name || finalName || (finalPhone ? `Giriraj Member (${finalPhone.slice(-4)})` : 'Customer'),
-            email: cloudEmailClean,
-            emailVerified: Boolean(cloudEmailClean)
-          };
-          setUserProfile(sanitizedCloudProf);
-          setUserPhone(sanitizedCloudProf.phone || null);
-          setUserName(sanitizedCloudProf.name || '');
-          navigate('/');
-          return;
-        }
-      } catch (err) {
-        console.warn('handleAuthSuccess profile fetch notice:', err);
-      }
-    }
-
-    // 5. Construct fresh, clean UserProfile with zero cross-user leakage
-    const prof: UserProfile = {
+    // 4. Construct optimistic UserProfile immediately without waiting for network calls
+    const userMeta = authUser?.user_metadata || {};
+    const optimisticProf: UserProfile = {
       id: authId,
       phone: finalPhone,
       phoneVerified: Boolean(finalPhone),
-      name: finalName || (finalPhone ? `Giriraj Member (${finalPhone.slice(-4)})` : 'Customer'),
+      name: finalName || userMeta.full_name || userMeta.name || (finalPhone ? `Giriraj Member (${finalPhone.slice(-4)})` : 'Customer'),
       email: cleanEmail,
       emailVerified: Boolean(cleanEmail),
-      photoURL: undefined,
-      dob: '',
+      photoURL: userMeta.avatar_url || userMeta.picture || undefined,
+      dob: userMeta.dob || userMeta.birth_date || '',
       walletBalance: 0,
       refundBalance: 0,
       cashbackBalance: 0
     };
 
-    setUserProfile(prof);
-    setUserPhone(finalPhone || null);
-    setUserName(prof.name);
-    navigate('/');
+    // 5. Instantly flush state and navigate to home with zero delay
+    flushSync(() => {
+      setIsLoggingOut(false);
+      setUserProfile(optimisticProf);
+      setUserPhone(finalPhone || null);
+      setUserName(optimisticProf.name);
+    });
+    navigate('/', { replace: true });
+
+    // 6. Non-blocking asynchronous sync for cloud profile in the background
+    (async () => {
+      try {
+        if (!authUser) {
+          const { data } = await supabase.auth.getUser();
+          authUser = data?.user || null;
+        }
+        const targetUid = authUser?.id || authId;
+        if (targetUid) {
+          const cloudProf = await fetchUserProfileFromSupabase(targetUid);
+          if (cloudProf && !isLoggingOutRef.current && activeUserIdRef.current === targetUid) {
+            const cloudEmailClean =
+              cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : cleanEmail;
+            setUserProfile((prev) => {
+              if (isLoggingOutRef.current || !activeUserIdRef.current) return null;
+              return {
+                ...(prev || optimisticProf),
+                ...cloudProf,
+                id: targetUid,
+                phone: cleanPhoneAutofill(cloudProf.phone || finalPhone || prev?.phone || ''),
+                name: cloudProf.name || finalName || prev?.name || 'Customer',
+                email: cloudEmailClean || prev?.email || '',
+                emailVerified: Boolean(cloudEmailClean || prev?.emailVerified)
+              };
+            });
+          }
+        }
+      } catch (err) {
+        console.debug('[Background Profile Sync Notice]:', err);
+      }
+    })();
   };
 
   const handleLogout = async () => {
@@ -1207,25 +1273,24 @@ export default function App() {
     isLoggingOutRef.current = true;
     activeUserIdRef.current = null;
 
-    try {
-      // 1. Immediately cancel all active real-time subscriptions to prevent background queries
-      if (unsubscribeOrdersRef.current) {
-        unsubscribeOrdersRef.current();
-        unsubscribeOrdersRef.current = null;
-      }
-      if (unsubscribeAddressesRef.current) {
-        unsubscribeAddressesRef.current();
-        unsubscribeAddressesRef.current = null;
-      }
-      if (unsubscribeProfileRef.current) {
-        unsubscribeProfileRef.current();
-        unsubscribeProfileRef.current = null;
-      }
+    // 1. Immediately cancel all active real-time subscriptions to prevent background queries
+    if (unsubscribeOrdersRef.current) {
+      try { unsubscribeOrdersRef.current(); } catch {}
+      unsubscribeOrdersRef.current = null;
+    }
+    if (unsubscribeAddressesRef.current) {
+      try { unsubscribeAddressesRef.current(); } catch {}
+      unsubscribeAddressesRef.current = null;
+    }
+    if (unsubscribeProfileRef.current) {
+      try { unsubscribeProfileRef.current(); } catch {}
+      unsubscribeProfileRef.current = null;
+    }
 
-      // 2. Perform backend sign out across Supabase and Firebase
-      await signOutUser();
-
-      // 3. Clear auth and session state in a single synchronous batch
+    // 2. Synchronously clear auth and session state using flushSync
+    // This flips isAuthenticated to false synchronously so the unauthenticated tree mounts immediately
+    flushSync(() => {
+      setIsLoggingOut(true);
       setActiveUserScope(null);
       setUserProfile(null);
       setUserPhone(null);
@@ -1233,21 +1298,28 @@ export default function App() {
       setOrders([]);
       setSavedAddresses([]);
       setCartItems(getLocalCartItems());
+    });
 
-      // 4. Smoothly navigate to /login replacing history
-      navigate('/login', { replace: true });
+    // 3. Immediately transition the route to /login
+    navigate('/login', { replace: true });
+
+    // 4. Perform background storage purge and Supabase/Firebase sign out
+    try {
+      await signOutUser();
     } catch (err) {
       console.error('Logout error:', err);
-      setActiveUserScope(null);
-      setUserProfile(null);
-      setUserPhone(null);
-      setUserName('');
-      setOrders([]);
-      navigate('/login', { replace: true });
     } finally {
+      flushSync(() => {
+        setIsLoggingOut(false);
+        setActiveUserScope(null);
+        setUserProfile(null);
+        setUserPhone(null);
+        setUserName('');
+        activeUserIdRef.current = null;
+      });
       setTimeout(() => {
         isLoggingOutRef.current = false;
-      }, 500);
+      }, 300);
     }
   };
 
@@ -1588,9 +1660,27 @@ export default function App() {
           {/* PASSWORD RESET */}
           <Route path="/reset-password" element={<ResetPassword onOpenAuth={() => navigate('/login')} />} />
 
-          {/* AUTH REDIRECTS WHEN ALREADY LOGGED IN */}
-          <Route path="/login" element={<Navigate to="/" replace />} />
-          <Route path="/auth" element={<Navigate to="/" replace />} />
+          {/* AUTH ROUTES IN STORE SHELL */}
+          <Route
+            path="/login"
+            element={
+              isLoggingOut || isLoggingOutRef.current ? (
+                <LoginPage onAuthSuccess={handleAuthSuccess} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+          <Route
+            path="/auth"
+            element={
+              isLoggingOut || isLoggingOutRef.current ? (
+                <LoginPage onAuthSuccess={handleAuthSuccess} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
 
           {/* HOME / DEFAULT ROUTE - MODERN WHOLESALE B2B & B2C HOME */}
           <Route

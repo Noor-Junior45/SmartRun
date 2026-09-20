@@ -209,15 +209,21 @@ export function getActiveUserScope(): string | null {
 
 export function getUserScopeKeyFromUser(user?: { id?: string; email?: string | null; phone?: string | null } | null): string | null {
   if (!user) return null;
-  // If user has a verified phone number, scope by their phone for unified account persistence
+  // Authenticated user ID is always the primary, unique and non-colliding scope key
+  if (user.id && user.id.trim()) {
+    return `uid_${user.id.trim()}`;
+  }
+  // Secondary fallback if user is identified by email
+  if (user.email && user.email.trim() && !user.email.includes('@girirajpower.internal')) {
+    return `email_${user.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+  }
+  // Tertiary fallback for unauthenticated phone flow
   if (user.phone && user.phone.trim()) {
     const cleanPhone = user.phone.replace(/\D/g, '').slice(-10);
     if (cleanPhone.length === 10) {
       return `phone_${cleanPhone}`;
     }
   }
-  if (user.id) return `uid_${user.id}`;
-  if (user.email && user.email.trim()) return `email_${user.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
   return null;
 }
 
@@ -227,12 +233,12 @@ export function getActiveAddressStorageKey(user?: { id?: string; email?: string 
 }
 
 /**
- * Purges legacy unscoped global localStorage keys to permanently eliminate cross-user data leakage (runs once)
+ * Purges legacy unscoped global localStorage keys and cross-contaminated profile data (runs once)
  */
 export function purgeLegacyUnscopedStorage(): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    const PURGE_DONE_FLAG = 'giriraj_legacy_purge_v4_done';
+    const PURGE_DONE_FLAG = 'giriraj_legacy_purge_v5_done';
     if (localStorage.getItem(PURGE_DONE_FLAG)) {
       return;
     }
@@ -264,22 +270,60 @@ export function purgeLegacyUnscopedStorage(): void {
     ];
     legacyKeys.forEach((k) => localStorage.removeItem(k));
 
-    // Sanitize any cached profiles that may contain internal emails or leaked cross-user emails
+    const ADMIN_EMAILS = ['gauravgiri123344@gmail.com', 'mdhassan1738@gmail.com'];
+    const adminNames = ['md hassan', 'md. hassan', 'hassan', 'mdhassan'];
+
+    // Sanitize any cached profiles and addresses that may have accidentally borrowed admin data
     const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && (key.startsWith('giriraj_profile_phone_') || key.startsWith('giriraj_profile_uid_'))) {
+      if (key && (key.startsWith('giriraj_profile_') || key.startsWith('giriraj_addrs_') || key.startsWith('giriraj_active_addr_'))) {
         try {
           const raw = localStorage.getItem(key);
           if (raw) {
-            const p = JSON.parse(raw);
-            let modified = false;
-            if (p.email && p.email.includes('@girirajpower.internal')) {
-              p.email = '';
-              modified = true;
-            }
-            if (modified) {
-              localStorage.setItem(key, JSON.stringify(p));
+            if (key.startsWith('giriraj_profile_')) {
+              const p = JSON.parse(raw);
+              let modified = false;
+              const pEmail = (p.email || '').trim().toLowerCase();
+              const isPAdmin = pEmail && ADMIN_EMAILS.includes(pEmail);
+
+              if (!isPAdmin) {
+                // If this non-admin profile has the admin phone, strip it immediately
+                const rawP = (p.phone || '').replace(/\D/g, '').slice(-10);
+                if (rawP === '8777400280') {
+                  p.phone = '';
+                  p.phoneVerified = false;
+                  // If corrupted with admin phone, restore genuine Google name or email prefix
+                  if (p.name && adminNames.includes(p.name.trim().toLowerCase())) {
+                    p.name = pEmail ? pEmail.split('@')[0] : 'Customer';
+                  }
+                  modified = true;
+                }
+                // Strip synthetic internal emails
+                if (p.email && p.email.includes('@girirajpower.internal')) {
+                  p.email = '';
+                  modified = true;
+                }
+              }
+              if (modified) {
+                localStorage.setItem(key, JSON.stringify(p));
+              }
+            } else if (key.startsWith('giriraj_addrs_')) {
+              // If addresses key is for non-admin, filter out admin addresses
+              const addrs = JSON.parse(raw);
+              if (Array.isArray(addrs)) {
+                const filtered = addrs.filter((a: any) => {
+                  const p = (a.receiverPhone || a.receiver_phone || '').replace(/\D/g, '').slice(-10);
+                  const name = (a.receiverName || a.receiver_name || '').trim().toLowerCase();
+                  if (p === '8777400280' || adminNames.includes(name)) {
+                    return false;
+                  }
+                  return true;
+                });
+                if (filtered.length !== addrs.length) {
+                  localStorage.setItem(key, JSON.stringify(filtered));
+                }
+              }
             }
           }
         } catch {
@@ -444,6 +488,10 @@ export async function resetPasswordForEmail(
  */
 export async function signInWithGoogle(): Promise<{ error: Error | null; url?: string | null }> {
   try {
+    // Reset any previous active user scope to prevent cross-account profile inheritance
+    activeUserScope = null;
+    clearUserProfile();
+
     const isIframe = typeof window !== 'undefined' && window.self !== window.top;
     const isNative = Capacitor.isNativePlatform();
     const isWv = typeof window !== 'undefined' && (isWebViewEnvironment() || (window as any).isAndroidApp);
@@ -726,7 +774,7 @@ export async function signOutUser(): Promise<void> {
     clearUserProfile();
     activeUserScope = null;
 
-    // Purge cached session, profile, address, and user data from localStorage immediately
+    // Purge cached session, profile, address, and auth tokens from localStorage immediately
     if (typeof window !== 'undefined') {
       try {
         const ALLOWED_LOGOUT_KEYS = new Set<string>([
@@ -736,8 +784,15 @@ export async function signOutUser(): Promise<void> {
         const keysToRemove: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key && key.startsWith('giriraj_') && !ALLOWED_LOGOUT_KEYS.has(key)) {
-            keysToRemove.push(key);
+          if (key && !ALLOWED_LOGOUT_KEYS.has(key)) {
+            if (
+              key.startsWith('giriraj_') ||
+              key.startsWith('sb-') ||
+              key.startsWith('firebase:') ||
+              key.includes('supabase.auth.token')
+            ) {
+              keysToRemove.push(key);
+            }
           }
         }
         keysToRemove.forEach((k) => safeRemoveItem(k));
@@ -745,6 +800,11 @@ export async function signOutUser(): Promise<void> {
         console.warn('Error clearing storage on logout:', e);
       }
     }
+
+    // Immediately clear local Supabase session scope so subsequent reads return null
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {}
 
     // Also sign out from Firebase Auth and clear verification sessions
     try {
@@ -754,14 +814,11 @@ export async function signOutUser(): Promise<void> {
       console.debug('Firebase signout note:', e);
     }
 
-    // Try standard Supabase sign out first, fall back to local scope if network fails
+    // Perform global Supabase sign out across server sessions
     try {
       await supabase.auth.signOut();
     } catch (e) {
-      console.warn('Supabase sign out notice, ensuring local cleanup:', e);
-      try {
-        await supabase.auth.signOut({ scope: 'local' });
-      } catch {}
+      console.debug('Supabase global sign out note:', e);
     }
   } catch (error) {
     console.error('Supabase sign out error:', error);
@@ -770,7 +827,7 @@ export async function signOutUser(): Promise<void> {
     activeUserScope = null;
     setTimeout(() => {
       isLoggingOut = false;
-    }, 500);
+    }, 400);
   }
 }
 
@@ -840,12 +897,35 @@ export function onAuthStateChange(
       // Extract profile details strictly for this authenticated user
       const userMeta = user.user_metadata || {};
       const localProf = scope ? getSavedUserProfile(scope) : null;
-      const rawPhone = user.phone || userMeta.phone || localProf?.phone || '';
-      const phone = cleanPhoneAutofill(rawPhone);
-      const name = userMeta.full_name || userMeta.name || userMeta.custom_claims?.name || localProf?.name || (user.email ? user.email.split('@')[0] : 'Customer');
-      const email = user.email || userMeta.email || localProf?.email || '';
-      const photoURL = userMeta.avatar_url || userMeta.picture || localProf?.photoURL || undefined;
-      const dob = userMeta.dob || userMeta.birth_date || userMeta.date_of_birth || localProf?.dob || '';
+      // VERIFY: Does localProf actually belong to THIS user?
+      const localBelongsToUser =
+        Boolean(localProf) &&
+        ((localProf?.id && localProf.id === user.id) ||
+         (localProf?.email && user.email && localProf.email.toLowerCase() === user.email.toLowerCase()));
+      const validLocalProf = localBelongsToUser ? localProf : null;
+
+      const ADMIN_EMAILS = ['gauravgiri123344@gmail.com', 'mdhassan1738@gmail.com'];
+      const isUserAdmin = Boolean(user.email && ADMIN_EMAILS.includes(user.email.toLowerCase()));
+      const adminNames = ['md hassan', 'md. hassan', 'hassan', 'mdhassan'];
+
+      let rawPhone = user.phone || userMeta.phone || validLocalProf?.phone || '';
+      let phone = cleanPhoneAutofill(rawPhone);
+      // Non-admin accounts must NEVER adopt or inherit the admin depot phone
+      if (!isUserAdmin && (phone === '8777400280' || phone.endsWith('8777400280'))) {
+        phone = '';
+      }
+
+      let name =
+        userMeta.full_name ||
+        userMeta.name ||
+        userMeta.custom_claims?.name ||
+        validLocalProf?.name ||
+        (user.email ? user.email.split('@')[0] : 'Customer');
+
+      const rawEmail = user.email || userMeta.email || validLocalProf?.email || '';
+      const email = rawEmail.includes('@girirajpower.internal') ? '' : rawEmail;
+      let photoURL = userMeta.avatar_url || userMeta.picture || validLocalProf?.photoURL || undefined;
+      const dob = userMeta.dob || userMeta.birth_date || userMeta.date_of_birth || validLocalProf?.dob || '';
       const emailVerified = !!user.email_confirmed_at || !!user.confirmed_at;
 
       saveUserProfile(
@@ -1109,6 +1189,45 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
 
     if (cloudEmail && cloudEmail.includes('@girirajpower.internal')) {
       cloudEmail = '';
+    }
+
+    const ADMIN_EMAILS = ['gauravgiri123344@gmail.com', 'mdhassan1738@gmail.com'];
+    const isThisUserAdmin = Boolean(cloudEmail && ADMIN_EMAILS.includes(cloudEmail.toLowerCase()));
+    const adminNames = ['md hassan', 'md. hassan', 'hassan', 'mdhassan'];
+
+    if (!isThisUserAdmin) {
+      // Auto-heal non-admin account if it was previously corrupted with the admin phone
+      if (cloudPhone === '8777400280' || cloudPhone === '+918777400280' || cloudPhone.endsWith('8777400280')) {
+        console.warn('Purging leaked admin phone from non-admin user:', cloudEmail);
+        cloudPhone = '';
+      }
+      // Revert name to user metadata or email prefix if corrupted with admin name
+      if (cloudName && adminNames.includes(cloudName.trim().toLowerCase())) {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          const meta = authData?.user?.user_metadata || {};
+          cloudName = meta.full_name || meta.name || (cloudEmail ? cloudEmail.split('@')[0] : 'Customer');
+        } catch {
+          cloudName = cloudEmail ? cloudEmail.split('@')[0] : 'Customer';
+        }
+      }
+      // Restore genuine Google avatar if available
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const meta = authData?.user?.user_metadata || {};
+        if (meta.avatar_url || meta.picture) {
+          cloudAvatar = meta.avatar_url || meta.picture;
+        }
+      } catch {}
+
+      // Proactively heal and clean Supabase database rows so cloud data is corrected permanently
+      syncUserProfileToSupabase(userId, {
+        phone: cloudPhone,
+        full_name: cloudName,
+        email: cloudEmail || undefined,
+        avatar_url: cloudAvatar,
+        dob: cloudDob
+      }).catch(() => {});
     }
 
     if (found) {
@@ -2749,11 +2868,14 @@ export function getStoredAddresses(userScopeOverride?: string): SavedAddress[] {
     // 3. Fallback strictly to this specific user's known linked scope (never loop across other users)
     if (collected.length === 0 && scope) {
       try {
+        const ADMIN_EMAILS = ['gauravgiri123344@gmail.com', 'mdhassan1738@gmail.com'];
+        const cachedProf = getSavedUserProfile(scope);
+        const isUserAdmin = Boolean(cachedProf?.email && ADMIN_EMAILS.includes(cachedProf.email.toLowerCase()));
+
         if (scope.startsWith('uid_')) {
-          const cachedProf = getSavedUserProfile(scope);
           if (cachedProf?.phone) {
             const cleanPhone = cachedProf.phone.replace(/\D/g, '').slice(-10);
-            if (cleanPhone.length === 10) {
+            if (cleanPhone.length === 10 && (isUserAdmin || cleanPhone !== '8777400280')) {
               const linkedKey = `giriraj_addrs_phone_${cleanPhone}`;
               const linkedData = localStorage.getItem(linkedKey);
               if (linkedData) {
@@ -2762,7 +2884,6 @@ export function getStoredAddresses(userScopeOverride?: string): SavedAddress[] {
             }
           }
         } else if (scope.startsWith('phone_')) {
-          const cachedProf = getSavedUserProfile(scope);
           if (cachedProf?.id) {
             const linkedKey = `giriraj_addrs_uid_${cachedProf.id}`;
             const linkedData = localStorage.getItem(linkedKey);
@@ -2774,15 +2895,28 @@ export function getStoredAddresses(userScopeOverride?: string): SavedAddress[] {
       } catch {}
     }
 
+    // Filter out any leaked admin addresses for non-admin profiles
+    const cachedProf = getSavedUserProfile(scope);
+    const ADMIN_EMAILS = ['gauravgiri123344@gmail.com', 'mdhassan1738@gmail.com'];
+    const isUserAdmin = Boolean(cachedProf?.email && ADMIN_EMAILS.includes(cachedProf.email.toLowerCase()));
+
+    const filteredCollected = isUserAdmin
+      ? collected
+      : collected.filter((a) => {
+          const p = (a.receiverPhone || '').replace(/\D/g, '').slice(-10);
+          if (p === '8777400280') return false;
+          return true;
+        });
+
     // If local storage was cleared / empty, trigger server fetch asynchronously to restore addresses
-    if (collected.length === 0 && !hasInitiatedInitialAddressFetch) {
+    if (filteredCollected.length === 0 && !hasInitiatedInitialAddressFetch) {
       hasInitiatedInitialAddressFetch = true;
       setTimeout(() => {
         fetchUserAddresses().catch(() => {});
       }, 50);
     }
 
-    return collected;
+    return filteredCollected;
   } catch (e) {
     console.error('Error reading saved addresses:', e);
     return [];
@@ -2809,13 +2943,21 @@ export async function fetchUserAddresses(): Promise<SavedAddress[]> {
     const userEmail = authUser?.email || savedProf?.email || '';
     const userId = authUser?.id || '';
 
+    const ADMIN_EMAILS = ['gauravgiri123344@gmail.com', 'mdhassan1738@gmail.com'];
+    const isUserAdmin = Boolean(userEmail && ADMIN_EMAILS.includes(userEmail.toLowerCase()));
+    const adminNames = ['md hassan', 'md. hassan', 'hassan', 'mdhassan'];
+
     const collectedMap = new Map<string, SavedAddress>();
 
     // 1. Fetch from Server API (Persistent Server Storage)
     try {
       const queryParams = new URLSearchParams();
       if (userId) queryParams.set('userId', userId);
-      if (userPhone) queryParams.set('phone', userPhone);
+      // Under no circumstances should a non-admin query by the admin depot phone
+      const cleanPhone = userPhone.replace(/\D/g, '').slice(-10);
+      if (cleanPhone && (isUserAdmin || cleanPhone !== '8777400280')) {
+        queryParams.set('phone', cleanPhone);
+      }
       if (userEmail) queryParams.set('email', userEmail);
       if (scope) queryParams.set('userScope', scope);
 
@@ -2902,11 +3044,34 @@ export async function fetchUserAddresses(): Promise<SavedAddress[]> {
       }
     }
 
-    const list = Array.from(collectedMap.values()).sort((a, b) => {
+    const rawList = Array.from(collectedMap.values()).sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
     });
+
+    const list = isUserAdmin
+      ? rawList
+      : rawList.filter((addr) => {
+          const p = (addr.receiverPhone || '').replace(/\D/g, '').slice(-10);
+          if (p === '8777400280') return false;
+          return true;
+        });
+
+    // Clean up contaminated addresses from Supabase if any were incorrectly associated with non-admin
+    if (!isUserAdmin && authUser?.id && rawList.length !== list.length) {
+      try {
+        Promise.resolve(
+          supabase
+            .from('saved_addresses')
+            .delete()
+            .eq('user_id', authUser.id)
+            .or('receiver_phone.eq.8777400280,receiver_phone.eq.+918777400280')
+        )
+          .then(() => {})
+          .catch(() => {});
+      } catch {}
+    }
 
     if (list.length > 0) {
       if (scope) {

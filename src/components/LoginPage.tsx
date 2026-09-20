@@ -28,7 +28,7 @@ import {
 } from '../services/firebaseAuthService';
 
 interface LoginPageProps {
-  onAuthSuccess: (phone: string, name: string, email?: string) => void;
+  onAuthSuccess: (phone: string, name: string, email?: string, userObj?: any) => void;
 }
 
 type AuthMode = 'signin' | 'signup' | 'forgot';
@@ -286,7 +286,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         const finalEmail = profile?.email || '';
 
         saveTermsAgreed(true);
-        onAuthSuccess(finalPhone, userFullName, finalEmail);
+        navigate('/', { replace: true });
+        onAuthSuccess(finalPhone, userFullName, finalEmail, result.user);
 
         if (finalEmail) {
           sendLoginNotificationEmail({
@@ -297,8 +298,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
             force: false,
           }).catch((e) => console.debug('[Security Alert Note]:', e));
         }
-
-        navigate('/');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to verify OTP.';
@@ -334,16 +333,16 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       if (loginError) {
         setError(loginError.message || 'Invalid email or password.');
       } else if (data.user) {
-        const cloudProf = await fetchUserProfileFromSupabase(data.user.id);
         const userFullName =
-          cloudProf?.name ||
           data.user.user_metadata?.full_name ||
+          data.user.user_metadata?.name ||
           cleanEmail.split('@')[0] ||
           'Giriraj Customer';
-        const finalPhone = cloudProf?.phone || data.user.phone || data.user.user_metadata?.phone || '';
+        const finalPhone = data.user.phone || data.user.user_metadata?.phone || '';
 
         saveTermsAgreed(true);
-        onAuthSuccess(finalPhone, userFullName, cleanEmail);
+        navigate('/', { replace: true });
+        onAuthSuccess(finalPhone, userFullName, cleanEmail, data.user);
         sendLoginNotificationEmail({
           email: cleanEmail,
           name: userFullName,
@@ -351,7 +350,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           loginMethod: 'Email & Password',
           force: true
         }).catch((e) => console.debug('[Security Alert Trigger Note]:', e));
-        navigate('/');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Invalid email or password.';
@@ -489,7 +487,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         }).catch(() => {});
 
         saveTermsAgreed(true);
-        onAuthSuccess(formattedPhone || '', finalFullName, cleanEmail);
+        navigate('/', { replace: true });
+        onAuthSuccess(formattedPhone || '', finalFullName, cleanEmail, data.user);
         sendLoginNotificationEmail({
           email: cleanEmail,
           name: finalFullName,
@@ -497,7 +496,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           loginMethod: 'New Account Creation & Password Sign-in',
           force: true
         }).catch((e) => console.debug('[Security Alert Trigger Note]:', e));
-        navigate('/');
       } else {
         if (data.user) {
           try {

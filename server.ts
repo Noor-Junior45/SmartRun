@@ -3502,13 +3502,25 @@ async function startServer() {
       if (!user_id && !phone && !email) {
         return res.status(400).json({ success: false, message: "Missing identifier" });
       }
+
+      const ADMIN_EMAILS = ["gauravgiri123344@gmail.com", "mdhassan1738@gmail.com"];
+      const cleanEmail = email ? String(email).trim().toLowerCase() : "";
+      const isReqAdmin = Boolean(cleanEmail && ADMIN_EMAILS.includes(cleanEmail));
+
+      let sanitizedPhone = phone;
+      if (!isReqAdmin && sanitizedPhone && String(sanitizedPhone).replace(/\D/g, "").slice(-10) === "8777400280") {
+        sanitizedPhone = null;
+      }
+
+      let sanitizedName = full_name;
+
       const sb = getServerSupabase();
       if (sb && user_id) {
         try {
           await sb.from("user_profiles").upsert({
             user_id,
-            phone: phone || null,
-            full_name: full_name || null,
+            phone: sanitizedPhone || null,
+            full_name: sanitizedName || null,
             email: email || null,
             avatar_url: avatar_url || null,
             dob: dob || null,
@@ -3521,9 +3533,9 @@ async function startServer() {
         try {
           await sb.from("profiles").upsert({
             id: user_id,
-            phone: phone || null,
-            full_name: full_name || null,
-            name: full_name || null,
+            phone: sanitizedPhone || null,
+            full_name: sanitizedName || null,
+            name: sanitizedName || null,
             email: email || null,
             avatar_url: avatar_url || null,
             dob: dob || null,
@@ -3552,13 +3564,20 @@ async function startServer() {
         userScope?: string;
       };
 
+      const ADMIN_EMAILS = ["gauravgiri123344@gmail.com", "mdhassan1738@gmail.com"];
+      const adminNames = ["md hassan", "md. hassan", "hassan", "mdhassan"];
+
       const cleanPhone = phone ? phone.replace(/\D/g, "").slice(-10) : "";
       const cleanEmail = email ? email.trim().toLowerCase() : "";
       const cleanUserId = userId ? String(userId).trim() : "";
       const cleanScope = userScope ? String(userScope).trim() : "";
+      const isReqAdmin = Boolean(cleanEmail && ADMIN_EMAILS.includes(cleanEmail));
+
+      // Never query or match admin phone for non-admin accounts
+      const effectivePhone = (!isReqAdmin && cleanPhone === "8777400280") ? "" : cleanPhone;
 
       // Strictly isolate user data: if no user identifier is provided, return empty array immediately
-      if (!cleanUserId && !cleanPhone && !cleanEmail && !cleanScope) {
+      if (!cleanUserId && !effectivePhone && !cleanEmail && !cleanScope) {
         return res.status(200).json({
           success: true,
           addresses: []
@@ -3569,13 +3588,13 @@ async function startServer() {
 
       // 1. Fetch from Supabase `saved_addresses` table ONLY for this user
       const sb = getServerSupabase();
-      if (sb && (cleanUserId || cleanPhone)) {
+      if (sb && (cleanUserId || effectivePhone)) {
         try {
           let query = sb.from("saved_addresses").select("*").order("created_at", { ascending: false }).limit(50);
           if (cleanUserId) {
             query = query.eq("user_id", cleanUserId);
-          } else if (cleanPhone) {
-            query = query.or(`receiver_phone.eq.${cleanPhone},receiver_phone.eq.+91${cleanPhone}`);
+          } else if (effectivePhone) {
+            query = query.or(`receiver_phone.eq.${effectivePhone},receiver_phone.eq.+91${effectivePhone}`);
           }
           const { data, error } = await query;
           if (!error && Array.isArray(data)) {
@@ -3586,7 +3605,7 @@ async function startServer() {
                 const rowPhone = (row.receiver_phone || "").replace(/\D/g, "").slice(-10);
                 const belongsToUser =
                   (cleanUserId && rowUid === cleanUserId) ||
-                  (cleanPhone && rowPhone === cleanPhone);
+                  (!cleanUserId && effectivePhone && rowPhone === effectivePhone);
 
                 if (belongsToUser) {
                   collectedMap.set(row.id, {
@@ -3636,11 +3655,11 @@ async function startServer() {
 
         if (cleanUserId && itemUserId && String(itemUserId) === cleanUserId) {
           matches = true;
-        } else if (cleanScope && itemScope && String(itemScope) === cleanScope) {
+        } else if (!cleanUserId && cleanScope && itemScope && String(itemScope) === cleanScope) {
           matches = true;
-        } else if (cleanPhone && cleanPhone.length === 10 && itemPhone && itemPhone === cleanPhone) {
+        } else if (!cleanUserId && effectivePhone && effectivePhone.length === 10 && itemPhone && itemPhone === effectivePhone) {
           matches = true;
-        } else if (cleanEmail && cleanEmail.includes("@") && itemEmail && itemEmail === cleanEmail) {
+        } else if (!cleanUserId && cleanEmail && cleanEmail.includes("@") && itemEmail && itemEmail === cleanEmail) {
           matches = true;
         }
 
@@ -3649,11 +3668,21 @@ async function startServer() {
         }
       }
 
-      const addresses = Array.from(collectedMap.values()).sort((a, b) => {
+      const rawAddresses = Array.from(collectedMap.values()).sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
       });
+
+      const addresses = isReqAdmin
+        ? rawAddresses
+        : rawAddresses.filter((a: any) => {
+            const p = (a.receiverPhone || a.receiver_phone || "").replace(/\D/g, "").slice(-10);
+            if (p === "8777400280") {
+              return false;
+            }
+            return true;
+          });
 
       return res.status(200).json({
         success: true,
