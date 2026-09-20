@@ -471,7 +471,7 @@ export async function signInWithGoogle(): Promise<{ error: Error | null; url?: s
         skipBrowserRedirect: isIframe || shouldUseAppFlow,
         queryParams: {
           access_type: 'offline',
-          prompt: 'consent'
+          prompt: 'select_account consent'
         }
       }
     });
