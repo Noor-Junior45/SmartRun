@@ -10,6 +10,12 @@ import com.getcapacitor.BridgeWebViewClient;
 
 public class MainActivity extends BridgeActivity {
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+    }
+
+    @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 

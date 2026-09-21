@@ -16,11 +16,14 @@ import {
   XCircle,
   HelpCircle,
   Phone,
-  Mail
+  Mail,
+  CreditCard,
+  ShoppingBag
 } from 'lucide-react';
 import { UserProfile, Order } from '../types';
 import { API_BASE_URL } from '../lib/apiBase';
 import { showToast } from '../utils/toast';
+import { purgeAllUserCacheAndStorage, signOutUser } from '../services/supabaseService';
 
 interface AccountDeletionPageProps {
   userProfile?: UserProfile | null;
@@ -48,9 +51,13 @@ export const AccountDeletionPage = ({
   // Checks & state
   const [isChecking, setIsChecking] = useState(false);
   const [activeOrdersCount, setActiveOrdersCount] = useState(0);
+  const [unpaidOrdersCount, setUnpaidOrdersCount] = useState(0);
   const [hasCheckedPrereqs, setHasCheckedPrereqs] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingRequest, setExistingRequest] = useState<any | null>(null);
+
+  // Success state after permanent deletion
+  const [isDeletedSuccess, setIsDeletedSuccess] = useState(false);
 
   // Success state after submission
   const [submittedData, setSubmittedData] = useState<{
@@ -82,6 +89,13 @@ export const AccountDeletionPage = ({
           return s !== 'delivered' && s !== 'cancelled' && s !== 'failed';
         });
         setActiveOrdersCount(activeClientOrders.length);
+
+        const unpaidClientOrders = orders.filter((o) => {
+          const pStatus = String(o.paymentStatus || '').toLowerCase();
+          const s = String(o.status || '').toLowerCase();
+          return (pStatus === 'unpaid' || pStatus === 'pending') && s !== 'cancelled' && s !== 'failed';
+        });
+        setUnpaidOrdersCount(unpaidClientOrders.length);
       }
 
       // 2. Check server-side DB for comprehensive orders & pending requests
@@ -95,6 +109,7 @@ export const AccountDeletionPage = ({
         const data = await res.json();
         if (data.success) {
           setActiveOrdersCount(data.activeOrdersCount || 0);
+          setUnpaidOrdersCount(data.unpaidOrdersCount || 0);
           if (data.existingRequest) {
             setExistingRequest(data.existingRequest);
           }
@@ -123,7 +138,12 @@ export const AccountDeletionPage = ({
     }
 
     if (activeOrdersCount > 0) {
-      showToast(`You have ${activeOrdersCount} active order(s). Please wait until they are delivered or cancel them first.`, 'error');
+      showToast(`You have ${activeOrdersCount} live order(s) in progress. Please wait until they are delivered or cancel them first.`, 'error');
+      return;
+    }
+
+    if (unpaidOrdersCount > 0) {
+      showToast(`You have ${unpaidOrdersCount} unpaid product(s) or pending dues. Please clear payments before deleting your account.`, 'error');
       return;
     }
 
@@ -135,7 +155,8 @@ export const AccountDeletionPage = ({
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/account/deletion-request`, {
+      // 1. Permanently delete account and all associated user records from Supabase
+      const res = await fetch(`${API_BASE_URL}/api/account/delete-account`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -151,16 +172,17 @@ export const AccountDeletionPage = ({
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setSubmittedData({
-          requestId: data.requestId,
-          scheduledDeletionDate: data.scheduledDeletionDate
-        });
-        showToast('Deletion request submitted. Admin confirmation alert dispatched.', 'success');
+        // 2. Wipes all cache memory and storage from user device
+        await purgeAllUserCacheAndStorage();
+        await signOutUser();
+
+        setIsDeletedSuccess(true);
+        showToast('Your account and personal data have been permanently deleted from Supabase.', 'success');
       } else {
-        showToast(data.message || 'Failed to submit deletion request.', 'error');
+        showToast(data.message || 'Failed to delete account.', 'error');
       }
     } catch (err: any) {
-      showToast(err.message || 'Network error submitting deletion request.', 'error');
+      showToast(err.message || 'Network error deleting account.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -282,8 +304,51 @@ export const AccountDeletionPage = ({
           </div>
         )}
 
-        {/* Successful Submission State */}
-        {submittedData ? (
+        {/* Permanent Deletion Successful State */}
+        {isDeletedSuccess ? (
+          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-emerald-200 shadow-sm space-y-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-slate-900">
+                Account &amp; Personal Data Permanently Deleted
+              </h2>
+              <p className="text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
+                Your profile, saved addresses, payment methods, and personal identifiers have been completely deleted from Supabase. All device and browser cache memory has been wiped clean.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 max-w-md mx-auto space-y-1 text-left">
+              <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Supabase personal data records deleted</span>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Device cache memory &amp; browser storage purged</span>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Active session successfully logged out</span>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  navigate('/');
+                  window.location.reload();
+                }}
+                className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer"
+              >
+                Return to Storefront
+              </button>
+            </div>
+          </div>
+        ) : submittedData ? (
           <div className="bg-white rounded-2xl p-6 sm:p-8 border border-emerald-200 shadow-sm space-y-6">
             <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-8 h-8" />
@@ -415,10 +480,51 @@ export const AccountDeletionPage = ({
                   <button
                     type="button"
                     onClick={() => navigate('/orders')}
-                    className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs"
+                    className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer"
                   >
                     View Active Orders
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Unpaid Products Warning if Unpaid Orders exist */}
+            {unpaidOrdersCount > 0 && (
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5 text-amber-950 space-y-3">
+                <div className="flex items-start gap-3">
+                  <CreditCard className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-sm text-amber-900">
+                      Deletion Blocked: {unpaidOrdersCount} Unpaid Product(s) / Pending Dues
+                    </h4>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      You have orders with pending payments or unsettled dues. In accordance with our financial and transaction policies, all outstanding amounts must be settled or cancelled before your account can be deleted.
+                    </p>
+                  </div>
+                </div>
+                <div className="pl-8 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/orders')}
+                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer"
+                  >
+                    View Unpaid Orders &amp; Clear Dues
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Eligible for Deletion Banner if NO live orders and NO unpaid products */}
+            {hasCheckedPrereqs && activeOrdersCount === 0 && unpaidOrdersCount === 0 && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 sm:p-5 text-emerald-950 flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <h4 className="font-bold text-sm text-emerald-900">
+                    Eligible for Deletion: No Active Orders or Unpaid Dues Found
+                  </h4>
+                  <p className="text-xs text-emerald-800 leading-relaxed">
+                    Your account has 0 active deliveries and 0 unpaid products. You can safely delete your account and wipe all stored user data.
+                  </p>
                 </div>
               </div>
             )}
@@ -534,9 +640,9 @@ export const AccountDeletionPage = ({
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={isSubmitting || isChecking || activeOrdersCount > 0 || confirmInput.trim() !== 'DELETE MY ACCOUNT'}
+                  disabled={isSubmitting || isChecking || activeOrdersCount > 0 || unpaidOrdersCount > 0 || confirmInput.trim() !== 'DELETE MY ACCOUNT'}
                   className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
-                    confirmInput.trim() === 'DELETE MY ACCOUNT' && activeOrdersCount === 0
+                    confirmInput.trim() === 'DELETE MY ACCOUNT' && activeOrdersCount === 0 && unpaidOrdersCount === 0
                       ? 'bg-red-600 hover:bg-red-700 text-white shadow-sm cursor-pointer'
                       : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                   }`}
@@ -545,19 +651,19 @@ export const AccountDeletionPage = ({
                   {isSubmitting ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Submitting to Admin Queue...</span>
+                      <span>Deleting Account &amp; Clearing Data...</span>
                     </>
                   ) : (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      <span>Submit Account Deletion Request</span>
+                      <span>Permanently Delete Account &amp; Clear All Data</span>
                     </>
                   )}
                 </button>
               </div>
 
               <p className="text-center text-[11px] text-slate-500">
-                By submitting, you acknowledge that your personal information will be scheduled for deletion in 7 days, and an alert will be transmitted to the database administrator.
+                When you click delete with 0 active orders and 0 unpaid dues, your user account and all personal data are immediately wiped from Supabase, and your local cache memory is completely cleared.
               </p>
             </form>
           </>

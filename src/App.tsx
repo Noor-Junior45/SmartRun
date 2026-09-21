@@ -226,10 +226,10 @@ export default function App() {
   const [userName, setUserName] = useState<string>(() => getSavedUserProfile()?.name || '');
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
-  const activeUserIdRef = useRef<string | null>(null);
+  const activeUserIdRef = useRef<string | null>(getSavedUserProfile()?.id || null);
   const isLoggingOutRef = useRef<boolean>(false);
 
-  const isAuthenticated = Boolean(!isLoggingOut && !isLoggingOutRef.current && (userProfile?.id || userProfile?.email || userProfile?.phone || userPhone));
+  const isAuthenticated = Boolean(!isLoggingOut && !isLoggingOutRef.current && activeUserIdRef.current && userProfile?.id);
   const unsubscribeOrdersRef = useRef<(() => void) | null>(null);
   const unsubscribeAddressesRef = useRef<(() => void) | null>(null);
   const unsubscribeProfileRef = useRef<(() => void) | null>(null);
@@ -284,10 +284,6 @@ export default function App() {
               refundBalance: freshData.refundBalance ?? prev?.refundBalance ?? 0,
               cashbackBalance: freshData.cashbackBalance ?? prev?.cashbackBalance ?? 0,
             };
-            const scope = getUserScopeKeyFromUser({ id: userId, email: updated.email, phone: updated.phone });
-            if (scope) {
-              safeSetItem(`giriraj_profile_${scope}`, JSON.stringify(updated));
-            }
             return updated;
           });
           if (freshData.phone) {
@@ -310,11 +306,11 @@ export default function App() {
 
     // Fast sync when user returns to the tab or focuses the app
     const syncProfileOnFocus = () => {
-      if (isLoggingOutRef.current || isUserLoggingOut()) return;
+      if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current) return;
       const targetUid = activeUserIdRef.current;
       if (targetUid && document.visibilityState === 'visible') {
         fetchUserProfileFromSupabase(targetUid).then((cloudProf) => {
-          if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current) return;
+          if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current || activeUserIdRef.current !== targetUid) return;
           if (cloudProf) {
             setUserProfile((prev) => {
               if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current) return null;
@@ -332,10 +328,6 @@ export default function App() {
                 refundBalance: cloudProf.refundBalance ?? prev?.refundBalance ?? 0,
                 cashbackBalance: cloudProf.cashbackBalance ?? prev?.cashbackBalance ?? 0,
               };
-              const scope = getUserScopeKeyFromUser({ id: targetUid, email: merged.email, phone: merged.phone });
-              if (scope) {
-                safeSetItem(`giriraj_profile_${scope}`, JSON.stringify(merged));
-              }
               return merged;
             });
             if (cloudProf.phone) setUserPhone(cleanPhoneAutofill(cloudProf.phone));
@@ -347,6 +339,21 @@ export default function App() {
 
     document.addEventListener('visibilitychange', syncProfileOnFocus);
     window.addEventListener('focus', syncProfileOnFocus);
+
+    // Fast path: If there is no stored session and no oauth tokens in URL, unlock loading immediately (zero delay)
+    const hasStoredAuth =
+      typeof window !== 'undefined' &&
+      (Boolean(window.localStorage.getItem('giriraj_supabase_auth_session')) ||
+       Boolean(window.localStorage.getItem('smartrun_user_profile')));
+    const hasUrlAuth =
+      typeof window !== 'undefined' &&
+      (window.location.hash.includes('access_token') ||
+       window.location.search.includes('code=') ||
+       window.location.search.includes('target=app'));
+
+    if (!hasStoredAuth && !hasUrlAuth) {
+      setIsAuthLoading(false);
+    }
 
     // Initial session check
     getInitialAuthSession().then(({ session, user }) => {
@@ -405,7 +412,7 @@ export default function App() {
         setUserProfile(prof);
         fetchUserProfileFromSupabase(user.id)
           .then((cloudProf) => {
-            if (cloudProf) {
+            if (cloudProf && !isLoggingOutRef.current && !isUserLoggingOut() && activeUserIdRef.current === user.id) {
               let mergedPhone = cleanPhoneAutofill(cloudProf.phone || prof.phone);
               if (!isUserAdmin && (mergedPhone === '8777400280' || mergedPhone.endsWith('8777400280'))) {
                 mergedPhone = '';
@@ -542,7 +549,7 @@ export default function App() {
         setUserProfile(prof);
         fetchUserProfileFromSupabase(user.id)
           .then((cloudProf) => {
-            if (cloudProf) {
+            if (cloudProf && !isLoggingOutRef.current && !isUserLoggingOut() && activeUserIdRef.current === user.id) {
               let mergedPhone = cleanPhoneAutofill(cloudProf.phone || prof.phone);
               if (!isUserAdmin && (mergedPhone === '8777400280' || mergedPhone.endsWith('8777400280'))) {
                 mergedPhone = '';
@@ -734,15 +741,17 @@ export default function App() {
             const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
             const refreshToken = hashParams.get('refresh_token') || queryParams.get('refresh_token');
             const isRecoveryFromHash = isPasswordRecovery || hashParams.get('type') === 'recovery' || queryParams.get('type') === 'recovery';
-            if (accessToken && refreshToken) {
+            if (accessToken) {
               supabase.auth.setSession({
                 access_token: accessToken,
-                refresh_token: refreshToken
+                refresh_token: refreshToken || ''
               })
                 .then(({ data, error }) => {
                   Browser.close().catch(() => {});
                   if (!error && data?.session) {
                     try {
+                      localStorage.removeItem('smartrun_oauth_target');
+                      sessionStorage.removeItem('smartrun_oauth_target');
                       localStorage.removeItem('giriraj_pending_native_oauth');
                       localStorage.removeItem('giriraj_oauth_from_android_app');
                     } catch {}
@@ -807,9 +816,29 @@ export default function App() {
       }
     };
 
+    // Expose deep link handler for Android WebViews or custom bridges
+    try {
+      (window as any).handleAppDeepUrl = handleDeepUrl;
+    } catch {}
+
     // Listen for runtime deep link events (app already open or resumed from background)
     const listenerPromise = CapApp.addListener('appUrlOpen', (data) => {
       handleDeepUrl(data.url);
+    });
+
+    // Listen for app resumption from background (e.g. user returning from Chrome Custom Tab)
+    const stateListenerPromise = CapApp.addListener('appStateChange', (state) => {
+      if (state.isActive) {
+        Browser.close().catch(() => {});
+        supabase.auth.getSession().then(({ data }) => {
+          if (data?.session) {
+            try {
+              localStorage.removeItem('smartrun_oauth_target');
+              sessionStorage.removeItem('smartrun_oauth_target');
+            } catch {}
+          }
+        }).catch(() => {});
+      }
     });
 
     // Check cold-start launch URL
@@ -823,6 +852,7 @@ export default function App() {
 
     return () => {
       listenerPromise.then((handle) => handle.remove()).catch(() => {});
+      stateListenerPromise.then((handle) => handle.remove()).catch(() => {});
     };
   }, [navigate]);
 
@@ -1228,6 +1258,7 @@ export default function App() {
 
     // 5. Instantly flush state and navigate to home with zero delay
     flushSync(() => {
+      isLoggingOutRef.current = false;
       setIsLoggingOut(false);
       setUserProfile(optimisticProf);
       setUserPhone(finalPhone || null);
@@ -1269,7 +1300,6 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    if (isLoggingOutRef.current) return;
     isLoggingOutRef.current = true;
     activeUserIdRef.current = null;
 
@@ -1300,27 +1330,13 @@ export default function App() {
       setCartItems(getLocalCartItems());
     });
 
-    // 3. Immediately transition the route to /login
+    // 3. Immediately transition the route to /login with zero delay
     navigate('/login', { replace: true });
 
-    // 4. Perform background storage purge and Supabase/Firebase sign out
-    try {
-      await signOutUser();
-    } catch (err) {
-      console.error('Logout error:', err);
-    } finally {
-      flushSync(() => {
-        setIsLoggingOut(false);
-        setActiveUserScope(null);
-        setUserProfile(null);
-        setUserPhone(null);
-        setUserName('');
-        activeUserIdRef.current = null;
-      });
-      setTimeout(() => {
-        isLoggingOutRef.current = false;
-      }, 300);
-    }
+    // 4. Perform background storage purge and Supabase/Firebase sign out asynchronously
+    signOutUser().catch((err) => {
+      console.debug('Background signout note:', err);
+    });
   };
 
   // 1. If auth session is still checking on app launch, show brand loading screen
@@ -1546,6 +1562,7 @@ export default function App() {
                 onOpenShop={() => navigate('/electrical')}
                 onOpenServices={() => navigate('/electrical')}
                 onProfileUpdated={(updated) => {
+                  if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current) return;
                   setUserProfile(updated);
                   setUserPhone(updated.phone || null);
                   setUserName(updated.name || '');

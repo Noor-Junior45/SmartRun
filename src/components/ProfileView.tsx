@@ -112,9 +112,9 @@ export const ProfileView = ({
       }
     });
 
-    if (userProfile?.id) {
+    if (userProfile?.id && !isSigningOut) {
       fetchUserProfileFromSupabase(userProfile.id).then((freshProf) => {
-        if (freshProf) {
+        if (freshProf && isMountedRef.current && !isSigningOut) {
           onProfileUpdated({
             ...userProfile,
             ...freshProf,

@@ -11,10 +11,14 @@ import {
   LogIn,
   UserPlus,
   Phone,
-  User
+  User,
+  AlertTriangle,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '../lib/supabaseClient';
+import { isAndroidAppEnvironment } from '../utils/platformDetection';
 import {
   saveUserProfile,
   signInWithGoogle,
@@ -147,6 +151,15 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [copiedIp, setCopiedIp] = useState(false);
+
+  const handleCopyIp = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText('34.34.254.4');
+      setCopiedIp(true);
+      setTimeout(() => setCopiedIp(false), 2500);
+    }
+  };
 
   const secondInputRef = useRef<HTMLInputElement>(null);
 
@@ -576,8 +589,10 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
 
     setIsMagicLoading(true);
     try {
-      const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
-      const redirectTo = isNative ? 'smartrun://login' : window.location.origin;
+      const isApp = isAndroidAppEnvironment();
+      const redirectTo = isApp
+        ? 'https://www.smartrun.in/login?target=app&source=android_app'
+        : (typeof window !== 'undefined' ? `${window.location.origin}/login?client=web` : undefined);
 
       const { error: magicError } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
@@ -645,9 +660,59 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         )}
 
         {error && (
-          <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold animate-in fade-in leading-relaxed">
-            {error}
-          </div>
+          error.includes('Fast2SMS Error 414') || error.includes('blacklisted') || error.includes('34.34.254.4') ? (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs space-y-2.5 animate-in fade-in leading-relaxed shadow-sm">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold text-amber-950 text-sm">Fast2SMS Error 414: IP Whitelist Required</h4>
+                  <p className="text-amber-800 text-xs mt-0.5">
+                    Fast2SMS blocked OTP dispatch because cloud server IP <code className="font-mono font-bold bg-amber-200/60 px-1 py-0.5 rounded text-amber-950">34.34.254.4</code> is blocked by Fast2SMS Dev API IP security filter.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider block">Server Public Egress IP</span>
+                  <code className="text-xs font-mono font-bold text-slate-800">34.34.254.4</code>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyIp}
+                  className="px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-semibold text-[11px] flex items-center gap-1.5 transition-colors border border-amber-300/60"
+                >
+                  {copiedIp ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-amber-700" />}
+                  <span>{copiedIp ? 'Copied IP' : 'Copy IP'}</span>
+                </button>
+              </div>
+
+              <div className="text-[11px] text-amber-900 space-y-1 pl-1">
+                <p className="font-bold text-amber-950">Steps to fix in Fast2SMS (30 seconds):</p>
+                <ol className="list-decimal list-inside space-y-0.5 text-amber-800">
+                  <li>Log in to Fast2SMS Dashboard &rarr; <strong>Dev API</strong> &rarr; <strong>SECURITY</strong> tab.</li>
+                  <li>Turn <strong>OFF / Disable</strong> the <strong>IP Whitelist</strong> option (or add <code className="bg-amber-100 px-1 rounded font-mono font-semibold">34.34.254.4</code>).</li>
+                  <li>Return here and tap <strong>Get OTP</strong> again.</li>
+                </ol>
+              </div>
+
+              <div className="pt-1 border-t border-amber-200/80 flex items-center justify-between">
+                <a
+                  href="https://www.fast2sms.com/dashboard/dev-api"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-900 hover:text-amber-950 underline"
+                >
+                  <span>Open Fast2SMS Dev API Dashboard</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold animate-in fade-in leading-relaxed">
+              {error}
+            </div>
+          )
         )}
 
         {/* Authentication Forms */}

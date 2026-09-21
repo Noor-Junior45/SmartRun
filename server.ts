@@ -3259,6 +3259,7 @@ async function startServer() {
       }
 
       let activeOrdersCount = 0;
+      let unpaidOrdersCount = 0;
       let existingRequest = null;
       const cleanPhone = (phone || "").replace(/\D/g, "").slice(-10);
 
@@ -3287,24 +3288,141 @@ async function startServer() {
 
           const { data: userOrders } = await query;
           if (Array.isArray(userOrders)) {
-            const activeStatuses = ["pending", "accepted", "packing", "out_for_delivery", "shipped", "near_destination", "in_transit"];
+            const activeStatuses = ["pending", "accepted", "packing", "out_for_delivery", "shipped", "near_destination", "in_transit", "processing"];
             const activeOrders = userOrders.filter((o: any) => activeStatuses.includes(String(o.status || "").toLowerCase()));
+            const unpaidOrders = userOrders.filter((o: any) => {
+              const payStatus = String(o.payment_status || "").toLowerCase();
+              const orderStatus = String(o.status || "").toLowerCase();
+              return (payStatus === "unpaid" || payStatus === "pending") && orderStatus !== "cancelled" && orderStatus !== "failed";
+            });
             activeOrdersCount = activeOrders.length;
+            unpaidOrdersCount = unpaidOrders.length;
           }
         } catch (dbErr) {
           console.warn("[Server Deletion Check Orders DB notice]:", dbErr);
         }
       }
 
+      const hasOutstandingDues = unpaidOrdersCount > 0;
+      const canDelete = activeOrdersCount === 0 && !hasOutstandingDues;
+
       return res.status(200).json({
         success: true,
-        canDelete: activeOrdersCount === 0,
+        canDelete,
         activeOrdersCount,
-        hasOutstandingDues: false,
+        unpaidOrdersCount,
+        hasOutstandingDues,
         existingRequest
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message || "Failed to check account status" });
+    }
+  });
+
+  // 1b. Direct Permanent Account & Data Deletion (executed when user has NO active orders and NO unpaid products)
+  app.post("/api/account/delete-account", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { userId, phone, email, name, reason } = req.body || {};
+      const cleanPhone = (phone || "").replace(/\D/g, "").slice(-10);
+
+      if (!userId && !cleanPhone && !email) {
+        return res.status(400).json({
+          success: false,
+          message: "User identifier (userId, phone, or email) required to execute account deletion."
+        });
+      }
+
+      const sb = getServerSupabase();
+      if (sb) {
+        // Enforce prerequisite: Verify user has NO active orders and NO unpaid products
+        try {
+          let query = sb.from("orders").select("id, status, payment_status");
+          if (userId) {
+            query = query.eq("user_id", userId);
+          } else if (cleanPhone) {
+            query = query.or(`phone.eq.${cleanPhone},phone.eq.+91${cleanPhone},recipient_phone.eq.${cleanPhone},recipient_phone.eq.+91${cleanPhone}`);
+          } else if (email) {
+            query = query.ilike("customer_email", `%${email.trim().toLowerCase()}%`);
+          }
+
+          const { data: userOrders } = await query;
+          if (Array.isArray(userOrders)) {
+            const activeStatuses = ["pending", "accepted", "packing", "out_for_delivery", "shipped", "near_destination", "in_transit", "processing"];
+            const activeOrders = userOrders.filter((o: any) => activeStatuses.includes(String(o.status || "").toLowerCase()));
+            const unpaidOrders = userOrders.filter((o: any) => {
+              const payStatus = String(o.payment_status || "").toLowerCase();
+              const orderStatus = String(o.status || "").toLowerCase();
+              return (payStatus === "unpaid" || payStatus === "pending") && orderStatus !== "cancelled" && orderStatus !== "failed";
+            });
+
+            if (activeOrders.length > 0) {
+              return res.status(400).json({
+                success: false,
+                code: "ACTIVE_ORDERS",
+                message: `Account deletion blocked: You currently have ${activeOrders.length} active in-flight order(s). All orders must be delivered or cancelled before account deletion.`
+              });
+            }
+
+            if (unpaidOrders.length > 0) {
+              return res.status(400).json({
+                success: false,
+                code: "UNPAID_PRODUCTS",
+                message: `Account deletion blocked: You have ${unpaidOrders.length} order(s) with pending payments. All outstanding dues must be settled before account deletion.`
+              });
+            }
+          }
+        } catch (orderCheckErr) {
+          console.warn("[Server Deletion Active Order Check Notice]:", orderCheckErr);
+        }
+
+        // Execute permanent data purge in Supabase
+        try {
+          if (userId) {
+            await sb.from("user_profiles").delete().eq("id", userId);
+            await sb.from("profiles").delete().eq("id", userId);
+            await sb.from("saved_addresses").delete().eq("user_id", userId);
+            await sb.from("saved_upi_ids").delete().eq("user_id", userId);
+            await sb.from("wiring_service_bookings").delete().eq("user_id", userId);
+          }
+          if (cleanPhone) {
+            await sb.from("user_profiles").delete().eq("phone", cleanPhone);
+            await sb.from("profiles").delete().eq("phone", cleanPhone);
+            await sb.from("saved_addresses").delete().eq("receiver_phone", cleanPhone);
+          }
+          if (email) {
+            await sb.from("user_profiles").delete().eq("email", email);
+            await sb.from("profiles").delete().eq("email", email);
+          }
+
+          // Record deletion event
+          const deleteRequestId = `DEL-DIRECT-${Date.now()}`;
+          await sb.from("account_deletion_requests").insert([{
+            request_id: deleteRequestId,
+            user_id: userId || null,
+            customer_name: name || "Customer",
+            customer_phone: cleanPhone || null,
+            customer_email: email || null,
+            reason: reason || "User permanent deletion request",
+            status: "permanently_deleted",
+            created_at: new Date().toISOString()
+          }]);
+        } catch (dbPurgeErr) {
+          console.warn("[Server DB Purge Notice]:", dbPurgeErr);
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        deleted: true,
+        message: "Your account and personal data have been permanently deleted from Supabase."
+      });
+    } catch (err: any) {
+      console.error("[Server Account Delete Error]:", err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || "Failed to permanently delete account."
+      });
     }
   });
 
@@ -3494,6 +3612,17 @@ async function startServer() {
     }
   });
 
+  interface ServerUserProfileRecord {
+    user_id: string;
+    phone?: string | null;
+    full_name?: string | null;
+    email?: string | null;
+    avatar_url?: string | null;
+    dob?: string | null;
+    updated_at: string;
+  }
+  const serverProfileStore = new Map<string, ServerUserProfileRecord>();
+
   // User Profile Server-Side Sync API
   app.post("/api/user-profile", async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -3513,41 +3642,70 @@ async function startServer() {
       }
 
       let sanitizedName = full_name;
+      const clean10Phone = sanitizedPhone ? String(sanitizedPhone).replace(/\D/g, "").slice(-10) : "";
+      const formattedE164 = clean10Phone ? `+91${clean10Phone}` : null;
 
       const sb = getServerSupabase();
+      let mergedEmail = email || null;
+      let mergedPhone = formattedE164 || sanitizedPhone || null;
+      let mergedName = sanitizedName || null;
+
       if (sb && user_id) {
         try {
+          // Read existing row to prevent overwriting genuine existing values with null
+          const { data: existingRow } = await sb
+            .from("user_profiles")
+            .select("*")
+            .eq("user_id", user_id)
+            .maybeSingle();
+
+          if (existingRow) {
+            if (!mergedEmail && existingRow.email && !existingRow.email.includes("@girirajpower.internal")) {
+              mergedEmail = existingRow.email;
+            }
+            if (!mergedPhone && existingRow.phone) {
+              mergedPhone = existingRow.phone;
+            }
+            if (!mergedName && (existingRow.full_name || existingRow.name)) {
+              mergedName = existingRow.full_name || existingRow.name;
+            }
+          }
+
           await sb.from("user_profiles").upsert({
             user_id,
-            phone: sanitizedPhone || null,
-            full_name: sanitizedName || null,
-            email: email || null,
-            avatar_url: avatar_url || null,
-            dob: dob || null,
+            phone: mergedPhone,
+            full_name: mergedName,
+            email: mergedEmail,
+            avatar_url: avatar_url || existingRow?.avatar_url || null,
+            dob: dob || existingRow?.dob || null,
             updated_at: new Date().toISOString()
           }, { onConflict: "user_id" });
         } catch (sbErr) {
           console.warn("[Server Profile Sync Notice]:", sbErr);
         }
-
-        try {
-          await sb.from("profiles").upsert({
-            id: user_id,
-            phone: sanitizedPhone || null,
-            full_name: sanitizedName || null,
-            name: sanitizedName || null,
-            email: email || null,
-            avatar_url: avatar_url || null,
-            dob: dob || null,
-            birth_date: dob || null,
-            date_of_birth: dob || null,
-            updated_at: new Date().toISOString()
-          }, { onConflict: "id" });
-        } catch (sbErr2) {
-          console.warn("[Server Profiles Table Sync Notice]:", sbErr2);
-        }
       }
-      return res.status(200).json({ success: true, message: "Profile synchronized" });
+
+      // Save to server-side in-memory registry for instant multi-login linking
+      const profileRecord: ServerUserProfileRecord = {
+        user_id: user_id || (clean10Phone ? `uid_${clean10Phone}` : "unknown"),
+        phone: mergedPhone,
+        full_name: mergedName,
+        email: mergedEmail,
+        avatar_url: avatar_url || null,
+        dob: dob || null,
+        updated_at: new Date().toISOString()
+      };
+
+      if (user_id) serverProfileStore.set(user_id, profileRecord);
+      if (clean10Phone) {
+        serverProfileStore.set(clean10Phone, profileRecord);
+        serverProfileStore.set(`+91${clean10Phone}`, profileRecord);
+      }
+      if (mergedEmail && !mergedEmail.includes("@girirajpower.internal")) {
+        serverProfileStore.set(mergedEmail.toLowerCase(), profileRecord);
+      }
+
+      return res.status(200).json({ success: true, message: "Profile synchronized", profile: profileRecord });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message || "Failed to sync profile" });
     }
@@ -5415,9 +5573,44 @@ Respond ONLY with a valid JSON object matching the following structure:
       };
     }
 
-    // 1. First attempt: Quick SMS route ("q")
+    // 1. Primary attempt: Dedicated Fast2SMS OTP route ("otp")
+    // Pre-approved DLT template, lowest cost (~₹0.20), highly reliable for OTP verification
     try {
-      console.log(`[Fast2SMS] Attempting Quick SMS dispatch for phone ${cleanPhone.slice(0, 4)}****`);
+      console.log(`[Fast2SMS] Attempting primary OTP route dispatch for phone ${cleanPhone.slice(0, 4)}****`);
+      const otpResponse = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+        method: "POST",
+        headers: {
+          "authorization": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          route: "otp",
+          variables_values: cleanOtp,
+          numbers: cleanPhone
+        })
+      });
+
+      const otpResult: any = await otpResponse.json().catch(() => null);
+      if (otpResponse.ok && otpResult && otpResult.return === true) {
+        console.log(`[Fast2SMS] OTP route successfully sent to ${cleanPhone.slice(0, 4)}****`);
+        return { success: true, data: otpResult, routeUsed: "otp" };
+      }
+
+      console.warn("[Fast2SMS] OTP route response:", otpResult?.message || otpResult);
+
+      // Check specifically for IP blacklist error (Fast2SMS status 414)
+      if (otpResult?.status_code === 414 || String(otpResult?.message || "").includes("blacklisted")) {
+        const ipError = "Fast2SMS Error 414: Server IP is blacklisted or restricted in your Fast2SMS Developer API settings. To fix: Open Fast2SMS Dashboard -> Dev API -> SECURITY tab, and disable IP Whitelisting or add server IP (34.34.254.4).";
+        console.error(`[Fast2SMS IP Blacklist] ${ipError}`);
+        return {
+          success: false,
+          error: ipError,
+          data: { otp: otpResult, serverIp: "34.34.254.4", statusCode: 414 }
+        };
+      }
+
+      // 2. Secondary fallback attempt: Quick SMS route ("q")
+      console.log(`[Fast2SMS] Attempting fallback Quick SMS route for phone ${cleanPhone.slice(0, 4)}****`);
       const quickResponse = await fetch("https://www.fast2sms.com/dev/bulkV2", {
         method: "POST",
         headers: {
@@ -5442,29 +5635,29 @@ Respond ONLY with a valid JSON object matching the following structure:
 
       console.warn("[Fast2SMS] Quick SMS response:", quickResult?.message || quickResult);
 
-      // 2. Secondary attempt: Dedicated OTP route ("otp")
-      const otpResponse = await fetch("https://www.fast2sms.com/dev/bulkV2", {
-        method: "POST",
-        headers: {
-          "authorization": apiKey,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          route: "otp",
-          variables_values: cleanOtp,
-          numbers: cleanPhone
-        })
-      });
+      // Check for Fast2SMS specific error statuses on either route
+      const anyResult = quickResult || otpResult;
+      const anyStatus = anyResult?.status_code || otpResult?.status_code || quickResult?.status_code;
+      const anyMsg = String(anyResult?.message || otpResult?.message || "");
 
-      const otpResult: any = await otpResponse.json().catch(() => null);
-      if (otpResponse.ok && otpResult && otpResult.return === true) {
-        console.log(`[Fast2SMS] OTP route successfully sent to ${cleanPhone.slice(0, 4)}****`);
-        return { success: true, data: otpResult, routeUsed: "otp" };
+      if (anyStatus === 414 || anyMsg.toLowerCase().includes("blacklisted")) {
+        const ipError = "Fast2SMS Error 414: Server IP is blacklisted or restricted in your Fast2SMS Developer API settings. To fix: Open Fast2SMS Dashboard -> Dev API -> SECURITY tab, and disable IP Whitelisting or add server IP (34.34.254.4).";
+        return { success: false, error: ipError, data: { otp: otpResult, quick: quickResult, serverIp: "34.34.254.4", statusCode: 414 } };
       }
 
-      const rawErr = quickResult?.message || otpResult?.message || "Failed to send SMS via Fast2SMS";
+      if (anyStatus === 402 || anyMsg.toLowerCase().includes("balance")) {
+        const balError = "Fast2SMS Error: Insufficient wallet balance in your Fast2SMS account. Please add credits to your Fast2SMS wallet to deliver SMS OTP.";
+        return { success: false, error: balError, data: { otp: otpResult, quick: quickResult, statusCode: 402 } };
+      }
+
+      if (anyStatus === 401 || anyMsg.toLowerCase().includes("invalid authorization")) {
+        const authError = "Fast2SMS Error: Invalid Fast2SMS API authorization key. Please verify your FAST2SMS_API_KEY.";
+        return { success: false, error: authError, data: { otp: otpResult, quick: quickResult, statusCode: 401 } };
+      }
+
+      const rawErr = otpResult?.message || quickResult?.message || "Failed to deliver SMS via Fast2SMS";
       const finalMsg = Array.isArray(rawErr) ? rawErr.join(", ") : String(rawErr);
-      return { success: false, error: finalMsg, data: { quick: quickResult, otp: otpResult } };
+      return { success: false, error: finalMsg, data: { otp: otpResult, quick: quickResult } };
     } catch (err: any) {
       console.warn("[Fast2SMS] Dispatch error:", err?.message || err);
       return { success: false, error: err?.message || String(err) };

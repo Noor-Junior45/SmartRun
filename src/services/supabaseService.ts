@@ -3,6 +3,7 @@ import { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { isWebViewEnvironment } from '../utils/webViewDetection';
+import { isAndroidAppEnvironment } from '../utils/platformDetection';
 import { Order, OrderStatus, WiringServiceBooking, SavedAddress, UserProfile, Product, CartItem, DeliveryPartner } from '../types';
 import { soundService } from './sound';
 import { showToast } from '../utils/toast';
@@ -230,6 +231,116 @@ export function getUserScopeKeyFromUser(user?: { id?: string; email?: string | n
 export function getActiveAddressStorageKey(user?: { id?: string; email?: string | null; phone?: string | null } | string | null): string {
   const scope = typeof user === 'string' ? user : (getUserScopeKeyFromUser(user) || activeUserScope);
   return scope ? `${ACTIVE_SAVED_ADDRESS_KEY}_${scope}` : `${ACTIVE_SAVED_ADDRESS_KEY}_guest`;
+}
+
+// In-memory runtime state for active session: User data is kept in memory during the active session
+// and stored authoritatively in Supabase (never in persistent client cache memory).
+const inMemoryProfiles = new Map<string, UserProfile>();
+const inMemoryOrders = new Map<string, Order[]>();
+const inMemoryAddresses = new Map<string, SavedAddress[]>();
+const inMemoryActiveAddress = new Map<string, SavedAddress>();
+const inMemoryUpi = new Map<string, string[]>();
+
+/**
+ * Purges all device cache memory, browser storage, and service worker caches
+ * Ensuring no user data or cache memory lingers on logout or account deletion.
+ */
+export async function purgeAllUserCacheAndStorage(): Promise<void> {
+  // 1. Clear in-memory caches
+  clearUserProfile();
+  activeUserScope = null;
+  inMemoryProfiles.clear();
+  inMemoryOrders.clear();
+  inMemoryAddresses.clear();
+  inMemoryActiveAddress.clear();
+  inMemoryUpi.clear();
+
+  if (typeof window !== 'undefined') {
+    // 2. Clear all localStorage
+    try {
+      window.localStorage.clear();
+    } catch (e) {
+      console.warn('LocalStorage clear notice:', e);
+    }
+
+    // 3. Clear all sessionStorage
+    try {
+      window.sessionStorage.clear();
+    } catch (e) {
+      console.warn('SessionStorage clear notice:', e);
+    }
+
+    // 4. Clear all browser Cache Storage API caches
+    try {
+      if ('caches' in window) {
+        const cacheKeys = await window.caches.keys();
+        await Promise.all(cacheKeys.map((key) => window.caches.delete(key)));
+      }
+    } catch (e) {
+      console.warn('Browser caches delete notice:', e);
+    }
+
+    // 5. Unregister service workers if any
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const reg of registrations) {
+          await reg.unregister();
+        }
+      }
+    } catch (e) {
+      console.warn('Service worker unregister notice:', e);
+    }
+  }
+}
+
+/**
+ * Permanently deletes user account and personal data from Supabase,
+ * purges all device cache, and terminates the session.
+ */
+export async function deleteUserDataFromSupabase(
+  userId?: string,
+  phone?: string,
+  email?: string
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const cleanPhone = phone ? phone.replace(/\D/g, '').slice(-10) : '';
+
+    // 1. Authoritative server-side deletion from Supabase
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/account/delete-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, phone: cleanPhone, email })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, message: data.message || 'Failed to delete account on server.' };
+      }
+    } catch (apiErr: any) {
+      console.warn('Server deletion API notice:', apiErr);
+    }
+
+    // 2. Direct client-side Supabase deletion fallback
+    if (userId) {
+      try { await supabase.from('user_profiles').delete().eq('id', userId); } catch {}
+      try { await supabase.from('profiles').delete().eq('id', userId); } catch {}
+      try { await supabase.from('saved_addresses').delete().eq('user_id', userId); } catch {}
+      try { await supabase.from('saved_upi_ids').delete().eq('user_id', userId); } catch {}
+    }
+    if (cleanPhone) {
+      try { await supabase.from('user_profiles').delete().eq('phone', cleanPhone); } catch {}
+      try { await supabase.from('profiles').delete().eq('phone', cleanPhone); } catch {}
+    }
+
+    // 3. Purge all cache and storage from device
+    await purgeAllUserCacheAndStorage();
+    await signOutUser();
+
+    return { success: true, message: 'Account and personal data permanently deleted from Supabase.' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to delete account.' };
+  }
 }
 
 /**
@@ -465,10 +576,10 @@ export async function resetPasswordForEmail(
   email: string
 ): Promise<{ error: Error | null; success: boolean }> {
   try {
-    const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
-    const redirectTo = isNative
-      ? 'smartrun://reset-password'
-      : (typeof window !== 'undefined' ? window.location.origin : undefined);
+    const isApp = isAndroidAppEnvironment();
+    const redirectTo = isApp
+      ? 'https://www.smartrun.in/reset-password?target=app&source=android_app'
+      : (typeof window !== 'undefined' ? `${window.location.origin}/reset-password?client=web` : undefined);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
       redirectTo
     });
@@ -493,30 +604,42 @@ export async function signInWithGoogle(): Promise<{ error: Error | null; url?: s
     clearUserProfile();
 
     const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+    const isApp = isAndroidAppEnvironment();
     const isNative = Capacitor.isNativePlatform();
-    const isWv = typeof window !== 'undefined' && (isWebViewEnvironment() || (window as any).isAndroidApp);
-    const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
-    const shouldUseAppFlow = isNative || isWv;
 
-    // Track pending native Google OAuth intent in localStorage
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('giriraj_pending_native_oauth', String(Date.now()));
-      if (shouldUseAppFlow || isAndroid) {
-        localStorage.setItem('giriraj_oauth_from_android_app', 'true');
-      }
+    let redirectTo: string;
+    if (isApp) {
+      // IN ANDROID APP:
+      // Pass the canonical HTTPS app-redirect callback URL:
+      // https://www.smartrun.in/login?target=app&source=android_app
+      // 1. Supabase allows https://www.smartrun.in/** by default (primary domain).
+      // 2. When Google OAuth completes, browser opens https://www.smartrun.in/login?target=app&source=android_app#access_token=...
+      // 3. AndroidAppBridgePrompt recognizes target=app and instantly forwards tokens to smartrun://login and intent://
+      // 4. Capacitor App receives session via appUrlOpen, closes the browser tab, and logs in inside the app!
+      try {
+        localStorage.setItem('smartrun_oauth_target', 'android_app');
+        sessionStorage.setItem('smartrun_oauth_target', 'android_app');
+      } catch {}
+      redirectTo = 'https://www.smartrun.in/login?target=app&source=android_app';
+    } else {
+      // IN STANDARD WEBSITE:
+      // User is browsing via web browser on desktop or mobile phone.
+      // Must stay and log into the website directly. No app redirect or app bridge prompt.
+      try {
+        localStorage.removeItem('smartrun_oauth_target');
+        sessionStorage.removeItem('smartrun_oauth_target');
+        localStorage.removeItem('giriraj_pending_native_oauth');
+        localStorage.removeItem('giriraj_oauth_from_android_app');
+      } catch {}
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.smartrun.in';
+      redirectTo = `${origin}/login?client=web`;
     }
-
-    // In native Android APK or App WebView, use custom app scheme: smartrun://login
-    // Supabase will redirect to smartrun://login which Android intercepts via intent filters
-    const redirectTo = shouldUseAppFlow
-      ? 'smartrun://login'
-      : (typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo,
-        skipBrowserRedirect: isIframe || shouldUseAppFlow,
+        skipBrowserRedirect: isIframe || isNative,
         queryParams: {
           access_type: 'offline',
           prompt: 'select_account consent'
@@ -538,7 +661,6 @@ export async function signInWithGoogle(): Promise<{ error: Error | null; url?: s
         }
       } else if (isNative) {
         // In native Android APK, open in Chrome Custom Tab via Capacitor Browser
-        // Chrome Custom Tab maintains app task identity and automatically passes smartrun:// redirects to app
         try {
           await Browser.open({
             url: data.url,
@@ -550,11 +672,11 @@ export async function signInWithGoogle(): Promise<{ error: Error | null; url?: s
           console.warn('Capacitor Browser.open error, falling back to window.open:', browserErr);
           window.open(data.url, '_system', 'noopener,noreferrer');
         }
-      } else if (isWv) {
-        // In Android WebView / TWA wrapper, open via external browser to avoid Google 403 disallowed_useragent
+      } else if (isApp) {
+        // In Android WebView wrapper, open via external browser to avoid Google 403 disallowed_useragent
         window.open(data.url, '_system', 'noopener,noreferrer') || (window.location.href = data.url);
       } else {
-        // Standard website in browser
+        // Standard website in browser: redirect current page
         window.location.href = data.url;
       }
     }
@@ -774,39 +896,19 @@ export async function signOutUser(): Promise<void> {
     clearUserProfile();
     activeUserScope = null;
 
-    // Purge cached session, profile, address, and auth tokens from localStorage immediately
-    if (typeof window !== 'undefined') {
-      try {
-        const ALLOWED_LOGOUT_KEYS = new Set<string>([
-          PENDING_SYNC_STORAGE_KEY,
-          'giriraj_legacy_purge_v1_done'
-        ]);
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && !ALLOWED_LOGOUT_KEYS.has(key)) {
-            if (
-              key.startsWith('giriraj_') ||
-              key.startsWith('sb-') ||
-              key.startsWith('firebase:') ||
-              key.includes('supabase.auth.token')
-            ) {
-              keysToRemove.push(key);
-            }
-          }
-        }
-        keysToRemove.forEach((k) => safeRemoveItem(k));
-      } catch (e) {
-        console.warn('Error clearing storage on logout:', e);
-      }
-    }
-
-    // Immediately clear local Supabase session scope so subsequent reads return null
+    // 1. Immediately clear local Supabase session scope so subsequent reads return null
     try {
       await supabase.auth.signOut({ scope: 'local' });
     } catch {}
 
-    // Also sign out from Firebase Auth and clear verification sessions
+    // 2. Perform global Supabase sign out across server sessions
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.debug('Supabase global sign out note:', e);
+    }
+
+    // 3. Also sign out from Firebase Auth and clear verification sessions
     try {
       const { signOutFromAll } = await import('./firebaseAuthService');
       await signOutFromAll();
@@ -814,20 +916,14 @@ export async function signOutUser(): Promise<void> {
       console.debug('Firebase signout note:', e);
     }
 
-    // Perform global Supabase sign out across server sessions
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.debug('Supabase global sign out note:', e);
-    }
+    // 4. Aggressively clean all cache memory from user devices and web
+    await purgeAllUserCacheAndStorage();
   } catch (error) {
     console.error('Supabase sign out error:', error);
   } finally {
     clearUserProfile();
     activeUserScope = null;
-    setTimeout(() => {
-      isLoggingOut = false;
-    }, 400);
+    isLoggingOut = false;
   }
 }
 
@@ -1245,7 +1341,7 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
       };
 
       const scope = `uid_${userId}`;
-      safeSetItem(`giriraj_profile_${scope}`, JSON.stringify(mappedProfile));
+      inMemoryProfiles.set(scope, mappedProfile);
       return mappedProfile;
     }
   } catch (err) {
@@ -1255,12 +1351,17 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
 }
 
 /**
- * Get saved user profile from storage & current Supabase session
+ * Get saved user profile from in-memory session or current Supabase session
  */
 export function getSavedUserProfile(userScopeOverride?: string): UserProfile | null {
   const scope = userScopeOverride || activeUserScope;
   if (!scope) {
     return null;
+  }
+
+  // 1. Check in-memory runtime store (no persistent cache dependency)
+  if (inMemoryProfiles.has(scope)) {
+    return inMemoryProfiles.get(scope)!;
   }
 
   const raw = safeGetItem(`giriraj_profile_${scope}`);
@@ -1276,6 +1377,7 @@ export function getSavedUserProfile(userScopeOverride?: string): UserProfile | n
     if (prof.email && prof.email.includes('@girirajpower.internal')) {
       prof.email = '';
     }
+    inMemoryProfiles.set(scope, prof);
     return prof;
   } catch {
     return null;
@@ -1283,7 +1385,7 @@ export function getSavedUserProfile(userScopeOverride?: string): UserProfile | n
 }
 
 /**
- * Save user profile updates to local state (offline-first) and Supabase
+ * Save user profile updates to in-memory state and persist to Supabase
  */
 export async function saveUserProfile(
   data: {
@@ -1348,7 +1450,7 @@ export async function saveUserProfile(
   };
 
   if (scope) {
-    safeSetItem(`giriraj_profile_${scope}`, JSON.stringify(updated));
+    inMemoryProfiles.set(scope, updated);
   }
 
   // Synchronize to Supabase & Backend API
@@ -1637,6 +1739,13 @@ export function getStoredOrders(userScopeOverride?: string): Order[] {
       return [];
     }
 
+    if (inMemoryOrders.has(scope)) {
+      const deletedIds = getDeletedOrderIds();
+      return (inMemoryOrders.get(scope) || [])
+        .filter(isRealOrder)
+        .filter((o) => !deletedIds.has(String(o.id)));
+    }
+
     const raw = safeGetItem(`giriraj_orders_${scope}`);
     if (!raw) return [];
 
@@ -1644,7 +1753,7 @@ export function getStoredOrders(userScopeOverride?: string): Order[] {
     if (!Array.isArray(parsed)) return [];
 
     const deletedIds = getDeletedOrderIds();
-    return parsed
+    const orders = parsed
       .filter(isRealOrder)
       .filter((o) => !deletedIds.has(String(o.id)))
       .map((o) => {
@@ -1655,6 +1764,8 @@ export function getStoredOrders(userScopeOverride?: string): Order[] {
         }
         return o;
       });
+    inMemoryOrders.set(scope, orders);
+    return orders;
   } catch (e) {
     console.error('Failed reading orders from storage', e);
     return [];
@@ -2033,7 +2144,7 @@ export async function fetchUserOrders(): Promise<Order[]> {
         });
 
       if (scope) {
-        safeSetItem(`giriraj_orders_${scope}`, JSON.stringify(finalOrders));
+        inMemoryOrders.set(scope, finalOrders);
       }
       notifyOrderListeners(finalOrders);
       return finalOrders;
@@ -2832,6 +2943,10 @@ export function getStoredAddresses(userScopeOverride?: string): SavedAddress[] {
       return [];
     }
 
+    if (inMemoryAddresses.has(scope)) {
+      return inMemoryAddresses.get(scope) || [];
+    }
+
     const collected: SavedAddress[] = [];
     const seenIds = new Set<string>();
 
@@ -3075,13 +3190,8 @@ export async function fetchUserAddresses(): Promise<SavedAddress[]> {
 
     if (list.length > 0) {
       if (scope) {
-        safeSetItem(`giriraj_addrs_${scope}`, JSON.stringify(list));
-      }
-      
-      const activeKey = getActiveAddressStorageKey(scope);
-      const activeRaw = safeGetItem(activeKey);
-      if (!activeRaw && list.length > 0) {
-        safeSetItem(activeKey, JSON.stringify(list[0]));
+        inMemoryAddresses.set(scope, list);
+        inMemoryActiveAddress.set(scope, list[0]);
       }
     }
 
