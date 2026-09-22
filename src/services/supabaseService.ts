@@ -859,6 +859,58 @@ export async function verifyPhoneChangeOtp(
 }
 
 /**
+ * Dispatches an Email OTP to the user's verified/linked email to authorize a mobile number change.
+ */
+export async function sendEmailOtpForPhoneChange(
+  email: string,
+  newPhone?: string,
+  customerName?: string
+): Promise<{ success: boolean; message?: string; emailMasked?: string; devOtp?: string; error?: string }> {
+  try {
+    const res = await fetch('/api/auth/send-email-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, phone: newPhone, customerName })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || data.message || 'Failed to send verification code to email.' };
+    }
+    return {
+      success: true,
+      message: data.message,
+      emailMasked: data.emailMasked,
+      devOtp: data.devOtp
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Network error sending email verification code.' };
+  }
+}
+
+/**
+ * Verifies the 6-digit code sent to the user's email before updating their mobile number.
+ */
+export async function verifyEmailOtpForPhoneChange(
+  email: string,
+  otp: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/auth/verify-email-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || data.message || 'Invalid or expired OTP code.' };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Network error verifying email code.' };
+  }
+}
+
+/**
  * Links an email address to the currently logged in Supabase user account.
  */
 export async function linkEmailToUser(
@@ -1241,12 +1293,16 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
           (!authData.user.email && Boolean(authData.user.phone));
 
         if (isInternalPhoneUser) {
-          // Keep genuine user email if present, strip synthetic internal email
+          // Check if metadata has real_email from linked account
+          if (!cloudEmail && meta.real_email && !meta.real_email.includes('@girirajpower.internal')) {
+            cloudEmail = meta.real_email;
+            found = true;
+          }
           if (cloudEmail && cloudEmail.includes('@girirajpower.internal')) {
             cloudEmail = '';
           }
-          if (!cloudPhone && (authData.user.phone || meta.phone)) {
-            cloudPhone = cleanPhoneAutofill(authData.user.phone || meta.phone);
+          if (!cloudPhone && (authData.user.phone || meta.phone || meta.contact_number)) {
+            cloudPhone = cleanPhoneAutofill(authData.user.phone || meta.phone || meta.contact_number);
             found = true;
           }
           if (!cloudName && (meta.full_name || meta.name)) {
@@ -1258,15 +1314,15 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
             found = true;
           }
         } else {
-          if (!cloudPhone && (authData.user.phone || meta.phone)) {
-            cloudPhone = cleanPhoneAutofill(authData.user.phone || meta.phone);
+          if (!cloudPhone && (authData.user.phone || meta.phone || meta.contact_number)) {
+            cloudPhone = cleanPhoneAutofill(authData.user.phone || meta.phone || meta.contact_number);
             found = true;
           }
           if (!cloudName && (meta.full_name || meta.name)) {
             cloudName = meta.full_name || meta.name;
             found = true;
           }
-          if (!cloudEmail && authData.user.email) {
+          if (!cloudEmail && authData.user.email && !authData.user.email.includes('@girirajpower.internal')) {
             cloudEmail = authData.user.email;
             found = true;
           }
@@ -1282,6 +1338,89 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
         }
       }
     } catch {}
+
+    // 4. Cross-account resolution: Check by phone or email if either is missing
+    try {
+      const cleanPhone = cloudPhone ? cloudPhone.replace(/\D/g, '').slice(-10) : '';
+      const formattedE164 = cleanPhone ? `+91${cleanPhone}` : '';
+
+      // If we have a verified phone but email is missing, query other user_profiles records with this phone
+      if (cleanPhone && !cloudEmail) {
+        const { data: pByPhone } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .or(`phone.eq.${formattedE164},phone.eq.${cleanPhone},phone.ilike.%${cleanPhone}%`)
+          .order('updated_at', { ascending: false })
+          .limit(5);
+
+        if (pByPhone && pByPhone.length > 0) {
+          const matchWithEmail = pByPhone.find((p) => p.email && !p.email.includes('@girirajpower.internal'));
+          if (matchWithEmail) {
+            cloudEmail = matchWithEmail.email;
+            if ((!cloudName || cloudName.startsWith('Giriraj Member')) && (matchWithEmail.full_name || matchWithEmail.name)) {
+              cloudName = matchWithEmail.full_name || matchWithEmail.name;
+            }
+            if (!cloudAvatar && (matchWithEmail.avatar_url || matchWithEmail.photo_url)) {
+              cloudAvatar = matchWithEmail.avatar_url || matchWithEmail.photo_url;
+            }
+            if (!cloudDob && matchWithEmail.dob) cloudDob = matchWithEmail.dob;
+            found = true;
+          }
+        }
+      }
+
+      // If we have an email but phone is missing, query other user_profiles records with this email
+      if (cloudEmail && !cloudPhone && !cloudEmail.includes('@girirajpower.internal')) {
+        const { data: pByEmail } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .ilike('email', cloudEmail.trim().toLowerCase())
+          .order('updated_at', { ascending: false })
+          .limit(5);
+
+        if (pByEmail && pByEmail.length > 0) {
+          const matchWithPhone = pByEmail.find((p) => p.phone);
+          if (matchWithPhone && matchWithPhone.phone) {
+            cloudPhone = cleanPhoneAutofill(matchWithPhone.phone);
+            if ((!cloudName || cloudName.startsWith('Giriraj Member')) && (matchWithPhone.full_name || matchWithPhone.name)) {
+              cloudName = matchWithPhone.full_name || matchWithPhone.name;
+            }
+            if (!cloudAvatar && (matchWithPhone.avatar_url || matchWithPhone.photo_url)) {
+              cloudAvatar = matchWithPhone.avatar_url || matchWithPhone.photo_url;
+            }
+            if (!cloudDob && matchWithPhone.dob) cloudDob = matchWithPhone.dob;
+            found = true;
+          }
+        }
+      }
+
+      // If still missing email, check orders placed under this phone
+      if (cleanPhone && !cloudEmail) {
+        const { data: oRows } = await supabase
+          .from('orders')
+          .select('customer_name, recipient_name, customer_email, recipient_email, updated_at')
+          .or(`phone.eq.${cleanPhone},phone.eq.${formattedE164},recipient_phone.eq.${cleanPhone},recipient_phone.eq.${formattedE164}`)
+          .order('updated_at', { ascending: false })
+          .limit(5);
+
+        if (oRows && oRows.length > 0) {
+          const oBest = oRows.find((o) => (o.customer_email || o.recipient_email) && !(o.customer_email || o.recipient_email).includes('@girirajpower.internal'));
+          if (oBest) {
+            const raw = (oBest.customer_email || oBest.recipient_email || '').trim().toLowerCase();
+            if (raw && !raw.includes('@girirajpower.internal')) {
+              cloudEmail = raw;
+              found = true;
+            }
+            if ((!cloudName || cloudName.startsWith('Giriraj Member')) && (oBest.customer_name || oBest.recipient_name)) {
+              cloudName = oBest.customer_name || oBest.recipient_name;
+              found = true;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.debug('Cross-account profile resolution notice:', e);
+    }
 
     if (cloudEmail && cloudEmail.includes('@girirajpower.internal')) {
       cloudEmail = '';
@@ -1451,7 +1590,30 @@ export async function saveUserProfile(
 
   if (scope) {
     inMemoryProfiles.set(scope, updated);
+    safeSetItem(`giriraj_profile_${scope}`, JSON.stringify(updated));
   }
+
+  const cleanPhone = updated.phone ? updated.phone.replace(/\D/g, '').slice(-10) : '';
+  if (cleanPhone) {
+    inMemoryProfiles.set(`phone_${cleanPhone}`, updated);
+    safeSetItem(`giriraj_profile_phone_${cleanPhone}`, JSON.stringify(updated));
+  }
+
+  // Always sync to server API
+  try {
+    fetch('/api/user-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: authUserId || updated.id,
+        phone: updated.phone || null,
+        full_name: updated.name || null,
+        email: effectiveEmail || null,
+        avatar_url: updated.photoURL || null,
+        dob: updated.dob || null
+      })
+    }).catch(() => {});
+  } catch {}
 
   // Synchronize to Supabase & Backend API
   try {
@@ -1664,13 +1826,16 @@ export function doesOrderBelongToUser(
   if (!user || !user.id) return false;
 
   const orderUserId = order.user_id || order.userId;
-  // If the order has an explicit user_id matching current user, confirm ownership
-  if (orderUserId && String(orderUserId) === String(user.id)) {
+  const meta = user.user_metadata || {};
+  const effectiveUserId = meta.master_user_id || meta.linked_user_id || user.id;
+
+  // If the order has an explicit user_id matching current user or linked master account
+  if (orderUserId && (String(orderUserId) === String(user.id) || String(orderUserId) === String(effectiveUserId))) {
     return true;
   }
 
   // Check exact 10-digit phone match (orders placed under the user's verified phone number)
-  const rawUPhone = user.phone || user.user_metadata?.phone || user.user_metadata?.contact_number || '';
+  const rawUPhone = user.phone || meta.phone || meta.contact_number || '';
   const uPhone = rawUPhone.replace(/\D/g, '').slice(-10);
   const rawOPhone = order.phone || order.recipient_phone || order.recipientPhone || order.customerPhone || order.customer_phone || '';
   const oPhone = rawOPhone.replace(/\D/g, '').slice(-10);
@@ -1679,7 +1844,7 @@ export function doesOrderBelongToUser(
   }
 
   // Check exact email match (case-insensitive) - ignore internal synthetic emails
-  const uEmail = (user.email || user.user_metadata?.email || user.user_metadata?.real_email || '').trim().toLowerCase();
+  const uEmail = (meta.real_email || user.email || meta.email || '').trim().toLowerCase();
   const oEmail = (order.customerEmail || order.customer_email || order.recipient_email || order.recipientEmail || '').trim().toLowerCase();
   if (uEmail && oEmail && uEmail.includes('@') && !uEmail.includes('@girirajpower.internal') && uEmail === oEmail) {
     return true;
@@ -1857,16 +2022,22 @@ export async function fetchUserOrders(): Promise<Order[]> {
     }
 
     const user = userData.user;
+    const meta = user.user_metadata || {};
+    const effectiveUserId = meta.master_user_id || meta.linked_user_id || user.id;
     const scope = getUserScopeKeyFromUser(user);
     if (scope) {
       activeUserScope = scope;
     }
 
-    const userEmail = (user.email || user.user_metadata?.email || '').trim().toLowerCase();
-    const rawPhone = user.phone || user.user_metadata?.phone || '';
+    let userEmail = (meta.real_email || user.email || meta.email || '').trim().toLowerCase();
+    if (userEmail.includes('@girirajpower.internal')) userEmail = '';
+    const rawPhone = user.phone || meta.phone || meta.contact_number || '';
     const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10);
 
     const orClauses: string[] = [`user_id.eq.${user.id}`];
+    if (effectiveUserId && effectiveUserId !== user.id) {
+      orClauses.push(`user_id.eq.${effectiveUserId}`);
+    }
     if (userEmail && userEmail.includes('@')) {
       orClauses.push(`customer_email.ilike.${userEmail}`);
       orClauses.push(`recipient_email.ilike.${userEmail}`);

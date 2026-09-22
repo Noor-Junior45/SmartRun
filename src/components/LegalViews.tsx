@@ -1,4 +1,5 @@
 import React from 'react';
+import { RefundPolicy } from './RefundPolicy';
 import {
   ArrowLeft,
   ShieldCheck,
@@ -78,6 +79,10 @@ export const LegalView = ({ onBack, type }: LegalViewProps) => {
         };
     }
   };
+
+  if (type === 'refund') {
+    return <RefundPolicy onBack={onBack} />;
+  }
 
   const meta = getPageMeta();
   const IconComponent = meta.icon;
@@ -220,50 +225,6 @@ export const LegalView = ({ onBack, type }: LegalViewProps) => {
                     <p className="font-bold text-slate-900 text-xs">Q: How are delivery charges calculated?</p>
                     <p className="text-slate-600 text-xs">
                       Delivery fees are dynamically calculated based on the item type, total weight/volume, and the distance between our Kasba depot and your site address.
-                    </p>
-                  </div>
-                </div>
-              </section>
-            </div>
-          )}
-
-          {/* =========================================================================
-              3. REFUND & RETURN POLICY VIEW
-              ========================================================================= */}
-          {type === 'refund' && (
-            <div className="space-y-6">
-              <section className="space-y-2">
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#00875a]"></span>
-                  1. 7-Day Return &amp; Replacement Condition
-                </h3>
-                <p>
-                  At SmartRun, customer satisfaction is our top priority. We accept returns or replacement requests within <strong>7 days from the date of delivery</strong>, subject to the following conditions:
-                </p>
-                <ul className="list-disc pl-5 space-y-1.5 text-slate-600">
-                  <li><strong>Product Condition:</strong> The product must be completely intact, unused, uninstalled, and free from cuts, scratches, or moisture exposure.</li>
-                  <li><strong>Original Packaging:</strong> The item must be returned in its original manufacturer box/wrapper with all barcodes, seals, holograms, and warranty tags intact.</li>
-                  <li><strong>Tax Invoice:</strong> The physical or digital GST invoice must be provided at the time of return inspection.</li>
-                  <li><strong>Non-Returnable Items:</strong> Custom cut cables, opened waterproofing sealant buckets, and special pre-mixed cement bags cannot be returned once delivered.</li>
-                </ul>
-              </section>
-
-              <section className="space-y-2 pt-4 border-t border-slate-100">
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#00875a]"></span>
-                  2. Refund Processing Modes
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <p className="font-black text-slate-900">⚡ Instant SmartRun Wallet Credit</p>
-                    <p className="text-[11px] text-slate-600 mt-0.5">
-                      Credited immediately upon successful warehouse verification with zero deductions.
-                    </p>
-                  </div>
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <p className="font-black text-slate-900">🏦 Original UPI / Bank Account Refund</p>
-                    <p className="text-[11px] text-slate-600 mt-0.5">
-                      Processed to your original payment method / bank account within 3 to 5 business banking days.
                     </p>
                   </div>
                 </div>

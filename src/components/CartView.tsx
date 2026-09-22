@@ -696,73 +696,97 @@ export const CartView = ({
   // ==========================================================================
   if (items.length === 0) {
     return (
-      <div className="min-h-[75vh] flex flex-col items-center justify-center px-4 py-12 font-sans">
-        <div className="max-w-md w-full text-center p-4 sm:p-6">
-          <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-3xl flex items-center justify-center mx-auto mb-5 border border-amber-100 shadow-inner">
-            <ShoppingBag className="w-10 h-10 stroke-[1.5]" />
+      <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans pb-16">
+        <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+          {/* Header */}
+          <div className="flex items-center gap-2.5 mb-6">
+            <button
+              onClick={() => {
+                if (window.history.length > 1) {
+                  navigate(-1);
+                } else {
+                  onContinueShopping();
+                }
+              }}
+              className="p-2 -ml-1 text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-200/60 transition cursor-pointer"
+              title="Back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              My Cart
+            </h1>
           </div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-6">Your cart is empty</h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-sm mx-auto">
-            <button
-              onClick={onContinueShopping}
-              className="w-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-black py-3 px-4 rounded-xl shadow-xs transition active:scale-98 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer border border-amber-500/30 whitespace-nowrap"
-            >
-              <Zap className="w-4 h-4 fill-slate-950 shrink-0" />
-              <span>Electrical Items</span>
-            </button>
-            <button
-              onClick={() => navigate('/construction')}
-              className="w-full bg-white hover:bg-slate-100 text-slate-900 font-bold py-3 px-4 rounded-xl shadow-2xs transition active:scale-98 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer border border-slate-200 whitespace-nowrap"
-            >
-              <Building2 className="w-4 h-4 text-slate-700 shrink-0" />
-              <span>Construction Items</span>
-            </button>
+          <div className="min-h-[50vh] flex flex-col items-center justify-center px-4 py-8">
+            <div className="max-w-md w-full text-center p-4 sm:p-6">
+              <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-3xl flex items-center justify-center mx-auto mb-5 border border-amber-100 shadow-inner">
+                <ShoppingBag className="w-10 h-10 stroke-[1.5]" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-6">Your cart is empty</h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-sm mx-auto">
+                <button
+                  onClick={onContinueShopping}
+                  className="w-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-black py-3 px-4 rounded-xl shadow-xs transition active:scale-98 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer border border-amber-500/30 whitespace-nowrap"
+                >
+                  <Zap className="w-4 h-4 fill-slate-950 shrink-0" />
+                  <span>Electrical Items</span>
+                </button>
+                <button
+                  onClick={() => navigate('/construction')}
+                  className="w-full bg-white hover:bg-slate-100 text-slate-900 font-bold py-3 px-4 rounded-xl shadow-2xs transition active:scale-98 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer border border-slate-200 whitespace-nowrap"
+                >
+                  <Building2 className="w-4 h-4 text-slate-700 shrink-0" />
+                  <span>Construction Items</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Saved for Later in Empty State */}
+            {savedItems.length > 0 && (
+              <div className="max-w-2xl w-full mt-10 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm">
+                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                  <Bookmark className="w-5 h-5 text-amber-500" />
+                  <h3 className="text-lg font-black text-slate-900">Saved for Later ({savedItems.length})</h3>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {savedItems.map((saved) => (
+                    <div key={saved.id} className="py-3.5 flex items-center gap-4 justify-between">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={saved.product.image || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=200&auto=format&fit=crop'}
+                          alt={saved.product.name}
+                          className="w-14 h-14 object-contain rounded-xl bg-slate-50 border border-slate-100 p-1"
+                        />
+                        <div>
+                          <h4 className="font-bold text-sm text-slate-900 line-clamp-1">{saved.product.name}</h4>
+                          <p className="text-xs text-slate-400">{saved.product.brand}</p>
+                          <p className="text-sm font-black text-slate-900 mt-0.5">₹{saved.product.price}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleMoveToCart(saved)}
+                          className="px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
+                        >
+                          Move to Cart
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSavedItem(saved.productId)}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Saved for Later in Empty State */}
-        {savedItems.length > 0 && (
-          <div className="max-w-2xl w-full mt-10 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm">
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
-              <Bookmark className="w-5 h-5 text-amber-500" />
-              <h3 className="text-lg font-black text-slate-900">Saved for Later ({savedItems.length})</h3>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {savedItems.map((saved) => (
-                <div key={saved.id} className="py-3.5 flex items-center gap-4 justify-between">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={saved.product.image || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=200&auto=format&fit=crop'}
-                      alt={saved.product.name}
-                      className="w-14 h-14 object-contain rounded-xl bg-slate-50 border border-slate-100 p-1"
-                    />
-                    <div>
-                      <h4 className="font-bold text-sm text-slate-900 line-clamp-1">{saved.product.name}</h4>
-                      <p className="text-xs text-slate-400">{saved.product.brand}</p>
-                      <p className="text-sm font-black text-slate-900 mt-0.5">₹{saved.product.price}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleMoveToCart(saved)}
-                      className="px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
-                    >
-                      Move to Cart
-                    </button>
-                    <button
-                      onClick={() => handleDeleteSavedItem(saved.productId)}
-                      className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 transition cursor-pointer"
-                      title="Remove"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -778,9 +802,15 @@ export const CartView = ({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
             <button
-              onClick={onContinueShopping}
+              onClick={() => {
+                if (window.history.length > 1) {
+                  navigate(-1);
+                } else {
+                  onContinueShopping();
+                }
+              }}
               className="p-2 -ml-1 text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-200/60 transition cursor-pointer"
-              title="Continue Shopping"
+              title="Back"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>

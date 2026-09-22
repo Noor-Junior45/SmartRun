@@ -1,19 +1,7 @@
 import React from 'react';
 import {
   ArrowLeft,
-  ShieldCheck,
-  RotateCcw,
-  Clock,
-  CreditCard,
-  Building2,
-  CheckCircle2,
-  AlertCircle,
-  HelpCircle,
-  PhoneCall,
-  ArrowDownRight,
-  ExternalLink,
-  Lock,
-  Smartphone
+  PhoneCall
 } from 'lucide-react';
 
 export interface RefundPolicyProps {
@@ -30,291 +18,220 @@ export const RefundPolicy = ({
   return (
     <div
       id="refund-policy-container"
-      className={isEmbedded ? 'space-y-5' : 'min-h-screen bg-slate-50 text-slate-900 pb-20'}
+      className="min-h-screen bg-white text-slate-900 pb-20 font-sans"
     >
-      {/* Top Header Banner (Shown only when not embedded inside an existing page) */}
-      {!isEmbedded && (
-        <div className="bg-gradient-to-b from-[#8B0000] via-[#A30000] to-[#B31B1B] text-white pt-4 pb-6 px-4 sm:px-6 relative shadow-md rounded-b-2xl">
-          <div className="max-w-3xl mx-auto flex items-center justify-between">
-            {onBack ? (
-              <button
-                id="btn-refund-policy-back"
-                onClick={onBack}
-                className="p-1.5 -ml-1 rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 text-white transition-all cursor-pointer flex items-center gap-1.5"
-                aria-label="Go back"
-              >
-                <ArrowLeft className="w-5 h-5" />
-                <span className="text-xs font-semibold sm:inline hidden">Back</span>
-              </button>
-            ) : (
-              <div />
-            )}
-          </div>
-
-          <div className="max-w-3xl mx-auto mt-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0 shadow-xs">
-                <ShieldCheck className="w-6 h-6 text-amber-300" />
-              </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-                  Refund Policy
-                </h1>
-              </div>
-            </div>
-          </div>
+      {/* Top Header: Simple Heading 'Refund policy' and Arrow Back Button in the same line with White Background */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 sm:px-6 py-3.5">
+        <div className="max-w-3xl mx-auto flex items-center gap-3">
+          {onBack && (
+            <button
+              id="btn-refund-policy-back"
+              type="button"
+              onClick={onBack}
+              className="p-1.5 -ml-1.5 rounded-full hover:bg-slate-100 active:bg-slate-200 text-slate-700 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+              aria-label="Go back"
+            >
+              <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
+            </button>
+          )}
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight whitespace-nowrap">
+            Refund policy
+          </h1>
         </div>
-      )}
+      </div>
 
-      {/* Embedded Header Title Card */}
-      {isEmbedded && (
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#8B0000] text-white flex items-center justify-center shrink-0 shadow-xs">
-                <ShieldCheck className="w-5 h-5 text-amber-300" />
-              </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                  Refund Policy
-                </h2>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className={isEmbedded ? 'space-y-4' : 'max-w-3xl mx-auto px-4 sm:px-6 mt-5 space-y-5'}>
-        {/* Core Direct-to-Source Notice */}
-        <div
-          id="refund-direct-source-box"
-          className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 border border-emerald-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs"
-        >
-          <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-              <RotateCcw className="w-5 h-5" />
-            </div>
-            <div className="space-y-1 text-xs sm:text-sm text-slate-700 leading-relaxed">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wide text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-300/50">
-                  Zero In-App Middleman
-                </span>
-                <span className="text-[10px] sm:text-xs font-semibold text-slate-500">
-                  ₹0 Processing Fee
-                </span>
-              </div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                100% Refund Direct to Your Source Account
-              </h3>
-              <p>
-                Our store does <strong>not</strong> withhold your refund as locked in-app store credits or wallet balance.
-                When an order is cancelled within the permitted cancellation period, the refund is initiated directly via the <strong>Razorpay Payment Gateway</strong> back to the exact payment method you used (your original UPI handle, bank account, or debit/credit card).
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* 2-Minute Cancellation Policy Rule */}
-        <div
-          id="refund-window-rule"
-          className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-3.5"
-        >
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-              <Clock className="w-4 h-4" />
-            </div>
-            <h3 className="text-sm sm:text-base font-bold text-slate-900">
-              The 2-Minute Cancellation Window
-            </h3>
+      {/* Main Content Area - Clean Article Layout without unnecessary background boxes */}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
+        
+        {/* Article 1: 100% Direct to Source Account */}
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              1. Direct-to-Source Refund Guarantee
+            </h2>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold whitespace-nowrap shrink-0">
+              100% Refund
+            </span>
           </div>
 
-          <div className="space-y-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
-            <p>
-              To maintain our <strong>60-minute express Kolkata delivery</strong> commitment, orders enter live picking and warehouse packing immediately.
+          <p className="text-sm text-slate-600 leading-relaxed">
+            SmartRun does <strong>not</strong> withhold your funds as locked in-app store credits or non-withdrawable wallet points. When an eligible order cancellation or return is confirmed, the full amount is returned directly through the <strong>Razorpay Payment Gateway</strong> to the original payment source you used (your original UPI handle, bank account, or debit/credit card).
+          </p>
+
+          {/* Highlight Box: Direct Refund Security */}
+          <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold whitespace-nowrap">
+                Zero Deduction
+              </span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[11px] font-bold whitespace-nowrap">
+                Direct Bank Transfer
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-700 leading-normal">
+              ₹0 cancellation charges or processing fees are deducted when cancellations occur within the approved window.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-1">
-                <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-xs">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Cancelled Within 2 Minutes
-                </div>
-                <p className="text-[11px] text-slate-600">
-                  Full 100% refund is initiated automatically via Razorpay with ₹0 deduction. Instant confirmation is provided with a unique Razorpay Refund ID.
-                </p>
-              </div>
+          </div>
+        </section>
 
-              <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-1">
-                <div className="flex items-center gap-1.5 text-rose-700 font-bold text-xs">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  After 2 Minutes
-                </div>
-                <p className="text-[11px] text-slate-600">
-                  Once picking completes or a delivery partner is dispatched, automatic cancellation locks to prevent warehouse loss. Contact support for exceptional issues.
-                </p>
+        {/* Article 2: The 2-Minute Cancellation Window */}
+        <section className="space-y-3 pt-6 border-t border-slate-100">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              2. Order Cancellation Rules
+            </h2>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-bold whitespace-nowrap shrink-0">
+              60-Min Express
+            </span>
+          </div>
+
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Because our express delivery partners dispatch materials within minutes of placement, order processing begins immediately at our Kasba warehouse:
+          </p>
+
+          <div className="space-y-3 text-sm text-slate-700">
+            <div className="flex items-start gap-2.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-600 mt-2 shrink-0" />
+              <div>
+                <strong className="text-slate-900">Cancelled Within 2 Minutes:</strong> You can cancel directly from the order screen. A 100% full refund is initiated automatically with an instant Razorpay Refund ID.
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-600 mt-2 shrink-0" />
+              <div>
+                <strong className="text-slate-900">After 2 Minutes:</strong> Once materials are packed or our delivery rider has departed, automatic in-app cancellation locks to protect warehouse operations. For urgent issues, please reach out to customer support immediately.
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Clearing Timelines by Payment Method */}
-        <div
-          id="refund-timelines-card"
-          className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-3.5"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                <CreditCard className="w-4 h-4" />
-              </div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                Razorpay Banking Clearing Timelines
-              </h3>
-            </div>
-            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+        {/* Article 3: Clearing Timelines by Payment Method */}
+        <section className="space-y-3 pt-6 border-t border-slate-100">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              3. Bank Clearing Timelines
+            </h2>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-semibold whitespace-nowrap shrink-0">
               Standard Banking SLA
             </span>
           </div>
 
-          <div className="divide-y divide-slate-100 text-xs sm:text-sm">
-            {/* UPI */}
-            <div className="py-3 flex items-start justify-between gap-3">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-1.5">
-                  <Smartphone className="w-3.5 h-3.5 text-blue-600" />
-                  <p className="font-bold text-slate-900">UPI Instant Pay</p>
-                </div>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Refunds are released into the banking network immediately by Razorpay. Settlement into your account follows Indian banking turnaround schedules:
+          </p>
+
+          <div className="divide-y divide-slate-100 text-sm">
+            <div className="py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-bold text-slate-900">UPI Payments</p>
                 <p className="text-xs text-slate-500">Google Pay, PhonePe, Paytm, BHIM, CRED</p>
               </div>
-              <div className="text-right shrink-0">
-                <span className="inline-block font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg text-xs">
-                  Instant – 24 Hours
-                </span>
-                <p className="text-[10px] text-slate-400 mt-0.5">Most reflect within minutes</p>
-              </div>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold whitespace-nowrap shrink-0">
+                Instant – 24 Hours
+              </span>
             </div>
 
-            {/* Debit / Credit Cards */}
-            <div className="py-3 flex items-start justify-between gap-3">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-1.5">
-                  <CreditCard className="w-3.5 h-3.5 text-purple-600" />
-                  <p className="font-bold text-slate-900">Debit / Credit Cards</p>
-                </div>
+            <div className="py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-bold text-slate-900">Debit &amp; Credit Cards</p>
                 <p className="text-xs text-slate-500">Visa, MasterCard, RuPay (All issuing banks)</p>
               </div>
-              <div className="text-right shrink-0">
-                <span className="inline-block font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg text-xs">
-                  5 to 7 Working Days
-                </span>
-                <p className="text-[10px] text-slate-400 mt-0.5">Governed by card issuer bank</p>
-              </div>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold whitespace-nowrap shrink-0">
+                5 to 7 Working Days
+              </span>
             </div>
 
-            {/* Net Banking */}
-            <div className="py-3 flex items-start justify-between gap-3">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                  <p className="font-bold text-slate-900">Net Banking</p>
-                </div>
+            <div className="py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-bold text-slate-900">Net Banking</p>
                 <p className="text-xs text-slate-500">SBI, HDFC, ICICI, Axis, PNB &amp; others</p>
               </div>
-              <div className="text-right shrink-0">
-                <span className="inline-block font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg text-xs">
-                  2 to 4 Working Days
-                </span>
-                <p className="text-[10px] text-slate-400 mt-0.5">Direct NEFT / IMPS bank credit</p>
-              </div>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold whitespace-nowrap shrink-0">
+                2 to 4 Working Days
+              </span>
             </div>
 
-            {/* Cash on Delivery */}
-            <div className="py-3 flex items-start justify-between gap-3">
-              <div className="space-y-0.5">
+            <div className="py-3 flex items-center justify-between gap-3">
+              <div>
                 <p className="font-bold text-slate-900">Cash on Delivery (COD)</p>
-                <p className="text-xs text-slate-500">Payment made in cash or QR at doorstep</p>
+                <p className="text-xs text-slate-500">Payment not yet made</p>
               </div>
-              <div className="text-right shrink-0">
-                <span className="inline-block font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
-                  ₹0 Charged
-                </span>
-                <p className="text-[10px] text-slate-400 mt-0.5">Order cancelled at zero cost</p>
-              </div>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold whitespace-nowrap shrink-0">
+                ₹0 Charged
+              </span>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Razorpay Refund ID & ARN Tracking */}
-        <div
-          id="refund-arn-info"
-          className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-3"
-        >
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-              <Building2 className="w-4 h-4" />
-            </div>
-            <h3 className="text-sm sm:text-base font-bold text-slate-900">
-              Razorpay Refund ID &amp; Bank ARN Reference
-            </h3>
-          </div>
-
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            Whenever a refund is initiated by our system, Razorpay assigns a unique <strong>Refund ID</strong> (e.g., <code className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold">rfnd_P18xyz9482</code>) and communicates the Acquiring Bank Reference Number (ARN).
+        {/* Article 4: Razorpay Refund ID & Bank ARN Tracking */}
+        <section className="space-y-3 pt-6 border-t border-slate-100">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900">
+            4. Tracking Your Refund
+          </h2>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Every refund initiated generates an official <strong>Razorpay Refund ID</strong> (e.g., <code className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded font-mono text-xs font-bold">rfnd_P18xyz9482</code>) and an <strong>Acquiring Bank Reference Number (ARN)</strong>.
           </p>
+          <ul className="list-disc pl-5 space-y-1.5 text-sm text-slate-600">
+            <li><strong>Automated SMS &amp; Email:</strong> Razorpay dispatches notification messages directly to your registered contact upon fund release.</li>
+            <li><strong>Bank Branch Trace:</strong> In the rare event a credit is delayed beyond the standard banking SLA, your bank manager can instantly locate the transaction using the ARN reference.</li>
+          </ul>
+        </section>
 
-          <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 text-xs text-slate-700 space-y-2">
-            <div className="flex items-start gap-2">
-              <ArrowDownRight className="w-3.5 h-3.5 text-purple-600 mt-0.5 shrink-0" />
-              <span>
-                <strong>Direct Notification:</strong> Razorpay sends automated SMS and email notifications directly to your registered phone number and email upon releasing funds to the banking network.
-              </span>
-            </div>
-            <div className="flex items-start gap-2">
-              <ArrowDownRight className="w-3.5 h-3.5 text-purple-600 mt-0.5 shrink-0" />
-              <span>
-                <strong>Bank Branch Tracing:</strong> If your bank statement does not reflect the credit after the standard turnaround time, you can present the ARN to your bank manager for immediate tracing.
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Kolkata Support Help Desk */}
-        <div
-          id="refund-support-card"
-          className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-sm space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <HelpCircle className="w-4 h-4 text-amber-400" />
-              <h4 className="text-sm font-bold text-white">Have Questions About a Refund?</h4>
-            </div>
-            <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Kolkata Support Active
+        {/* Article 5: 7-Day Return & Replacement for Damaged/Defective Goods */}
+        <section className="space-y-3 pt-6 border-t border-slate-100">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              5. 7-Day Replacement for Damaged Items
+            </h2>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-bold whitespace-nowrap shrink-0">
+              Doorstep Verification
             </span>
           </div>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Our Kolkata central depot finance &amp; customer care team is available daily from 9:00 AM to 9:00 PM to assist you with transaction references or bank inquiries.
+          <p className="text-sm text-slate-600 leading-relaxed">
+            If you receive defective, wrong, or transit-damaged materials, please report it within <strong>7 days of delivery</strong>:
           </p>
-          <div className="pt-1 flex flex-wrap items-center gap-3">
-            <a
-              id="link-call-helpline"
-              href="tel:+918777400280"
-              className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-xs active:scale-95"
-            >
-              <PhoneCall className="w-3.5 h-3.5" />
-              Call Support (+91 87774 00280)
-            </a>
-            {onContactSupport && (
-              <button
-                type="button"
-                onClick={onContactSupport}
-                className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-medium text-xs px-3 py-2 rounded-xl transition-all cursor-pointer"
+          <ul className="list-disc pl-5 space-y-1.5 text-sm text-slate-600">
+            <li>Unused products with manufacturer packaging, seals, and tags intact are eligible for immediate doorstep replacement or refund.</li>
+            <li>Custom-cut wire coils or opened chemical buckets cannot be accepted once altered.</li>
+          </ul>
+        </section>
+
+        {/* Highlight Box: Need Help / Support Section */}
+        <section className="pt-6 border-t border-slate-100">
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                Have questions about a refund?
+              </h3>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold whitespace-nowrap shrink-0">
+                Daily 9 AM – 9 PM
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Our Kolkata finance and dispatch desk is ready to help you track references or answer questions.
+            </p>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <a
+                id="link-call-helpline"
+                href="tel:+918777400280"
+                className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs sm:text-sm px-3.5 py-2 rounded-xl transition-all shadow-2xs whitespace-nowrap"
               >
-                Open Help Center
-              </button>
-            )}
+                <PhoneCall className="w-4 h-4" />
+                <span>Call Support (+91 87774 00280)</span>
+              </a>
+              {onContactSupport && (
+                <button
+                  type="button"
+                  onClick={onContactSupport}
+                  className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 font-bold text-xs sm:text-sm px-3.5 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap"
+                >
+                  <span>Open Help Center</span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        </section>
+
       </div>
     </div>
   );

@@ -181,6 +181,20 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
             text: options.text
           });
         }
+
+        // If in Resend testing sandbox (unverified domain), also send copy to account owner
+        const errMsgNow = (res.error?.message || "").toLowerCase();
+        if (errMsgNow.includes("only send testing emails to your own email address") && recipient !== "noorpos.alerts@gmail.com") {
+          try {
+            await callResendApi(apiKey, {
+              from: "BuildNow <onboarding@resend.dev>",
+              to: ["noorpos.alerts@gmail.com"],
+              subject: `[OTP for ${recipient}] ${options.subject}`,
+              html: `<p style="font-family: sans-serif; font-size: 13px; color: #334155; margin-bottom: 16px;"><strong>Resend Test Mode Notice:</strong> Resend account is currently using the onboarding sandbox. Direct delivery was requested for <strong>${recipient}</strong>:</p>` + options.html,
+              text: `[OTP for ${recipient}] ` + (options.text || "")
+            });
+          } catch {}
+        }
       }
 
       if (!res.ok) {
@@ -1056,18 +1070,43 @@ const getClientIp = (req: express.Request): string => {
   return req.ip || req.socket.remoteAddress || "127.0.0.1";
 };
 
-// apiLimiter: 100 requests per 15 minutes, applied to all /api/ routes
+// apiLimiter: 5000 requests per 15 minutes, applied to all general /api/ routes
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per 15 minutes
+  max: 5000, // 5000 requests per 15 minutes to allow uninterrupted real-time polling and navigation
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, forwardedHeader: false, default: false },
+  keyGenerator: getClientIp,
+  skip: (req) => {
+    // Never rate-limit critical health checks, auth endpoints, or delivery location polling
+    const path = req.path || req.originalUrl || "";
+    return (
+      path.includes("/health") ||
+      path.includes("/auth/") ||
+      path.includes("/rider-location") ||
+      path.includes("/categories") ||
+      path.includes("/products")
+    );
+  },
+  message: {
+    success: false,
+    message: "Too many requests. Please try again later.",
+    retryAfterMinutes: 15
+  }
+});
+
+// emailOtpLimiter: 20 OTP requests per 15 minutes specifically for email verification
+const emailOtpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20, // 20 requests per 15 minutes per IP
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false, forwardedHeader: false, default: false },
   keyGenerator: getClientIp,
   message: {
     success: false,
-    message: "Too many requests. Please try again later.",
-    retryAfterMinutes: 15
+    message: "Too many OTP requests from this connection. Please wait a few minutes before trying again."
   }
 });
 
@@ -5619,7 +5658,7 @@ Respond ONLY with a valid JSON object matching the following structure:
         },
         body: JSON.stringify({
           route: "q",
-          message: `Your Giriraj Power verification OTP is ${cleanOtp}. Valid for 10 minutes.`,
+          message: `Your SmartRun verification OTP is ${cleanOtp}. Valid for 10 minutes.`,
           language: "english",
           flash: 0,
           numbers: cleanPhone
@@ -5639,6 +5678,11 @@ Respond ONLY with a valid JSON object matching the following structure:
       const anyResult = quickResult || otpResult;
       const anyStatus = anyResult?.status_code || otpResult?.status_code || quickResult?.status_code;
       const anyMsg = String(anyResult?.message || otpResult?.message || "");
+
+      if (anyStatus === 427 || anyMsg.toLowerCase().includes("dnd")) {
+        const dndError = "This mobile number is registered on TRAI DND (Do Not Disturb). Fast2SMS Quick SMS cannot deliver to DND-registered numbers. Please use a non-DND phone or complete website verification in Fast2SMS dashboard to use transactional route.";
+        return { success: false, error: dndError, data: { otp: otpResult, quick: quickResult, statusCode: 427 } };
+      }
 
       if (anyStatus === 414 || anyMsg.toLowerCase().includes("blacklisted")) {
         const ipError = "Fast2SMS Error 414: Server IP is blacklisted or restricted in your Fast2SMS Developer API settings. To fix: Open Fast2SMS Dashboard -> Dev API -> SECURITY tab, and disable IP Whitelisting or add server IP (34.34.254.4).";
@@ -5799,6 +5843,190 @@ Respond ONLY with a valid JSON object matching the following structure:
     }
   });
 
+  // =========================================================================
+  // EMAIL OTP STORE & ENDPOINTS FOR MOBILE NUMBER CHANGE VERIFICATION
+  // =========================================================================
+  interface CachedEmailOtp {
+    otp: string;
+    expiresAt: number;
+    attempts: number;
+    phone?: string;
+  }
+  const emailOtpStore = new Map<string, CachedEmailOtp>();
+
+  // Clean expired Email OTPs every 5 minutes
+  setInterval(() => {
+    const now = Date.now();
+    for (const [emailKey, entry] of emailOtpStore.entries()) {
+      if (entry.expiresAt < now) {
+        emailOtpStore.delete(emailKey);
+      }
+    }
+  }, 5 * 60 * 1000);
+
+  /**
+   * Send Email OTP for Mobile Number Change Verification
+   * POST /api/auth/send-email-otp
+   * Request Body: { email: "user@example.com", phone?: "9876543210", customerName?: "John" }
+   */
+  app.post("/api/auth/send-email-otp", emailOtpLimiter, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { email, phone, customerName } = req.body || {};
+      const cleanEmail = String(email || "").trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes("@") || !cleanEmail.includes(".")) {
+        return res.status(400).json({
+          success: false,
+          error: "A valid email address is required to receive verification OTP."
+        });
+      }
+
+      const cleanPhone = phone ? String(phone).replace(/\D/g, "").slice(-10) : "";
+      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      emailOtpStore.set(cleanEmail, {
+        otp: generatedOtp,
+        expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+        attempts: 0,
+        phone: cleanPhone
+      });
+
+      console.log(`[Email OTP] Generated code for ${cleanEmail}: ${generatedOtp} (New phone: ${cleanPhone || 'N/A'})`);
+
+      // Mask email for privacy
+      const atIdx = cleanEmail.indexOf("@");
+      const namePart = cleanEmail.substring(0, atIdx);
+      const domainPart = cleanEmail.substring(atIdx);
+      const maskedName = namePart.length <= 2 
+        ? namePart[0] + "*" 
+        : namePart[0] + "*".repeat(Math.min(namePart.length - 2, 4)) + namePart[namePart.length - 1];
+      const maskedEmail = `${maskedName}${domainPart}`;
+
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"></head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px;">
+          <div style="max-width: 480px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+            <div style="background-color: #f59e0b; padding: 20px; text-align: center;">
+              <h2 style="color: #0f172a; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.5px;">Giriraj Power (SmartRun)</h2>
+              <p style="color: #451a03; margin: 4px 0 0 0; font-size: 12px; font-weight: 600;">Security Verification Code</p>
+            </div>
+            <div style="padding: 28px 24px; text-align: center;">
+              <p style="font-size: 14px; color: #334155; margin: 0 0 16px 0;">
+                Hello${customerName ? ` <strong>${customerName}</strong>` : ''},
+              </p>
+              <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0 0 24px 0;">
+                You requested to update your account's mobile number${cleanPhone ? ` to <strong>+91 ${cleanPhone}</strong>` : ''}. Enter this 6-digit verification code to authorize this change:
+              </p>
+              <div style="background-color: #fef3c7; border: 2px dashed #f59e0b; border-radius: 12px; padding: 16px 28px; margin: 0 auto 24px auto; display: inline-block;">
+                <span style="font-size: 32px; font-weight: 900; font-family: monospace; letter-spacing: 6px; color: #78350f;">
+                  ${generatedOtp}
+                </span>
+              </div>
+              <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                This code is valid for 10 minutes. If you did not initiate this request, please secure your account immediately.
+              </p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 12px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="font-size: 11px; color: #64748b; margin: 0;">Express Electricals &bull; Kasba Warehouse Hub &bull; Kolkata</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      try {
+        await dispatchResendEmail({
+          to: cleanEmail,
+          subject: `🔐 ${generatedOtp} is your Giriraj Power verification code`,
+          html: emailHtml,
+          text: `Your Giriraj Power verification code to update your mobile number is: ${generatedOtp}. Valid for 10 minutes.`
+        });
+      } catch (sendErr) {
+        console.warn("[Email OTP Dispatch Notice]:", sendErr);
+      }
+
+      return res.json({
+        success: true,
+        message: `Verification code sent to ${cleanEmail}`,
+        email: cleanEmail,
+        emailMasked: maskedEmail
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to send email verification OTP."
+      });
+    }
+  });
+
+  /**
+   * Verify Email OTP Endpoint
+   * POST /api/auth/verify-email-otp
+   * Request Body: { email: "user@example.com", otp: "123456" }
+   */
+  app.post("/api/auth/verify-email-otp", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { email, otp } = req.body || {};
+      const cleanEmail = String(email || "").trim().toLowerCase();
+      const cleanOtp = String(otp || "").trim();
+
+      if (!cleanEmail || !cleanEmail.includes("@")) {
+        return res.status(400).json({ success: false, error: "A valid email address is required." });
+      }
+      if (!cleanOtp || cleanOtp.length !== 6) {
+        return res.status(400).json({ success: false, error: "Please enter the complete 6-digit OTP code." });
+      }
+
+      const cached = emailOtpStore.get(cleanEmail);
+      if (!cached) {
+        return res.status(400).json({
+          success: false,
+          error: "No active verification code found or code expired. Please request a new OTP."
+        });
+      }
+
+      if (Date.now() > cached.expiresAt) {
+        emailOtpStore.delete(cleanEmail);
+        return res.status(400).json({
+          success: false,
+          error: "Verification code has expired. Please request a fresh OTP."
+        });
+      }
+
+      cached.attempts += 1;
+      if (cached.attempts > 5) {
+        emailOtpStore.delete(cleanEmail);
+        return res.status(400).json({
+          success: false,
+          error: "Too many invalid attempts. Please request a new OTP code."
+        });
+      }
+
+      if (cached.otp !== cleanOtp) {
+        return res.status(400).json({
+          success: false,
+          error: "Incorrect verification code. Please check the code sent to your email."
+        });
+      }
+
+      // Validated successfully! Remove from store
+      emailOtpStore.delete(cleanEmail);
+      return res.json({
+        success: true,
+        verified: true,
+        message: "Email verification code verified successfully."
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Internal error verifying code."
+      });
+    }
+  });
+
   /**
    * Phone User Profile Resolution Endpoint
    * POST /api/auth/resolve-phone-user
@@ -5818,45 +6046,90 @@ Respond ONLY with a valid JSON object matching the following structure:
 
       let resolvedProfile: any = null;
 
+      // 0. Check in-memory serverProfileStore
+      const memProf = serverProfileStore.get(cleanPhone) || serverProfileStore.get(formattedE164);
+      if (memProf) {
+        resolvedProfile = { ...memProf };
+      }
+
       if (sb) {
         // 1. Check user_profiles table for any existing record matching this phone
         try {
           const { data: profiles, error: pErr } = await sb
             .from("user_profiles")
             .select("*")
-            .or(`phone.eq.${formattedE164},phone.eq.${cleanPhone}`)
+            .or(`phone.eq.${formattedE164},phone.eq.${cleanPhone},phone.ilike.%${cleanPhone}%`)
             .order("updated_at", { ascending: false })
-            .limit(1);
+            .limit(5);
 
           if (!pErr && Array.isArray(profiles) && profiles.length > 0) {
-            resolvedProfile = profiles[0];
+            // Prefer row that has a genuine non-internal email
+            const bestRow = profiles.find((p) => p.email && !p.email.includes("@girirajpower.internal")) || profiles[0];
+            resolvedProfile = {
+              user_id: bestRow.user_id || resolvedProfile?.user_id || null,
+              full_name: bestRow.full_name || bestRow.name || resolvedProfile?.full_name || null,
+              email: (bestRow.email && !bestRow.email.includes("@girirajpower.internal")) ? bestRow.email : (resolvedProfile?.email || null),
+              phone: formattedE164,
+              avatar_url: bestRow.avatar_url || resolvedProfile?.avatar_url || null,
+              dob: bestRow.dob || resolvedProfile?.dob || null,
+              wallet_balance: bestRow.wallet_balance !== undefined ? bestRow.wallet_balance : resolvedProfile?.wallet_balance,
+              refund_balance: bestRow.refund_balance !== undefined ? bestRow.refund_balance : resolvedProfile?.refund_balance,
+              cashback_balance: bestRow.cashback_balance !== undefined ? bestRow.cashback_balance : resolvedProfile?.cashback_balance
+            };
           }
         } catch (e) {
           console.debug("[Resolve Phone User] user_profiles query notice:", e);
         }
 
-        // 2. If not found in user_profiles, check orders table for customer name / email
-        if (!resolvedProfile) {
+        // 2. If email or name still missing, check orders table for customer name / email
+        if (!resolvedProfile || !resolvedProfile.email || !resolvedProfile.full_name) {
           try {
             const { data: orderRows, error: oErr } = await sb
               .from("orders")
-              .select("user_id, customer_name, recipient_name, customer_email, recipient_email, address, address_line1, city, pincode")
+              .select("user_id, customer_name, recipient_name, customer_email, recipient_email, address, address_line1, city, pincode, updated_at")
               .or(`phone.eq.${cleanPhone},phone.eq.${formattedE164},recipient_phone.eq.${cleanPhone},recipient_phone.eq.${formattedE164}`)
-              .order("created_at", { ascending: false })
-              .limit(1);
+              .order("updated_at", { ascending: false })
+              .limit(5);
 
             if (!oErr && Array.isArray(orderRows) && orderRows.length > 0) {
-              const o = orderRows[0];
+              const oBest = orderRows.find(
+                (o) => (o.customer_email || o.recipient_email) && !(o.customer_email || o.recipient_email).includes("@girirajpower.internal")
+              ) || orderRows[0];
+
+              const oEmail = (oBest.customer_email || oBest.recipient_email || "").trim().toLowerCase();
+              const cleanOrderEmail = oEmail.includes("@girirajpower.internal") ? null : (oEmail || null);
+
               resolvedProfile = {
-                user_id: o.user_id || null,
-                full_name: o.customer_name || o.recipient_name || null,
-                email: (o.customer_email || o.recipient_email || "").includes("@girirajpower.internal") ? null : (o.customer_email || o.recipient_email || null),
-                phone: formattedE164
+                user_id: resolvedProfile?.user_id || oBest.user_id || null,
+                full_name: resolvedProfile?.full_name || oBest.customer_name || oBest.recipient_name || null,
+                email: resolvedProfile?.email || cleanOrderEmail,
+                phone: formattedE164,
+                avatar_url: resolvedProfile?.avatar_url || null,
+                dob: resolvedProfile?.dob || null
               };
             }
           } catch (e) {
             console.debug("[Resolve Phone User] orders lookup notice:", e);
           }
+        }
+      }
+
+      // If resolved, cache back to serverProfileStore
+      if (resolvedProfile) {
+        const toCache: ServerUserProfileRecord = {
+          user_id: resolvedProfile.user_id || `uid_${cleanPhone}`,
+          phone: formattedE164,
+          full_name: resolvedProfile.full_name,
+          email: resolvedProfile.email,
+          avatar_url: resolvedProfile.avatar_url,
+          dob: resolvedProfile.dob,
+          updated_at: new Date().toISOString()
+        };
+        serverProfileStore.set(cleanPhone, toCache);
+        serverProfileStore.set(formattedE164, toCache);
+        if (resolvedProfile.user_id) serverProfileStore.set(resolvedProfile.user_id, toCache);
+        if (resolvedProfile.email && !resolvedProfile.email.includes("@girirajpower.internal")) {
+          serverProfileStore.set(resolvedProfile.email.toLowerCase(), toCache);
         }
       }
 

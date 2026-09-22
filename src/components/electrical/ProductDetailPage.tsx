@@ -419,7 +419,7 @@ export const ProductDetailPage = ({
       <button
         type="button"
         onClick={() => navigate(catalogBackRoute)}
-        className="fixed top-28 sm:top-32 left-4 sm:left-6 z-50 p-2.5 sm:p-3 rounded-full bg-white text-slate-800 hover:bg-yellow-400 hover:text-slate-950 shadow-xl hover:shadow-2xl transition-all border border-slate-300 backdrop-blur-md cursor-pointer active:scale-90 flex items-center justify-center group"
+        className="fixed top-4 sm:top-5 left-4 sm:left-6 z-50 p-2.5 sm:p-3 rounded-full bg-white text-slate-800 hover:bg-yellow-400 hover:text-slate-950 shadow-xl hover:shadow-2xl transition-all border border-slate-300 backdrop-blur-md cursor-pointer active:scale-90 flex items-center justify-center group"
         title={catalogBackTitle}
         aria-label={catalogBackTitle}
       >
@@ -433,7 +433,7 @@ export const ProductDetailPage = ({
           {/* ========================================================================= */}
           {/* LEFT COLUMN: IMAGE GALLERY WITH ZOOM + FLOATING BOTTOM ACTION BAR */}
           {/* ========================================================================= */}
-          <div className="lg:col-span-5 flex flex-col gap-4 self-start lg:sticky lg:top-20">
+          <div className="lg:col-span-5 flex flex-col gap-4 self-start lg:sticky lg:top-6">
             
             {/* Gallery Image Display */}
             <div className="flex flex-col-reverse sm:flex-row gap-3">
@@ -604,34 +604,36 @@ export const ProductDetailPage = ({
 
                 {/* Floating Action Buttons: Shows Add to Cart & Buy Now if in stock; Single Out of Stock button if out of stock */}
                 {product.stock_quantity > 0 ? (
-                  <div className="grid grid-cols-2 gap-2.5 sm:gap-3 w-full sm:w-auto sm:min-w-[360px] md:min-w-[400px]">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 w-full sm:w-auto sm:min-w-[360px] md:min-w-[400px]">
                     <button
                       onClick={() => {
                         hapticMedium();
                         onAddToCart(adaptToCartProduct(product));
                       }}
-                      className="py-3 px-4 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wide flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-98 border border-yellow-500/40"
+                      className="h-11 sm:h-12 px-2 sm:px-4 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black text-[11px] sm:text-xs uppercase tracking-tight flex items-center justify-center gap-1.5 sm:gap-2 shadow-sm transition-all cursor-pointer active:scale-98 border border-yellow-500/40 whitespace-nowrap"
                     >
-                      <ShoppingCart className="w-4 h-4 shrink-0" />
-                      <span>Add to Cart {cartQty > 0 && `(${cartQty})`}</span>
+                      <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                      <span className="whitespace-nowrap">Add to Cart {cartQty > 0 ? `(${cartQty})` : ''}</span>
                     </button>
 
                     <button
                       onClick={() => {
                         hapticMedium();
-                        onAddToCart(adaptToCartProduct(product));
+                        if (cartQty === 0) {
+                          onAddToCart(adaptToCartProduct(product));
+                        }
                         onOpenCart();
                       }}
-                      className="py-3 px-4 rounded-xl bg-[#fb641b] hover:bg-[#e85b17] text-white font-black text-xs sm:text-sm uppercase tracking-wide flex items-center justify-center shadow-sm transition-all cursor-pointer active:scale-98"
+                      className="h-11 sm:h-12 px-2 sm:px-4 rounded-xl bg-[#fb641b] hover:bg-[#e85b17] text-white font-black text-[11px] sm:text-xs uppercase tracking-tight flex items-center justify-center shadow-sm transition-all cursor-pointer active:scale-98 whitespace-nowrap"
                     >
-                      <span>Buy Now</span>
+                      <span className="whitespace-nowrap">{cartQty > 0 ? 'Go to Cart' : 'Buy Now'}</span>
                     </button>
                   </div>
                 ) : (
                   <div className="w-full sm:w-auto sm:min-w-[360px] md:min-w-[400px]">
                     <button
                       disabled
-                      className="w-full py-3.5 px-6 rounded-xl bg-slate-200 text-slate-500 font-black text-xs sm:text-sm uppercase tracking-wide flex items-center justify-center gap-2 cursor-not-allowed border border-slate-300 shadow-none"
+                      className="w-full h-11 sm:h-12 px-6 rounded-xl bg-slate-200 text-slate-500 font-black text-[11px] sm:text-xs uppercase tracking-wide flex items-center justify-center gap-2 cursor-not-allowed border border-slate-300 shadow-none whitespace-nowrap"
                     >
                       <AlertCircle className="w-4 h-4" />
                       <span>Out of Stock</span>
@@ -758,32 +760,18 @@ export const ProductDetailPage = ({
 
             {/* Colour Options (IS 694 Indian Standards / Conduit Standards) */}
             {hasColorOptions && (
-              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200/90 shadow-xs space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
-                      <Palette className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
-                        {isPipe ? 'Select Pipe Colour' : isWire ? 'Select Wire Colour' : 'Select Colour Option'}
-                      </h3>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        {isPipe
-                          ? 'Standard PVC Conduit & Casting Colour Coding'
-                          : isWire
-                          ? 'Indian Standard (IS 694 / IS 732) Colour Coding'
-                          : 'Available Manufacturer Colours'}
-                      </p>
-                    </div>
+              <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50 border border-slate-200/90 shadow-2xs space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <Palette className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-xs font-black text-blue-800 bg-blue-100/90 px-3 py-1 rounded-full border border-blue-200 shadow-2xs">
-                    Selected: {selectedWireColor}
-                  </span>
+                  <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
+                    {isPipe ? 'Select Pipe Colour' : isWire ? 'Select Wire Colour' : 'Select Colour Option'}
+                  </h3>
                 </div>
 
                 {/* Interactive Colour Swatches Grid */}
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5 pt-1">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                   {colorOptions.map((opt) => {
                     const isSelected = selectedWireColor === opt.name;
                     return (
@@ -791,31 +779,31 @@ export const ProductDetailPage = ({
                         key={opt.name}
                         type="button"
                         onClick={() => setSelectedWireColor(opt.name)}
-                        className={`p-2.5 rounded-xl border flex flex-col items-center gap-2 transition-all cursor-pointer text-center relative ${
+                        className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center relative ${
                           isSelected
-                            ? 'border-slate-900 bg-white ring-2 ring-slate-900 shadow-md scale-102'
+                            ? 'border-slate-900 bg-white ring-2 ring-slate-900 shadow-sm'
                             : 'border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50/80 shadow-2xs'
                         }`}
                       >
                         <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center border transition-transform ${
-                            isSelected ? 'border-white ring-2 ring-slate-900 scale-110 shadow-sm' : 'border-black/20'
+                          className={`w-6 h-6 rounded-full flex items-center justify-center border transition-transform ${
+                            isSelected ? 'border-white ring-2 ring-slate-900 scale-105 shadow-xs' : 'border-black/20'
                           }`}
                           style={{ backgroundColor: opt.hex }}
                         >
                           {isSelected && (
                             <Check
-                              className={`w-4 h-4 stroke-[3] ${
+                              className={`w-3.5 h-3.5 stroke-[3] ${
                                 opt.name === 'White' || opt.name === 'Ivory / Off-White' ? 'text-slate-900' : 'text-white'
                               }`}
                             />
                           )}
                         </div>
-                        <div className="min-w-0">
-                          <span className="block text-xs font-black text-slate-900 leading-none mb-0.5">
+                        <div className="min-w-0 w-full px-0.5">
+                          <span className="block text-[11px] font-black text-slate-900 leading-tight truncate">
                             {opt.name}
                           </span>
-                          <span className="block text-[10px] font-bold text-slate-500 truncate">
+                          <span className="block text-[9px] font-semibold text-slate-500 truncate">
                             {opt.shortRole}
                           </span>
                         </div>
@@ -829,15 +817,13 @@ export const ProductDetailPage = ({
                   const activeColor = colorOptions.find((c) => c.name === selectedWireColor);
                   if (!activeColor) return null;
                   return (
-                    <div className="p-2.5 rounded-xl bg-white border border-blue-100 text-xs text-slate-700 flex items-start gap-2.5 shadow-2xs">
+                    <div className="p-2 sm:p-2.5 rounded-lg bg-white border border-slate-200 text-[11px] sm:text-xs text-slate-700 flex items-center gap-2 shadow-2xs">
                       <span
-                        className="w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 border border-black/20"
+                        className="w-3 h-3 rounded-full shrink-0 border border-black/20"
                         style={{ backgroundColor: activeColor.hex }}
                       />
-                      <div className="leading-snug">
-                        <span className="font-extrabold text-slate-900">{activeColor.label}:</span>{' '}
-                        <span className="text-slate-600">{activeColor.description}</span>
-                      </div>
+                      <span className="font-extrabold text-slate-900 shrink-0">{activeColor.name}:</span>
+                      <span className="text-slate-600 truncate">{activeColor.shortRole || activeColor.description}</span>
                     </div>
                   );
                 })()}

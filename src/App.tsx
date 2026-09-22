@@ -359,12 +359,13 @@ export default function App() {
     getInitialAuthSession().then(({ session, user }) => {
       if (isLoggingOutRef.current || isUserLoggingOut()) return;
       if (user) {
-        activeUserIdRef.current = user.id;
-        const scope = getUserScopeKeyFromUser(user);
+        const userMeta = user.user_metadata || {};
+        const effectiveUserId = userMeta.master_user_id || userMeta.linked_user_id || user.id;
+        activeUserIdRef.current = effectiveUserId;
+        const scope = effectiveUserId ? `uid_${effectiveUserId}` : getUserScopeKeyFromUser(user);
         if (scope) {
           setActiveUserScope(scope);
         }
-        const userMeta = user.user_metadata || {};
         const isInternalPhoneUser =
           Boolean(user.email?.includes('@girirajpower.internal')) ||
           (!user.email && Boolean(user.phone));
@@ -375,11 +376,11 @@ export default function App() {
         const local = getSavedUserProfile(scope || undefined);
         const localBelongsToUser =
           Boolean(local) &&
-          ((local?.id && local.id === user.id) ||
+          ((local?.id && (local.id === user.id || local.id === effectiveUserId)) ||
            (local?.email && user.email && local.email.toLowerCase() === user.email.toLowerCase()));
         const validLocal = localBelongsToUser ? local : null;
 
-        let rawPhone = user.phone || userMeta.phone || validLocal?.phone || '';
+        let rawPhone = user.phone || userMeta.phone || userMeta.contact_number || validLocal?.phone || '';
         let phone = cleanPhoneAutofill(rawPhone);
         if (!isUserAdmin && (phone === '8777400280' || phone.endsWith('8777400280'))) {
           phone = '';
@@ -393,16 +394,17 @@ export default function App() {
             ? user.email.split('@')[0]
             : (phone ? `Giriraj Member (${phone.slice(-4)})` : 'Customer'));
 
-        const rawEmail = isInternalPhoneUser ? '' : (user.email || validLocal?.email || '');
+        const metaRealEmail = userMeta.real_email && !userMeta.real_email.includes('@girirajpower.internal') ? userMeta.real_email : '';
+        const rawEmail = isInternalPhoneUser ? (metaRealEmail || validLocal?.email || '') : (user.email || validLocal?.email || '');
         const email = rawEmail.includes('@girirajpower.internal') ? '' : rawEmail;
         let photoURL = userMeta.avatar_url || userMeta.picture || validLocal?.photoURL || undefined;
         const dob = userMeta.dob || userMeta.birth_date || userMeta.date_of_birth || validLocal?.dob || '';
         const prof: UserProfile = {
-          id: user.id,
+          id: effectiveUserId,
           phone,
           name,
           email,
-          emailVerified: isInternalPhoneUser ? false : (!!user.email_confirmed_at || !!user.confirmed_at || validLocal?.emailVerified || Boolean(email)),
+          emailVerified: isInternalPhoneUser ? Boolean(email) : (!!user.email_confirmed_at || !!user.confirmed_at || validLocal?.emailVerified || Boolean(email)),
           photoURL,
           dob,
           walletBalance: validLocal?.walletBalance || 0,
@@ -410,9 +412,9 @@ export default function App() {
           cashbackBalance: validLocal?.cashbackBalance || 0
         };
         setUserProfile(prof);
-        fetchUserProfileFromSupabase(user.id)
+        fetchUserProfileFromSupabase(effectiveUserId)
           .then((cloudProf) => {
-            if (cloudProf && !isLoggingOutRef.current && !isUserLoggingOut() && activeUserIdRef.current === user.id) {
+            if (cloudProf && !isLoggingOutRef.current && !isUserLoggingOut() && activeUserIdRef.current === effectiveUserId) {
               let mergedPhone = cleanPhoneAutofill(cloudProf.phone || prof.phone);
               if (!isUserAdmin && (mergedPhone === '8777400280' || mergedPhone.endsWith('8777400280'))) {
                 mergedPhone = '';
@@ -422,13 +424,15 @@ export default function App() {
 
               const cloudEmailClean =
                 cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : '';
+              const resolvedEmail = cloudEmailClean || prof.email || metaRealEmail || '';
               const merged: UserProfile = {
                 ...prof,
                 ...cloudProf,
-                id: user.id,
+                id: effectiveUserId,
                 name: mergedName,
                 phone: mergedPhone,
-                email: isInternalPhoneUser ? '' : (cloudEmailClean || prof.email),
+                email: resolvedEmail,
+                emailVerified: Boolean(resolvedEmail),
                 dob: cloudProf.dob || prof.dob,
                 photoURL: mergedPhoto,
                 walletBalance: cloudProf.walletBalance ?? prof.walletBalance,
@@ -495,12 +499,13 @@ export default function App() {
         return;
       }
       if (user) {
-        activeUserIdRef.current = user.id;
-        const scope = getUserScopeKeyFromUser(user);
+        const userMeta = user.user_metadata || {};
+        const effectiveUserId = userMeta.master_user_id || userMeta.linked_user_id || user.id;
+        activeUserIdRef.current = effectiveUserId;
+        const scope = effectiveUserId ? `uid_${effectiveUserId}` : getUserScopeKeyFromUser(user);
         if (scope) {
           setActiveUserScope(scope);
         }
-        const userMeta = user.user_metadata || {};
         const isInternalPhoneUser =
           Boolean(user.email?.includes('@girirajpower.internal')) ||
           (!user.email && Boolean(user.phone));
@@ -512,11 +517,11 @@ export default function App() {
         const local = getSavedUserProfile(scope || undefined);
         const localBelongsToUser =
           Boolean(local) &&
-          ((local?.id && local.id === user.id) ||
+          ((local?.id && (local.id === user.id || local.id === effectiveUserId)) ||
            (local?.email && user.email && local.email.toLowerCase() === user.email.toLowerCase()));
         const validLocal = localBelongsToUser ? local : null;
 
-        let rawPhone = user.phone || userMeta.phone || validLocal?.phone || '';
+        let rawPhone = user.phone || userMeta.phone || userMeta.contact_number || validLocal?.phone || '';
         let phone = cleanPhoneAutofill(rawPhone);
         if (!isUserAdmin && (phone === '8777400280' || phone.endsWith('8777400280'))) {
           phone = '';
@@ -530,16 +535,17 @@ export default function App() {
             ? user.email.split('@')[0]
             : (phone ? `Giriraj Member (${phone.slice(-4)})` : 'Customer'));
 
-        const rawEmail = isInternalPhoneUser ? '' : (user.email || validLocal?.email || '');
+        const metaRealEmail = userMeta.real_email && !userMeta.real_email.includes('@girirajpower.internal') ? userMeta.real_email : '';
+        const rawEmail = isInternalPhoneUser ? (metaRealEmail || validLocal?.email || '') : (user.email || validLocal?.email || '');
         const email = rawEmail.includes('@girirajpower.internal') ? '' : rawEmail;
         let photoURL = userMeta.avatar_url || userMeta.picture || validLocal?.photoURL || undefined;
         const dob = userMeta.dob || userMeta.birth_date || userMeta.date_of_birth || validLocal?.dob || '';
         const prof: UserProfile = {
-          id: user.id,
+          id: effectiveUserId,
           phone,
           name,
           email,
-          emailVerified: isInternalPhoneUser ? false : (!!user.email_confirmed_at || !!user.confirmed_at || validLocal?.emailVerified || Boolean(email)),
+          emailVerified: isInternalPhoneUser ? Boolean(email) : (!!user.email_confirmed_at || !!user.confirmed_at || validLocal?.emailVerified || Boolean(email)),
           photoURL,
           dob,
           walletBalance: validLocal?.walletBalance || 0,
@@ -547,9 +553,9 @@ export default function App() {
           cashbackBalance: validLocal?.cashbackBalance || 0
         };
         setUserProfile(prof);
-        fetchUserProfileFromSupabase(user.id)
+        fetchUserProfileFromSupabase(effectiveUserId)
           .then((cloudProf) => {
-            if (cloudProf && !isLoggingOutRef.current && !isUserLoggingOut() && activeUserIdRef.current === user.id) {
+            if (cloudProf && !isLoggingOutRef.current && !isUserLoggingOut() && activeUserIdRef.current === effectiveUserId) {
               let mergedPhone = cleanPhoneAutofill(cloudProf.phone || prof.phone);
               if (!isUserAdmin && (mergedPhone === '8777400280' || mergedPhone.endsWith('8777400280'))) {
                 mergedPhone = '';
@@ -559,13 +565,15 @@ export default function App() {
 
               const cloudEmailClean =
                 cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : '';
+              const resolvedEmail = cloudEmailClean || prof.email || metaRealEmail || '';
               const merged: UserProfile = {
                 ...prof,
                 ...cloudProf,
-                id: user.id,
+                id: effectiveUserId,
                 name: mergedName,
                 phone: mergedPhone,
-                email: isInternalPhoneUser ? '' : (cloudEmailClean || prof.email),
+                email: resolvedEmail,
+                emailVerified: Boolean(resolvedEmail),
                 dob: cloudProf.dob || prof.dob,
                 photoURL: mergedPhoto,
                 walletBalance: cloudProf.walletBalance ?? prof.walletBalance,
@@ -1227,8 +1235,10 @@ export default function App() {
 
     // 2. Fetch authenticated Supabase user to establish scope and isolation
     let authUser: any = userObj || null;
-    const authId = authUser?.id || (finalPhone ? `uid_${finalPhone}` : undefined);
-    const scope = authUser ? getUserScopeKeyFromUser(authUser) : (finalPhone ? `phone_${finalPhone}` : null);
+    const userMeta = authUser?.user_metadata || {};
+    const effectiveUserId = userMeta.master_user_id || userMeta.linked_user_id || authUser?.id || (finalPhone ? `uid_${finalPhone}` : undefined);
+    const authId = effectiveUserId;
+    const scope = effectiveUserId ? `uid_${effectiveUserId}` : (authUser ? getUserScopeKeyFromUser(authUser) : (finalPhone ? `phone_${finalPhone}` : null));
     if (scope) {
       setActiveUserScope(scope);
     }
@@ -1236,19 +1246,21 @@ export default function App() {
       activeUserIdRef.current = authId;
     }
 
+    const metaRealEmail = userMeta.real_email && !userMeta.real_email.includes('@girirajpower.internal') ? userMeta.real_email : '';
+    const resolvedCleanEmail = cleanEmail || metaRealEmail;
+
     // 3. Clear previous user's cached in-memory state (orders & addresses)
     setOrders([]);
     setSavedAddresses(getStoredAddresses(scope || undefined));
 
     // 4. Construct optimistic UserProfile immediately without waiting for network calls
-    const userMeta = authUser?.user_metadata || {};
     const optimisticProf: UserProfile = {
       id: authId,
       phone: finalPhone,
       phoneVerified: Boolean(finalPhone),
       name: finalName || userMeta.full_name || userMeta.name || (finalPhone ? `Giriraj Member (${finalPhone.slice(-4)})` : 'Customer'),
-      email: cleanEmail,
-      emailVerified: Boolean(cleanEmail),
+      email: resolvedCleanEmail,
+      emailVerified: Boolean(resolvedCleanEmail),
       photoURL: userMeta.avatar_url || userMeta.picture || undefined,
       dob: userMeta.dob || userMeta.birth_date || '',
       walletBalance: 0,
@@ -1273,12 +1285,12 @@ export default function App() {
           const { data } = await supabase.auth.getUser();
           authUser = data?.user || null;
         }
-        const targetUid = authUser?.id || authId;
+        const targetUid = effectiveUserId || authUser?.id || authId;
         if (targetUid) {
           const cloudProf = await fetchUserProfileFromSupabase(targetUid);
           if (cloudProf && !isLoggingOutRef.current && activeUserIdRef.current === targetUid) {
             const cloudEmailClean =
-              cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : cleanEmail;
+              cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : resolvedCleanEmail;
             setUserProfile((prev) => {
               if (isLoggingOutRef.current || !activeUserIdRef.current) return null;
               return {
@@ -1402,8 +1414,15 @@ export default function App() {
       <SEOHead />
       <AndroidAppBridgePrompt />
       
-      {/* Top Header - Hidden when viewing profile or live-order */}
-      {location.pathname !== '/profile' && !location.pathname.startsWith('/live-order') && (
+      {/* Top Header - Hidden when viewing profile, live-order, product details, cart, or delete account */}
+      {location.pathname !== '/profile' &&
+        !location.pathname.startsWith('/live-order') &&
+        !location.pathname.includes('/product/') &&
+        !location.pathname.startsWith('/cart') &&
+        !location.pathname.startsWith('/delete') &&
+        !location.pathname.startsWith('/account-deletion') &&
+        activeTab !== 'cart' &&
+        !selectedProductQuickView && (
         <Header
           currentArea={currentArea}
           activeAddress={activeSavedAddress}
@@ -1842,8 +1861,12 @@ export default function App() {
         }}
       />
 
-      {/* Zomato-style Floating Map Route Circle Button for Current Active Order (Navigates directly to dedicated live order page, hidden on profile tab, cart page, and live-order sub-pages) */}
-      {!location.pathname.startsWith('/live-order') && !location.pathname.startsWith('/profile') && !location.pathname.startsWith('/cart') && activeTab !== 'cart' && (
+      {/* Zomato-style Floating Map Route Circle Button for Current Active Order (Navigates directly to dedicated live order page, hidden on profile tab, cart page, product details, and live-order sub-pages) */}
+      {!location.pathname.startsWith('/live-order') &&
+        !location.pathname.startsWith('/profile') &&
+        !location.pathname.startsWith('/cart') &&
+        !location.pathname.includes('/product/') &&
+        activeTab !== 'cart' && (
         <FloatingLiveOrderButton
           order={activeLiveOrder}
           onClick={() => navigate('/live-order')}

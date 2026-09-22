@@ -456,6 +456,7 @@ export async function bridgeVerifiedPhoneToSupabase(
   }
 
   // Pre-resolve existing customer profile across backend resolver and local storage
+  let preResolvedUserId = '';
   let preResolvedName = preferredName || '';
   let preResolvedEmail = '';
   let preResolvedPhoto = '';
@@ -475,13 +476,14 @@ export async function bridgeVerifiedPhoneToSupabase(
       const resolveJson = await resolveRes.json().catch(() => null);
       if (resolveJson?.profile) {
         const p = resolveJson.profile;
+        if (p.user_id) preResolvedUserId = p.user_id;
         if (p.full_name) preResolvedName = p.full_name;
         if (p.email && !p.email.includes('@girirajpower.internal')) preResolvedEmail = p.email;
         if (p.avatar_url) preResolvedPhoto = p.avatar_url;
         if (p.dob) preResolvedDob = p.dob;
-        if (p.wallet_balance) preResolvedWallet = Number(p.wallet_balance);
-        if (p.refund_balance) preResolvedRefund = Number(p.refund_balance);
-        if (p.cashback_balance) preResolvedCashback = Number(p.cashback_balance);
+        if (p.wallet_balance !== undefined) preResolvedWallet = Number(p.wallet_balance);
+        if (p.refund_balance !== undefined) preResolvedRefund = Number(p.refund_balance);
+        if (p.cashback_balance !== undefined) preResolvedCashback = Number(p.cashback_balance);
       }
     }
   } catch (e) {
@@ -490,6 +492,9 @@ export async function bridgeVerifiedPhoneToSupabase(
 
   const existingPhoneLocal = getSavedUserProfile(`phone_${clean10}`);
   if (existingPhoneLocal) {
+    if (!preResolvedUserId && existingPhoneLocal.id && !existingPhoneLocal.id.startsWith('phone_')) {
+      preResolvedUserId = existingPhoneLocal.id;
+    }
     if (!preResolvedName && existingPhoneLocal.name) preResolvedName = existingPhoneLocal.name;
     if (!preResolvedEmail && existingPhoneLocal.email && !existingPhoneLocal.email.includes('@girirajpower.internal')) {
       preResolvedEmail = existingPhoneLocal.email;
@@ -558,11 +563,11 @@ export async function bridgeVerifiedPhoneToSupabase(
       });
     }
 
-    const userId = supabaseUser?.id || `uid_${clean10}`;
-    const scope = `uid_${userId}`;
+    const effectiveUserId = preResolvedUserId || supabaseUser?.id || `uid_${clean10}`;
+    const scope = `uid_${effectiveUserId}`;
     setActiveUserScope(scope);
 
-    // Step 3: Fetch ONLY this user's profile from user_profiles table (STRICT: query ONLY user_id)
+    // Step 3: Fetch linked user profile from user_profiles table (querying effectiveUserId)
     let resolvedName = preResolvedName || preferredName || `Giriraj Member (${clean10.slice(-4)})`;
     let resolvedEmail = preResolvedEmail || '';
     let resolvedDob = preResolvedDob || '';
@@ -575,7 +580,7 @@ export async function bridgeVerifiedPhoneToSupabase(
       const { data: userProfileRecord } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', effectiveUserId)
         .maybeSingle();
 
       if (userProfileRecord) {
@@ -615,13 +620,15 @@ export async function bridgeVerifiedPhoneToSupabase(
           phone: formattedE164,
           contact_number: formattedE164,
           full_name: resolvedName,
+          master_user_id: effectiveUserId,
+          linked_user_id: effectiveUserId,
           ...(resolvedEmail ? { real_email: resolvedEmail } : {})
         }
       });
     } catch {}
 
     const finalizedProfile: UserProfile = {
-      id: userId,
+      id: effectiveUserId,
       phone: formattedE164,
       phoneVerified: true,
       name: resolvedName,
@@ -637,12 +644,15 @@ export async function bridgeVerifiedPhoneToSupabase(
     // Save profile under both user scope AND phone scope for instant multi-login consistency
     saveUserProfile(finalizedProfile, scope);
     saveUserProfile(finalizedProfile, `phone_${clean10}`);
+    if (supabaseUser?.id && supabaseUser.id !== effectiveUserId) {
+      saveUserProfile(finalizedProfile, `uid_${supabaseUser.id}`);
+    }
 
-    // Save to user_profiles table in Supabase
+    // Save to user_profiles table in Supabase under effective master user_id
     try {
       await supabase.from('user_profiles').upsert(
         {
-          user_id: userId,
+          user_id: effectiveUserId,
           phone: formattedE164,
           full_name: resolvedName,
           email: resolvedEmail || null,
@@ -652,11 +662,59 @@ export async function bridgeVerifiedPhoneToSupabase(
         },
         { onConflict: 'user_id' }
       );
+
+      if (supabaseUser?.id && supabaseUser.id !== effectiveUserId) {
+        try {
+          await supabase.from('user_profiles').upsert(
+            {
+              user_id: supabaseUser.id,
+              phone: formattedE164,
+              full_name: resolvedName,
+              email: resolvedEmail || null,
+              avatar_url: resolvedPhoto || null,
+              dob: resolvedDob || null,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'user_id' }
+          );
+        } catch {}
+      }
     } catch {}
+
+    // Synchronize to backend server-side store
+    fetch('/api/user-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: effectiveUserId,
+        phone: formattedE164,
+        full_name: resolvedName,
+        email: resolvedEmail || null,
+        avatar_url: resolvedPhoto || null,
+        dob: resolvedDob || null
+      })
+    }).catch(() => {});
+
+    const unifiedUser = {
+      ...(supabaseUser || {}),
+      id: effectiveUserId,
+      auth_id: supabaseUser?.id,
+      email: resolvedEmail || supabaseUser?.email,
+      phone: formattedE164,
+      user_metadata: {
+        ...(supabaseUser?.user_metadata || {}),
+        full_name: resolvedName,
+        name: resolvedName,
+        phone: formattedE164,
+        master_user_id: effectiveUserId,
+        linked_user_id: effectiveUserId,
+        real_email: resolvedEmail
+      }
+    };
 
     return {
       success: true,
-      user: supabaseUser,
+      user: unifiedUser,
       session: supabaseSession,
       profile: finalizedProfile
     };

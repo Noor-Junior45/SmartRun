@@ -219,11 +219,12 @@ export const AccountDeletionPage = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-24" id="account-deletion-page">
-      {/* Top App Bar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-white text-slate-900 font-sans pb-20" id="account-deletion-page">
+      {/* Top Header: Simple Heading 'Account delete' and Arrow Back Button in the same line with White Background */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 sm:px-6 py-3.5">
+        <div className="max-w-3xl mx-auto flex items-center gap-3">
           <button
+            id="btn-account-delete-back"
             type="button"
             onClick={() => {
               if (onBack) {
@@ -231,69 +232,52 @@ export const AccountDeletionPage = ({
               } else if (window.history.length > 1) {
                 navigate(-1);
               } else {
-                navigate('/');
+                navigate('/profile');
               }
             }}
-            className="flex items-center gap-2 text-slate-700 hover:text-slate-950 text-sm font-semibold transition-colors py-2 px-2 -ml-2 rounded-lg hover:bg-slate-100"
-            id="deletion-back-btn"
+            className="p-1.5 -ml-1.5 rounded-full hover:bg-slate-100 active:bg-slate-200 text-slate-700 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+            aria-label="Go back"
           >
-            <ArrowLeft className="w-5 h-5" />
-            <span>Back</span>
+            <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
           </button>
-
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <ShieldAlert className="w-3.5 h-3.5" />
-              Google Play Policy Compliant
-            </span>
-          </div>
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight whitespace-nowrap">
+            Account delete
+          </h1>
         </div>
-      </header>
+      </div>
 
-      {/* Main Container */}
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-8 space-y-6">
-        {/* Title Header */}
-        <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-xs">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center text-red-600 shrink-0">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-                Request Account &amp; Personal Data Deletion
-              </h1>
-              <p className="text-sm text-slate-600 mt-1 leading-relaxed">
-                In compliance with Google Play Developer Policy and Indian data protection regulations,
-                you can submit a formal request to delete your account and personal identifying data.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Existing Pending Request Notice */}
+      {/* Main Content Area - Clean Article Layout without unnecessary background boxes */}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
+        
+        {/* Existing Pending Request Notice (Highlighted Section) */}
         {existingRequest && !submittedData && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-amber-950">
+          <div className="p-4 sm:p-5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 space-y-3">
             <div className="flex items-start gap-3">
               <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div className="flex-1 space-y-2">
-                <h3 className="font-bold text-base text-amber-900">
-                  Active Deletion Request in Progress
-                </h3>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-bold text-sm sm:text-base text-amber-900">
+                    Active Deletion Request in Progress
+                  </h3>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold whitespace-nowrap shrink-0">
+                    Under Review
+                  </span>
+                </div>
                 <p className="text-xs sm:text-sm text-amber-800 leading-relaxed">
                   A deletion request for this account is currently undergoing the mandatory{' '}
                   <strong>7-day cooling-off verification period</strong>. Administrator confirmation is pending.
                 </p>
-                <div className="bg-white/80 rounded-xl p-3 text-xs space-y-1 font-mono text-slate-700 border border-amber-200">
+                <div className="bg-white/80 rounded-lg p-3 text-xs space-y-1 font-mono text-slate-700 border border-amber-200">
                   <div>Request ID: <span className="font-semibold">{existingRequest.requestId}</span></div>
                   <div>Status: <span className="font-semibold text-amber-600 uppercase">{existingRequest.status}</span></div>
                   <div>Scheduled Deletion: <span className="font-semibold">{new Date(existingRequest.scheduledDeletionDate).toDateString()}</span></div>
                 </div>
-                <div className="pt-2">
+                <div className="pt-1">
                   <button
                     type="button"
                     disabled={isSubmitting}
                     onClick={() => handleCancelRequest(existingRequest.requestId)}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-lg border border-slate-300 shadow-2xs transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-lg border border-slate-300 shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
                   >
                     <XCircle className="w-4 h-4 text-slate-500" />
                     <span>Cancel Deletion &amp; Keep Account Active</span>
@@ -304,15 +288,15 @@ export const AccountDeletionPage = ({
           </div>
         )}
 
-        {/* Permanent Deletion Successful State */}
+        {/* Permanent Deletion Successful State (Highlighted Section) */}
         {isDeletedSuccess ? (
-          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-emerald-200 shadow-sm space-y-6 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-8 h-8" />
+          <div className="p-6 sm:p-8 rounded-2xl bg-slate-50 border border-emerald-200 space-y-5 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-7 h-7" />
             </div>
 
-            <div className="space-y-2">
-              <h2 className="text-xl font-bold text-slate-900">
+            <div className="space-y-1.5">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900">
                 Account &amp; Personal Data Permanently Deleted
               </h2>
               <p className="text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
@@ -320,17 +304,17 @@ export const AccountDeletionPage = ({
               </p>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 max-w-md mx-auto space-y-1 text-left">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 text-xs text-slate-600 max-w-md mx-auto space-y-2 text-left">
               <div className="flex items-center gap-2 text-emerald-700 font-semibold">
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>Supabase personal data records deleted</span>
               </div>
               <div className="flex items-center gap-2 text-emerald-700 font-semibold">
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>Device cache memory &amp; browser storage purged</span>
               </div>
               <div className="flex items-center gap-2 text-emerald-700 font-semibold">
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>Active session successfully logged out</span>
               </div>
             </div>
@@ -342,67 +326,57 @@ export const AccountDeletionPage = ({
                   navigate('/');
                   window.location.reload();
                 }}
-                className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer"
+                className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer whitespace-nowrap"
               >
                 Return to Storefront
               </button>
             </div>
           </div>
         ) : submittedData ? (
-          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-emerald-200 shadow-sm space-y-6">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-8 h-8" />
+          <div className="p-6 sm:p-8 rounded-2xl bg-slate-50 border border-emerald-200 space-y-5">
+            <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-6 h-6" />
             </div>
 
-            <div className="text-center space-y-2">
-              <h2 className="text-xl font-bold text-slate-900">
+            <div className="text-center space-y-1.5">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900">
                 Account Deletion Request Dispatched
               </h2>
-              <p className="text-sm text-slate-600 max-w-lg mx-auto">
+              <p className="text-xs sm:text-sm text-slate-600 max-w-lg mx-auto">
                 Your request has been officially recorded and an administrative alert has been sent to our verification team.
               </p>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-5 space-y-3 text-sm">
-              <div className="flex justify-between items-center py-1.5 border-b border-slate-200">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2.5 text-xs sm:text-sm">
+              <div className="flex justify-between items-center py-1 border-b border-slate-100">
                 <span className="text-slate-500 text-xs">Reference Tracking ID</span>
                 <span className="font-mono font-bold text-slate-900">{submittedData.requestId}</span>
               </div>
-              <div className="flex justify-between items-center py-1.5 border-b border-slate-200">
+              <div className="flex justify-between items-center py-1 border-b border-slate-100">
                 <span className="text-slate-500 text-xs">Status</span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
                   <Clock className="w-3 h-3" />
                   7-Day Grace Period Active
                 </span>
               </div>
-              <div className="flex justify-between items-center py-1.5 border-b border-slate-200">
+              <div className="flex justify-between items-center py-1 border-b border-slate-100">
                 <span className="text-slate-500 text-xs">Scheduled Erasure Date</span>
                 <span className="font-semibold text-slate-900">
                   {new Date(submittedData.scheduledDeletionDate).toLocaleDateString('en-IN', {
-                    weekday: 'long',
+                    weekday: 'short',
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric'
                   })}
                 </span>
               </div>
-              <div className="flex justify-between items-start py-1.5">
+              <div className="flex justify-between items-center py-1">
                 <span className="text-slate-500 text-xs">Admin Notification</span>
-                <span className="text-emerald-700 font-semibold text-xs flex items-center gap-1">
+                <span className="text-emerald-700 font-semibold text-xs flex items-center gap-1 whitespace-nowrap">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   Alert Dispatched for Review
                 </span>
               </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 leading-relaxed space-y-1">
-              <p className="font-bold flex items-center gap-1.5">
-                <HelpCircle className="w-4 h-4 text-blue-600" />
-                Changed your mind?
-              </p>
-              <p>
-                You have a 7-day cooling-off window. If you wish to cancel this request and preserve your saved addresses and purchase history, you can click below or contact support before the scheduled erasure date.
-              </p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
@@ -410,7 +384,7 @@ export const AccountDeletionPage = ({
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => handleCancelRequest()}
-                className="flex-1 py-3 px-4 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
               >
                 <XCircle className="w-4 h-4 text-slate-500" />
                 <span>Cancel Deletion Request</span>
@@ -418,7 +392,7 @@ export const AccountDeletionPage = ({
               <button
                 type="button"
                 onClick={() => navigate('/')}
-                className="flex-1 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm transition-colors flex items-center justify-center gap-2 shadow-xs"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 shadow-xs whitespace-nowrap cursor-pointer"
               >
                 <span>Return to Home</span>
               </button>
@@ -426,262 +400,297 @@ export const AccountDeletionPage = ({
           </div>
         ) : (
           <>
-            {/* Condition Rules Accordion/Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Card 1 */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
-                <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm">
-                  1
-                </div>
-                <h3 className="font-bold text-sm text-slate-900">All Orders &amp; Dues Cleared</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  You cannot delete an account with in-flight deliveries. Pending orders must be delivered or cancelled, and any COD dues settled.
-                </p>
+            {/* Article 1: Account & Personal Data Deletion Policy */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  1. Account &amp; Personal Data Deletion
+                </h2>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold whitespace-nowrap shrink-0">
+                  Play Store Compliant
+                </span>
               </div>
 
-              {/* Card 2 */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
-                <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
-                  2
-                </div>
-                <h3 className="font-bold text-sm text-slate-900">7-Day Cooling Period</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Account deletion does not occur instantaneously. It enters a 7-day review queue with an immediate alert to our administrator.
-                </p>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                In compliance with Google Play Developer Policy and Indian data protection regulations, you can permanently delete your account, authentication tokens, and personal identifying data from SmartRun.
+              </p>
+            </section>
+
+            {/* Article 2: Prerequisites & Rules */}
+            <section className="space-y-3 pt-6 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  2. Prerequisites &amp; Verification Rules
+                </h2>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold whitespace-nowrap shrink-0">
+                  Safety Checks
+                </span>
               </div>
 
-              {/* Card 3 */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
-                  3
-                </div>
-                <h3 className="font-bold text-sm text-slate-900">Personal Data Erasure</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Your name, mobile, email, and addresses are wiped. Tax/statutory GST invoices are retained as required by Indian commercial law.
-                </p>
-              </div>
-            </div>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                To prevent fraud or in-transit delivery abandonment, the following safety criteria must be satisfied before account erasure:
+              </p>
 
-            {/* Active Orders Warning if Active Orders exist */}
-            {activeOrdersCount > 0 && (
-              <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-5 text-red-950 space-y-3">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-sm text-red-900">
+              <div className="space-y-3 text-sm text-slate-700">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-800 mt-2 shrink-0" />
+                  <div>
+                    <strong className="text-slate-900">All Orders &amp; Deliveries Completed:</strong> Accounts with in-flight shipments cannot be deleted. Any pending deliveries must either be received or cancelled.
+                  </div>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-800 mt-2 shrink-0" />
+                  <div>
+                    <strong className="text-slate-900">Outstanding Balances Settled:</strong> All pending payments or unpaid Cash-on-Delivery dues must be cleared.
+                  </div>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-800 mt-2 shrink-0" />
+                  <div>
+                    <strong className="text-slate-900">Permanent Personal Data Erasure:</strong> Your name, phone, email, addresses, and auth tokens are wiped. Local cache memory on your device is purged.
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Orders Warning Box (Highlighted if active orders exist) */}
+              {activeOrdersCount > 0 && (
+                <div className="p-4 rounded-xl bg-red-50 border border-red-200 space-y-2.5 text-red-950 mt-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="font-bold text-sm text-red-900 flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
                       Deletion Blocked: {activeOrdersCount} Active Order(s) In Progress
                     </h4>
-                    <p className="text-xs text-red-800 leading-relaxed">
-                      You currently have orders that are being packed, shipped, or out for delivery. In accordance with consumer safety policies, you cannot delete your account until these orders reach you or are cancelled.
-                    </p>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-100 text-red-800 text-[11px] font-bold whitespace-nowrap shrink-0">
+                      Action Required
+                    </span>
+                  </div>
+                  <p className="text-xs text-red-800 leading-relaxed">
+                    You currently have orders that are being packed or out for delivery. Please wait until they are delivered or cancel them first.
+                  </p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/orders')}
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
+                    >
+                      View Active Orders
+                    </button>
                   </div>
                 </div>
-                <div className="pl-8 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/orders')}
-                    className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer"
-                  >
-                    View Active Orders
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
 
-            {/* Unpaid Products Warning if Unpaid Orders exist */}
-            {unpaidOrdersCount > 0 && (
-              <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5 text-amber-950 space-y-3">
-                <div className="flex items-start gap-3">
-                  <CreditCard className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-sm text-amber-900">
+              {/* Unpaid Products Warning Box (Highlighted if unpaid orders exist) */}
+              {unpaidOrdersCount > 0 && (
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-2.5 text-amber-950 mt-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="font-bold text-sm text-amber-900 flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4 text-amber-600 shrink-0" />
                       Deletion Blocked: {unpaidOrdersCount} Unpaid Product(s) / Pending Dues
                     </h4>
-                    <p className="text-xs text-amber-800 leading-relaxed">
-                      You have orders with pending payments or unsettled dues. In accordance with our financial and transaction policies, all outstanding amounts must be settled or cancelled before your account can be deleted.
-                    </p>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold whitespace-nowrap shrink-0">
+                      Settlement Required
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    You have orders with pending payments or unsettled dues. All outstanding amounts must be settled or cancelled first.
+                  </p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/orders')}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
+                    >
+                      View Unpaid Orders &amp; Clear Dues
+                    </button>
                   </div>
                 </div>
-                <div className="pl-8 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/orders')}
-                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer"
-                  >
-                    View Unpaid Orders &amp; Clear Dues
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
 
-            {/* Eligible for Deletion Banner if NO live orders and NO unpaid products */}
-            {hasCheckedPrereqs && activeOrdersCount === 0 && unpaidOrdersCount === 0 && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 sm:p-5 text-emerald-950 flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <h4 className="font-bold text-sm text-emerald-900">
-                    Eligible for Deletion: No Active Orders or Unpaid Dues Found
-                  </h4>
-                  <p className="text-xs text-emerald-800 leading-relaxed">
-                    Your account has 0 active deliveries and 0 unpaid products. You can safely delete your account and wipe all stored user data.
+              {/* Eligible Banner (Highlighted Section when verified clean) */}
+              {hasCheckedPrereqs && activeOrdersCount === 0 && unpaidOrdersCount === 0 && (
+                <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 mt-4">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold whitespace-nowrap">
+                      Eligible for Deletion
+                    </span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-slate-200 text-slate-800 text-[11px] font-bold whitespace-nowrap">
+                      0 Active Deliveries
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-700 leading-normal">
+                    Your account has 0 active deliveries and 0 unpaid products. You can safely proceed with account deletion below.
                   </p>
                 </div>
+              )}
+            </section>
+
+            {/* Article 3: Deletion Form (Highlighted Interactive Container) */}
+            <section className="pt-6 border-t border-slate-100 space-y-4">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  3. Submit Deletion Request
+                </h2>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold whitespace-nowrap shrink-0">
+                  Permanent Action
+                </span>
               </div>
-            )}
 
-            {/* Deletion Form */}
-            <form onSubmit={handleSubmitRequest} className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-5">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 border-b border-slate-100 pb-3">
-                Submit Account Deletion Request
-              </h2>
+              <form onSubmit={handleSubmitRequest} className="p-4 sm:p-6 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
+                {/* Account Identification */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Registered Mobile Number <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="tel"
+                        required
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="e.g. 9876543210"
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      />
+                    </div>
+                  </div>
 
-              {/* Account Identification */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    Registered Mobile Number <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="tel"
-                      required
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="e.g. 9876543210"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white"
-                    />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Registered Email (Optional)
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="e.g. name@example.com"
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      />
+                    </div>
                   </div>
                 </div>
 
+                {/* Full Name */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    Registered Email (Optional)
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Full Name / Account Holder
                   </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="e.g. name@example.com"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white"
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your registered name"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
                 </div>
-              </div>
 
-              {/* Full Name */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Full Name / Account Holder
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your full name as registered"
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white"
-                />
-              </div>
+                {/* Reason Selection */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Reason for Deletion <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  >
+                    <option value="I no longer need electrical goods delivery">I no longer need electrical goods delivery</option>
+                    <option value="Concerned about data privacy / sharing">Concerned about data privacy / sharing</option>
+                    <option value="Created a duplicate account">Created a duplicate account</option>
+                    <option value="Dissatisfied with products or delivery speed">Dissatisfied with products or delivery speed</option>
+                    <option value="Switching to a different supplier">Switching to a different supplier</option>
+                    <option value="Other reason">Other reason</option>
+                  </select>
+                </div>
 
-              {/* Reason Selection */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Reason for Account Deletion <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white"
-                >
-                  <option value="I no longer need electrical goods delivery">I no longer need electrical goods delivery</option>
-                  <option value="Concerned about data privacy / sharing">Concerned about data privacy / sharing</option>
-                  <option value="Created a duplicate account">Created a duplicate account</option>
-                  <option value="Dissatisfied with products or delivery speed">Dissatisfied with products or delivery speed</option>
-                  <option value="Switching to a different supplier">Switching to a different supplier</option>
-                  <option value="Other reason">Other reason</option>
-                </select>
-              </div>
+                {/* Feedback */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Additional Feedback (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    placeholder="Tell us what we could have done better..."
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none"
+                  />
+                </div>
 
-              {/* Feedback */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Additional Details or Feedback (Optional)
-                </label>
-                <textarea
-                  rows={3}
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  placeholder="Help us improve: tell us what we could have done better..."
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white resize-none"
-                />
-              </div>
+                {/* Mandatory Confirmation Input */}
+                <div className="p-3.5 rounded-lg bg-rose-50/70 border border-rose-200 space-y-1.5">
+                  <label className="block text-xs font-bold text-rose-900">
+                    Type <span className="font-mono uppercase bg-rose-100 px-1 py-0.5 rounded text-rose-700">DELETE MY ACCOUNT</span> to confirm:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={confirmInput}
+                    onChange={(e) => setConfirmInput(e.target.value)}
+                    placeholder="DELETE MY ACCOUNT"
+                    className="w-full px-3 py-2 bg-white border border-rose-300 rounded-md text-xs sm:text-sm font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                  <p className="text-[11px] text-rose-700 leading-tight">
+                    This safety check ensures your account cannot be deleted by accident.
+                  </p>
+                </div>
 
-              {/* Mandatory Confirmation Input */}
-              <div className="bg-red-50/70 border border-red-200 rounded-xl p-4 space-y-2">
-                <label className="block text-xs font-bold text-red-900">
-                  Type <span className="font-mono uppercase bg-red-100 px-1.5 py-0.5 rounded text-red-700">DELETE MY ACCOUNT</span> to confirm:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={confirmInput}
-                  onChange={(e) => setConfirmInput(e.target.value)}
-                  placeholder="DELETE MY ACCOUNT"
-                  className="w-full px-3 py-2 bg-white border border-red-300 rounded-lg text-sm font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-                <p className="text-[11px] text-red-700 leading-tight">
-                  This safety measure ensures no account is deleted accidentally. Submitting starts the 7-day administrative alert queue.
+                {/* Submit Button */}
+                <div className="pt-1">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || isChecking || activeOrdersCount > 0 || unpaidOrdersCount > 0 || confirmInput.trim() !== 'DELETE MY ACCOUNT'}
+                    className={`w-full py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 ${
+                      confirmInput.trim() === 'DELETE MY ACCOUNT' && activeOrdersCount === 0 && unpaidOrdersCount === 0
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-2xs cursor-pointer'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                    id="submit-deletion-btn"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span className="whitespace-nowrap">Deleting Account &amp; Clearing Data...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        <span className="whitespace-nowrap">Permanently Delete Account &amp; Clear All Data</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <p className="text-center text-[11px] text-slate-500">
+                  When confirmed, your user account and personal identifiers are immediately removed from Supabase and local cache memory is purged.
                 </p>
-              </div>
-
-              {/* Submit Button */}
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={isSubmitting || isChecking || activeOrdersCount > 0 || unpaidOrdersCount > 0 || confirmInput.trim() !== 'DELETE MY ACCOUNT'}
-                  className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
-                    confirmInput.trim() === 'DELETE MY ACCOUNT' && activeOrdersCount === 0 && unpaidOrdersCount === 0
-                      ? 'bg-red-600 hover:bg-red-700 text-white shadow-sm cursor-pointer'
-                      : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                  }`}
-                  id="submit-deletion-btn"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Deleting Account &amp; Clearing Data...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-4 h-4" />
-                      <span>Permanently Delete Account &amp; Clear All Data</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <p className="text-center text-[11px] text-slate-500">
-                When you click delete with 0 active orders and 0 unpaid dues, your user account and all personal data are immediately wiped from Supabase, and your local cache memory is completely cleared.
-              </p>
-            </form>
+              </form>
+            </section>
           </>
         )}
 
-        {/* Data Retention & Statutory Disclosure (Required for Google Play Store Policy) */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs space-y-3 text-xs text-slate-600 leading-relaxed">
-          <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
-            <Lock className="w-4 h-4 text-slate-500" />
-            Statutory Data Retention Disclosure
-          </h4>
-          <p>
+        {/* Article 4: Statutory Data Retention Disclosure (Google Play Store Policy) */}
+        <section className="pt-6 border-t border-slate-100 space-y-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+              <span>4. Statutory Data Retention Disclosure</span>
+            </h3>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-bold whitespace-nowrap shrink-0">
+              Audit Compliance
+            </span>
+          </div>
+
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
             Under Section 36 of the Central Goods and Services Tax (CGST) Act, 2017, and the Companies Act, 2013, businesses registered in India are legally mandated to retain commercial tax records, invoice copies, and payment transaction receipts for a minimum statutory audit period of 72 months (6 years).
           </p>
-          <p>
-            Upon completion of the 7-day cooling-off verification period and administrator approval, all personal identification records—including your name, mobile phone number, personal delivery addresses, UPI handles, and device notification tokens—are permanently expunged or anonymized from active application databases.
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+            All personal identification records—including your name, mobile phone number, personal delivery addresses, UPI handles, and device notification tokens—are permanently expunged or anonymized from active application databases.
           </p>
-        </div>
+        </section>
+
       </div>
     </div>
   );
