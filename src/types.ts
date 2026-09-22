@@ -195,6 +195,8 @@ export interface DeliveryTrackingEvent {
 
 export interface Order {
   id: string;
+  orderId?: string;
+  order_id?: string;
   userId?: string;
   user_id?: string;
   customerName: string;

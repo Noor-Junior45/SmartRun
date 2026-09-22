@@ -23,8 +23,14 @@ import { KOLKATA_AREAS } from '../../data/kolkataAreas';
 import { LiveOrderRealMap } from './LiveOrderRealMap';
 import { supabase } from '../../lib/supabaseClient';
 import { updateOrderStatusInFirestore, saveUserProfile } from '../../services/supabaseService';
+import { getShortOrderUuid } from '../../utils/cryptoHelper';
 import { initiateRazorpayRefund } from '../../services/razorpayService';
 import { showToast } from '../../utils/toast';
+import {
+  RiderDetailsCard,
+  RiderReviewCard,
+  OrderProductReviewCard
+} from './OrderReviewComponents';
 
 // Giriraj Power Kasba Central Warehouse Exact Coordinates
 const WAREHOUSE_LOCATION = {
@@ -228,8 +234,12 @@ export const LiveOrderPage = ({
   const discount = order?.discount ?? ((order as any)?.discountAmount ?? 0);
   const totalAmount = order?.totalAmount || itemsSubtotal + deliveryFee + handlingFee + rainFee + surgeFee + productHandlingFee - discount;
 
-  const orderNumber =
-    order?.id && order.id.length > 8 ? order.id.slice(-6).toUpperCase() : order?.id || 'ORDER';
+  const orderNumber = getShortOrderUuid(
+    order?.id ||
+    order?.orderId ||
+    (order as any)?.order_id ||
+    order?.trackingNumber
+  );
 
   // Delivery partner name extracted directly from backend order
   const deliveryPartnerName = useMemo(() => {
@@ -274,6 +284,11 @@ export const LiveOrderPage = ({
     speed?: number;
     updatedAt?: string;
   } | null>(initialRiderLocation);
+
+  // Rider & Reviews State from Backend
+  const [backendRider, setBackendRider] = useState<any | null>(null);
+  const [riderReview, setRiderReview] = useState<any | null>(null);
+  const [productReview, setProductReview] = useState<any | null>(null);
 
   // Cancellation State
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -484,6 +499,88 @@ export const LiveOrderPage = ({
       clearInterval(pollTimer);
     };
   }, [order?.id, order?.status]);
+
+  // Fetch assigned rider details from backend (/api/orders/:id/rider)
+  useEffect(() => {
+    if (!order?.id) return;
+    let isMounted = true;
+    const fetchBackendRider = async () => {
+      try {
+        const res = await fetch(`/api/orders/${encodeURIComponent(order.id)}/rider`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isMounted && data.success && data.assigned && data.rider) {
+          setBackendRider(data.rider);
+        } else if (isMounted && !data.assigned) {
+          const localPartner = (order as any)?.delivery?.delivery_partner || (order as any)?.deliveryPartner;
+          if (localPartner && localPartner.name) {
+            setBackendRider(localPartner);
+          }
+        }
+      } catch {
+        const localPartner = (order as any)?.delivery?.delivery_partner || (order as any)?.deliveryPartner;
+        if (isMounted && localPartner && localPartner.name) {
+          setBackendRider(localPartner);
+        }
+      }
+    };
+
+    fetchBackendRider();
+
+    const isFinished = order.status === 'delivered' || order.status === 'cancelled' || order.status === 'failed';
+    let pollTimer: any = null;
+    if (!isFinished) {
+      pollTimer = setInterval(fetchBackendRider, 7000);
+    }
+    return () => {
+      isMounted = false;
+      if (pollTimer) clearInterval(pollTimer);
+    };
+  }, [order?.id, order?.status, (order as any)?.deliveryPartner, (order as any)?.delivery]);
+
+  // Fetch submitted reviews for this order from backend (/api/orders/:id/reviews)
+  useEffect(() => {
+    if (!order?.id) return;
+    let isMounted = true;
+    const fetchReviews = async () => {
+      try {
+        const res = await fetch(`/api/orders/${encodeURIComponent(order.id)}/reviews`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isMounted && data.success) {
+          if (data.riderReview) setRiderReview(data.riderReview);
+          if (data.productReview) setProductReview(data.productReview);
+        }
+      } catch {
+        // silent
+      }
+    };
+    fetchReviews();
+    return () => {
+      isMounted = false;
+    };
+  }, [order?.id]);
+
+  // Authoritative Assigned Delivery Partner
+  const assignedRider = useMemo(() => {
+    if (backendRider && backendRider.name) return backendRider;
+    const localPartner = (order as any)?.delivery?.delivery_partner || (order as any)?.deliveryPartner;
+    if (localPartner && localPartner.name) return localPartner;
+    if (deliveryPartnerName && deliveryPartnerName !== 'Delivery Partner') {
+      const fallbackPartner = (order as any)?.deliveryPartner || (order as any)?.delivery?.delivery_partner;
+      return {
+        name: deliveryPartnerName,
+        rating: fallbackPartner?.rating || 4.9,
+        vehicleType: fallbackPartner?.vehicleType || fallbackPartner?.vehicle_type || 'Express Delivery Bike',
+        vehicleNumber: fallbackPartner?.vehicleNumber || fallbackPartner?.vehicle_number || fallbackPartner?.vehicle_no,
+        avatarUrl: fallbackPartner?.avatarUrl || fallbackPartner?.avatar_url || null,
+        phone: fallbackPartner?.phone || '+91 87774 00280'
+      };
+    }
+    return null;
+  }, [backendRider, order, deliveryPartnerName]);
+
+  const isDelivered = (order?.status || '').toLowerCase() === 'delivered';
 
   // Single Status Pill display above the map (driven directly by backend order status)
   const statusPill = useMemo(() => {
@@ -707,6 +804,22 @@ export const LiveOrderPage = ({
       <main className="flex-1 w-full max-w-2xl mx-auto p-4 sm:p-6 pb-20 sm:pb-12">
         {/* Container identified with live-order-details-modal for seamless targeting */}
         <div id="live-order-details-modal" className="space-y-4 sm:space-y-5">
+          {/* 1. RIDER DETAILS (Directly above Delivery Destination box when delivery partner is assigned) */}
+          {assignedRider && (
+            <div className="space-y-3">
+              <RiderDetailsCard rider={assignedRider} />
+              {/* Rider Review Card (Appears directly below rider section when order is completed) */}
+              {isDelivered && (
+                <RiderReviewCard
+                  orderId={order.id}
+                  riderName={assignedRider.name}
+                  existingReview={riderReview}
+                  onReviewSubmitted={(rev) => setRiderReview(rev)}
+                />
+              )}
+            </div>
+          )}
+
           {/* Delivery Destination Box (Moved below map and above order items) */}
           <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs flex items-center justify-between border border-slate-100">
             <div className="flex items-center gap-3">
@@ -803,6 +916,17 @@ export const LiveOrderPage = ({
               )}
             </div>
           </div>
+
+          {/* Order / Products Review (Appears directly below order items section when order is completed) */}
+          {isDelivered && (
+            <OrderProductReviewCard
+              orderId={order.id}
+              itemsCount={order.items?.length || 0}
+              items={order.items || []}
+              existingReview={productReview}
+              onReviewSubmitted={(rev) => setProductReview(rev)}
+            />
+          )}
 
           {/* 3. CUSTOMER DETAILS (Separate Card) */}
           <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">

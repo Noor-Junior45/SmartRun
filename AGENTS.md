@@ -140,4 +140,20 @@
   - Converted the deletion policy and prerequisite rules into a clean editorial article layout without redundant card containers.
   - Reserved subtle highlight containers strictly for actionable and status sections: in-flight order warnings, unpaid dues settlement, eligibility confirmation, interactive confirmation form, and statutory CGST data retention disclosure.
   - Enforced single-line badges and tags (`whitespace-nowrap inline-flex`) across all statuses and alerts to prevent multiline wrapping on mobile viewports.
+- [x] **Delivery Partner Details & Dual Review System (Rider & Order)**:
+  - **Backend API**: Added `/api/orders/:id/rider`, `/api/orders/:id/assign-rider`, `/api/orders/:id/reviews`, `/api/orders/:id/rider-review`, and `/api/orders/:id/product-review` with persistent storage in `rider_assignments.json` and `order_reviews.json`.
+  - **Minimalist Rider Card**: Placed directly above the Delivery Destination box on both `LiveOrderPage` and `OrderHistoryView`. Shows clean heading "Delivery Partner", rider name, star rating with star icon, express vehicle info, and quick call shortcut.
+  - **Contextual Review Cards**: When order status is `delivered`:
+    - Rider review card appears directly below the Rider details section.
+    - Product / order review card appears directly below the Purchased items section.
+    - Both cards feature interactive 5-star rating, pre-defined quick feedback tags, comment support, and persistent state once submitted.
+- [x] **Unified `order_id` Synchronization & 8-Character Short Display (`#DE7A0E6C`)**:
+  - Maintained full Primary Key UUID (`de7a0e6c-a824-472b-8e28-18ac425083a6`) across `id` and `order_id` in Supabase and server-side upserts for foreign key integrity across related tables (`order_items`, `deliveries`, etc.).
+  - Centralized display format in `getShortOrderUuid` and `formatOrderDisplayId` in `/src/utils/cryptoHelper.ts`.
+  - Standardized UI display to `#` + the first 8 uppercase hex characters (e.g. `#DE7A0E6C`) across:
+    - `OrderHistoryView`: Order cards, details modals, copy button, and search filter (supports querying `#DE7A0E6C` or `DE7A0E6C`).
+    - `LiveOrderPage`: Header title (`Order #DE7A0E6C`), live map tracking badge, and cancellation modal dialogs.
+    - `FloatingLiveOrderButton`: Quick tracking pill.
+    - `invoiceGenerator`: A4 PDF invoice header metadata and clean download file name (`SmartRun-Invoice-DE7A0E6C.pdf`).
+    - `emailService` & `server.ts`: Automated WhatsApp alert messages and customer email notifications.
 - [x] **Persistent Project Memory**: Created `AGENTS.md` to permanently store all system rules, package details, and fix history.

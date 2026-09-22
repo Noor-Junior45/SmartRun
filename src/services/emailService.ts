@@ -1,5 +1,6 @@
 import { Order, WiringServiceBooking, ReceivedEmail } from '../types';
 import { API_BASE_URL } from '../lib/apiBase';
+import { getShortOrderUuid } from '../utils/cryptoHelper';
 
 export interface EmailSendResult {
   success: boolean;
@@ -210,7 +211,7 @@ export function formatOrderWhatsAppMessage(order: Order): string {
 
   return (
     `⚡ *NEW ORDER RECEIVED - GIRIRAJ POWER* ⚡\n\n` +
-    `📦 *Order ID:* #${order.id}\n` +
+    `📦 *Order ID:* #${getShortOrderUuid(order.id)}\n` +
     `📅 *Time:* ${new Date(order.createdAt || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST\n\n` +
     `👤 *Customer:* ${order.customerName}\n` +
     `📱 *Mobile:* ${order.phone}\n` +

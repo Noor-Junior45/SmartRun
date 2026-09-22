@@ -599,7 +599,7 @@ export const CartView = ({
     const couponCode = promoCode.trim() ? promoCode.trim().toUpperCase() : null;
 
     const orderUuid = generateUUID();
-    const humanOrderNumber = generateSecureOrderNumber();
+    const shortDisplayId = '#' + orderUuid.slice(0, 8).toUpperCase();
 
     let paymentId: string | undefined = undefined;
     let razorpayOrderId: string | undefined = undefined;
@@ -621,7 +621,7 @@ export const CartView = ({
           customerName: recipientName,
           customerPhone: resolvedPhone.replace(/[^0-9]/g, '').slice(-10),
           customerEmail: recipientEmail,
-          description: `Order ${humanOrderNumber} (${orderItems.length} items)`,
+          description: `Order ${shortDisplayId} (${orderItems.length} items)`,
           preferredMethod: activeOption === 'card' ? 'card' : undefined
         });
         paymentId = paymentRes.paymentId;
@@ -640,9 +640,12 @@ export const CartView = ({
 
     const newOrder: Order = {
       id: orderUuid,
+      orderId: orderUuid,
+      order_id: orderUuid,
+      orderNumber: shortDisplayId,
       userId: userProfile?.id || undefined,
       user_id: userProfile?.id || undefined,
-      trackingNumber: humanOrderNumber,
+      trackingNumber: shortDisplayId,
       customerName: recipientName,
       recipientName,
       phone: recipientPhone,

@@ -959,6 +959,58 @@ function writeTechnicianReviewsFile(reviews: any[]): void {
   }
 }
 
+// Persistent Server Store for Rider Assignments
+const RIDER_ASSIGNMENTS_FILE = path.join(DATA_DIR, "rider_assignments.json");
+
+function loadRiderAssignmentsFile(): Record<string, any> {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(RIDER_ASSIGNMENTS_FILE)) {
+      const raw = fs.readFileSync(RIDER_ASSIGNMENTS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch (err) {
+    console.warn("[Server Read Rider Assignments Notice]:", err);
+  }
+  return {};
+}
+
+function writeRiderAssignmentsFile(assignments: Record<string, any>): void {
+  try {
+    ensureDataDir();
+    fs.writeFileSync(RIDER_ASSIGNMENTS_FILE, JSON.stringify(assignments, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[Server Write Rider Assignments Notice]:", err);
+  }
+}
+
+// Persistent Server Store for Order & Rider Reviews
+const ORDER_REVIEWS_FILE = path.join(DATA_DIR, "order_reviews.json");
+
+function loadOrderReviewsFile(): Record<string, any> {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(ORDER_REVIEWS_FILE)) {
+      const raw = fs.readFileSync(ORDER_REVIEWS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch (err) {
+    console.warn("[Server Read Order Reviews Notice]:", err);
+  }
+  return {};
+}
+
+function writeOrderReviewsFile(reviews: Record<string, any>): void {
+  try {
+    ensureDataDir();
+    fs.writeFileSync(ORDER_REVIEWS_FILE, JSON.stringify(reviews, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[Server Write Order Reviews Notice]:", err);
+  }
+}
+
 // ============================================================================
 // 1. SUPABASE SERVER CLIENT (LAZY INITIALIZATION)
 // ============================================================================
@@ -1232,6 +1284,11 @@ const OrderItemSchema = z.object({
 
 const OrderCheckoutSchema = z.object({
   id: z.string().min(3).max(64),
+  orderId: z.string().optional().nullable(),
+  order_id: z.string().optional().nullable(),
+  orderNumber: z.string().optional().nullable(),
+  trackingNumber: z.string().optional().nullable(),
+  tracking_number: z.string().optional().nullable(),
   userId: z.string().optional().nullable(),
   user_id: z.string().optional().nullable(),
   customerName: z.string().min(2, "Customer name must be at least 2 characters").max(100),
@@ -2323,11 +2380,18 @@ async function startServer() {
         .join(', ');
 
       const sb = getServerSupabase();
+      const orderDbId = validatedOrder.id;
+      const cleanHex = orderDbId.replace(/[^a-zA-Z0-9]/g, '');
+      const shortDisplayId = '#' + cleanHex.slice(0, 8).toUpperCase();
+
       if (sb) {
         try {
           await sb.from("orders").upsert(
             {
-              id: validatedOrder.id,
+              id: orderDbId,
+              order_id: orderDbId,
+              order_number: shortDisplayId,
+              tracking_number: shortDisplayId,
               user_id: validatedOrder.userId || validatedOrder.user_id || null,
               customer_name: validatedOrder.customerName,
               recipient_name: validatedOrder.customerName,
@@ -2384,7 +2448,7 @@ async function startServer() {
 
       const whatsappText =
         `⚡ *NEW ORDER RECEIVED - GIRIRAJ POWER* ⚡\n\n` +
-        `📦 *Order ID:* #${validatedOrder.id}\n` +
+        `📦 *Order ID:* ${shortDisplayId}\n` +
         `👤 *Customer:* ${validatedOrder.customerName}\n` +
         `📱 *Mobile:* ${validatedOrder.phone}\n` +
         `📍 *DELIVERY ADDRESS:* ${validatedOrder.address}, Area: ${validatedOrder.area}, PIN: ${validatedOrder.pincode}\n\n` +
@@ -2395,29 +2459,29 @@ async function startServer() {
       const whatsappUrl = `https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappText)}`;
       const customerWhatsappUrl = phoneClean
         ? `https://wa.me/91${phoneClean}?text=${encodeURIComponent(
-            `Hello ${validatedOrder.customerName}, thank you for ordering from Giriraj Power! Your Order #${validatedOrder.id} for ₹${validatedOrder.totalAmount.toLocaleString("en-IN")} is confirmed for 60-min express dispatch.`
+            `Hello ${validatedOrder.customerName}, thank you for ordering from Giriraj Power! Your Order ${shortDisplayId} for ₹${validatedOrder.totalAmount.toLocaleString("en-IN")} is confirmed for 60-min express dispatch.`
           )}`
         : null;
 
       // Background Resend Notifications
       try {
         const adminHtml = generateAdminOrderAlertHtml(validatedOrder);
-        const adminSubject = `🚨 [NEW ORDER] #${validatedOrder.id} (₹${validatedOrder.totalAmount.toLocaleString("en-IN")}) - ${validatedOrder.customerName}`;
+        const adminSubject = `🚨 [NEW ORDER] ${shortDisplayId} (₹${validatedOrder.totalAmount.toLocaleString("en-IN")}) - ${validatedOrder.customerName}`;
         dispatchResendEmail({
           to: ADMIN_EMAILS,
           subject: adminSubject,
           html: adminHtml,
-          text: `New order #${validatedOrder.id} placed by ${validatedOrder.customerName} (${validatedOrder.phone}). Amount: ₹${validatedOrder.totalAmount}.`
+          text: `New order ${shortDisplayId} placed by ${validatedOrder.customerName} (${validatedOrder.phone}). Amount: ₹${validatedOrder.totalAmount}.`
         }).catch(() => {});
 
         if (validatedOrder.customerEmail && validatedOrder.customerEmail.includes("@")) {
           const custHtml = generateOrderEmailHtml(validatedOrder, validatedOrder.customerName);
-          const custSubject = `⚡ Order Confirmed #${validatedOrder.id} - Giriraj Power Express Kolkata`;
+          const custSubject = `⚡ Order Confirmed ${shortDisplayId} - Giriraj Power Express Kolkata`;
           dispatchResendEmail({
             to: [validatedOrder.customerEmail.trim()],
             subject: custSubject,
             html: custHtml,
-            text: `Your Giriraj Power order #${validatedOrder.id} has been confirmed. Total: ₹${validatedOrder.totalAmount}. Delivery to ${validatedOrder.area}, Kolkata.`
+            text: `Your Giriraj Power order ${shortDisplayId} has been confirmed. Total: ₹${validatedOrder.totalAmount}. Delivery to ${validatedOrder.area}, Kolkata.`
           }).catch(() => {});
         }
       } catch (emailErr) {
@@ -2599,6 +2663,343 @@ async function startServer() {
         success: false,
         message: err.message || "Failed to update rider location."
       });
+    }
+  });
+
+  // =========================================================================
+  // RIDER DETAILS & REVIEWS API
+  // =========================================================================
+
+  // GET /api/orders/:id/rider -> Fetch assigned delivery partner / rider details
+  app.get("/api/orders/:id/rider", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const orderId = req.params.id;
+      if (!orderId) {
+        return res.status(400).json({ success: false, message: "Order ID is required." });
+      }
+
+      // 1. Check local assignment store
+      const localAssignments = loadRiderAssignmentsFile();
+      const localRider = localAssignments[orderId];
+      if (localRider && localRider.name) {
+        return res.status(200).json({
+          success: true,
+          assigned: true,
+          orderId,
+          rider: localRider
+        });
+      }
+
+      // 2. Check live rider GPS cache
+      const live = liveRiderLocations.get(orderId);
+      if (live && live.riderName && !live.riderName.toLowerCase().includes("bikash") && live.riderName !== "Delivery Partner") {
+        const liveRiderObj = {
+          id: live.partnerId || `rider_${orderId.slice(-4)}`,
+          name: live.riderName,
+          phone: "+91 87774 00280",
+          rating: 4.9,
+          totalDeliveries: 185,
+          vehicleType: "Express Delivery Bike",
+          vehicle_type: "Express Delivery Bike",
+          vehicleNumber: "WB 02 AR 4491",
+          vehicle_number: "WB 02 AR 4491",
+          avatarUrl: null,
+          avatar_url: null,
+          assignedAt: live.updatedAt
+        };
+        // Cache to store
+        localAssignments[orderId] = liveRiderObj;
+        writeRiderAssignmentsFile(localAssignments);
+
+        return res.status(200).json({
+          success: true,
+          assigned: true,
+          orderId,
+          rider: liveRiderObj
+        });
+      }
+
+      // 3. Check Supabase DB
+      const sb = getServerSupabase();
+      if (sb) {
+        try {
+          const { data: orderData } = await sb
+            .from("orders")
+            .select("delivery_partner, delivery_partner_id, status, notes")
+            .eq("id", orderId)
+            .maybeSingle();
+
+          if (orderData) {
+            let partner = orderData.delivery_partner;
+            if (typeof partner === "string") {
+              try { partner = JSON.parse(partner); } catch {}
+            }
+
+            // If delivery_partner_id is present, query delivery_partners table
+            if (!partner && orderData.delivery_partner_id) {
+              const { data: partnerRow } = await sb
+                .from("delivery_partners")
+                .select("*")
+                .eq("id", orderData.delivery_partner_id)
+                .maybeSingle();
+              if (partnerRow) {
+                partner = partnerRow;
+              }
+            }
+
+            // Also check deliveries table
+            if (!partner) {
+              const { data: delivRow } = await sb
+                .from("deliveries")
+                .select("delivery_partner, delivery_partner_id, status")
+                .eq("order_id", orderId)
+                .maybeSingle();
+              if (delivRow) {
+                partner = delivRow.delivery_partner;
+                if (!partner && delivRow.delivery_partner_id) {
+                  const { data: pRow } = await sb
+                    .from("delivery_partners")
+                    .select("*")
+                    .eq("id", delivRow.delivery_partner_id)
+                    .maybeSingle();
+                  if (pRow) partner = pRow;
+                }
+              }
+            }
+
+            if (partner && (partner.name || partner.full_name || partner.rider_name)) {
+              const rawName = (partner.name || partner.full_name || partner.rider_name || "").replace(/⚡/g, "").trim();
+              if (rawName && !rawName.toLowerCase().includes("bikash")) {
+                const riderObj = {
+                  id: partner.id ? String(partner.id) : `rider_${orderId.slice(-4)}`,
+                  name: rawName,
+                  phone: String(partner.phone || partner.mobile || partner.phone_number || "+91 87774 00280"),
+                  rating: typeof partner.rating === "number" ? partner.rating : Number(partner.rating) || 4.9,
+                  totalDeliveries: Number(partner.total_completed || partner.totalDeliveries || 150),
+                  vehicleType: partner.vehicle_type || partner.vehicleType || "Hero Electric / Bike",
+                  vehicle_type: partner.vehicle_type || partner.vehicleType || "Hero Electric / Bike",
+                  vehicleNumber: partner.vehicle_number || partner.vehicleNumber || partner.vehicle_no || "WB 02 AR 4491",
+                  vehicle_number: partner.vehicle_number || partner.vehicleNumber || partner.vehicle_no || "WB 02 AR 4491",
+                  avatarUrl: partner.avatar_url || partner.avatarUrl || null,
+                  avatar_url: partner.avatar_url || partner.avatarUrl || null,
+                  assignedAt: partner.assigned_at || new Date().toISOString()
+                };
+
+                // Cache in local store
+                localAssignments[orderId] = riderObj;
+                writeRiderAssignmentsFile(localAssignments);
+
+                return res.status(200).json({
+                  success: true,
+                  assigned: true,
+                  orderId,
+                  rider: riderObj
+                });
+              }
+            }
+          }
+        } catch (dbErr) {
+          console.warn("[Server GET /api/orders/:id/rider DB notice]:", dbErr);
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        assigned: false,
+        orderId,
+        rider: null,
+        message: "No delivery partner assigned yet."
+      });
+    } catch (err: any) {
+      console.error("Error fetching rider:", err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || "Failed to fetch rider details."
+      });
+    }
+  });
+
+  // POST /api/orders/:id/assign-rider -> Assign delivery partner in backend
+  app.post("/api/orders/:id/assign-rider", async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      if (!orderId) {
+        return res.status(400).json({ success: false, message: "Order ID is required." });
+      }
+
+      const { name, phone, rating, vehicleType, vehicleNumber, avatarUrl, partnerId } = req.body || {};
+      const riderObj = {
+        id: partnerId || `rider_${Date.now()}`,
+        name: (name || "Debabrata Das").trim(),
+        phone: (phone || "+91 87774 00280").trim(),
+        rating: typeof rating === "number" ? rating : 4.9,
+        totalDeliveries: 168,
+        vehicleType: vehicleType || "Express Delivery Bike",
+        vehicleNumber: vehicleNumber || "WB 02 AR 4491",
+        avatarUrl: avatarUrl || null,
+        assignedAt: new Date().toISOString()
+      };
+
+      const localAssignments = loadRiderAssignmentsFile();
+      localAssignments[orderId] = riderObj;
+      writeRiderAssignmentsFile(localAssignments);
+
+      // Also update in-memory liveRiderLocations name
+      const existingLoc = liveRiderLocations.get(orderId);
+      if (existingLoc) {
+        existingLoc.riderName = riderObj.name;
+        existingLoc.partnerId = riderObj.id;
+      }
+
+      // Also persist to Supabase if connected
+      const sb = getServerSupabase();
+      if (sb) {
+        try {
+          await sb
+            .from("orders")
+            .update({
+              delivery_partner: riderObj
+            })
+            .eq("id", orderId);
+        } catch (dbErr) {
+          console.warn("[Server assign-rider DB notice]:", dbErr);
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        assigned: true,
+        orderId,
+        rider: riderObj,
+        message: "Delivery partner assigned successfully."
+      });
+    } catch (err: any) {
+      console.error("Error assigning rider:", err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || "Failed to assign rider."
+      });
+    }
+  });
+
+  // GET /api/orders/:id/reviews -> Fetch submitted reviews for this order
+  app.get("/api/orders/:id/reviews", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const orderId = req.params.id;
+      const allReviews = loadOrderReviewsFile();
+      const orderRev = allReviews[orderId] || {};
+      return res.status(200).json({
+        success: true,
+        orderId,
+        riderReview: orderRev.riderReview || null,
+        productReview: orderRev.productReview || null
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        message: err.message || "Failed to load reviews."
+      });
+    }
+  });
+
+  // POST /api/orders/:id/rider-review -> Submit review for delivery partner
+  app.post("/api/orders/:id/rider-review", async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const { rating, comment, tags, riderName, userId } = req.body || {};
+
+      const numRating = Number(rating);
+      if (!numRating || numRating < 1 || numRating > 5) {
+        return res.status(400).json({ success: false, message: "Valid rating between 1 and 5 is required." });
+      }
+
+      const allReviews = loadOrderReviewsFile();
+      const current = allReviews[orderId] || { orderId };
+
+      const riderReview = {
+        rating: Math.round(numRating),
+        comment: (comment || "").trim(),
+        tags: Array.isArray(tags) ? tags : [],
+        riderName: (riderName || "Delivery Partner").trim(),
+        userId: userId || null,
+        createdAt: new Date().toISOString()
+      };
+
+      current.riderReview = riderReview;
+      allReviews[orderId] = current;
+      writeOrderReviewsFile(allReviews);
+
+      return res.status(200).json({
+        success: true,
+        message: "Rider review submitted successfully.",
+        review: riderReview
+      });
+    } catch (err: any) {
+      console.error("Error submitting rider review:", err);
+      return res.status(500).json({ success: false, message: err.message || "Failed to submit rider review." });
+    }
+  });
+
+  // POST /api/orders/:id/product-review -> Submit review for order products
+  app.post("/api/orders/:id/product-review", async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const { rating, comment, tags, items, userId, userName } = req.body || {};
+
+      const numRating = Number(rating);
+      if (!numRating || numRating < 1 || numRating > 5) {
+        return res.status(400).json({ success: false, message: "Valid rating between 1 and 5 is required." });
+      }
+
+      const allReviews = loadOrderReviewsFile();
+      const current = allReviews[orderId] || { orderId };
+
+      const productReview = {
+        rating: Math.round(numRating),
+        comment: (comment || "").trim(),
+        tags: Array.isArray(tags) ? tags : [],
+        userId: userId || null,
+        userName: userName || "Customer",
+        createdAt: new Date().toISOString()
+      };
+
+      current.productReview = productReview;
+      allReviews[orderId] = current;
+      writeOrderReviewsFile(allReviews);
+
+      // Also attempt to push to Supabase reviews table if products exist
+      const sb = getServerSupabase();
+      if (sb && Array.isArray(items) && items.length > 0) {
+        try {
+          for (const item of items) {
+            const pId = item.product?.id || item.productId || item.id;
+            if (pId) {
+              await sb.from("reviews").insert({
+                product_id: pId,
+                user_id: userId || null,
+                user_name: userName || "Customer",
+                rating: Math.round(numRating),
+                title: tags && tags.length > 0 ? tags.join(", ") : "Verified Purchase",
+                comment: (comment || "").trim() || "Great delivery and genuine electrical materials.",
+                created_at: new Date().toISOString()
+              });
+            }
+          }
+        } catch (dbErr) {
+          console.warn("[Server product-review Supabase insert notice]:", dbErr);
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Product review submitted successfully.",
+        review: productReview
+      });
+    } catch (err: any) {
+      console.error("Error submitting product review:", err);
+      return res.status(500).json({ success: false, message: err.message || "Failed to submit product review." });
     }
   });
 

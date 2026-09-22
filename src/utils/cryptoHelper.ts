@@ -43,3 +43,24 @@ export function generateSecureToken(prefix = 'tok', length = 8): string {
   }
   return `${prefix}_${Date.now()}_${Date.now().toString(36).slice(-length)}`;
 }
+
+/**
+ * Extracts the first 8 characters of an order ID/UUID in uppercase
+ * e.g., "de7a0e6c-a824-472b-8e28-18ac425083a6" -> "DE7A0E6C"
+ */
+export function getShortOrderUuid(rawId?: string | null): string {
+  if (!rawId) return 'ORDER';
+  const str = String(rawId).trim();
+  // Strip leading # or GP-
+  const clean = str.replace(/^#/, '').replace(/^GP-?/i, '').replace(/-/g, '');
+  const prefix = clean.slice(0, 8).toUpperCase();
+  return prefix || 'ORDER';
+}
+
+/**
+ * Formats an order ID/UUID to the standard #DE7A0E6C display tag
+ * e.g., "de7a0e6c-a824-472b-8e28-18ac425083a6" -> "#DE7A0E6C"
+ */
+export function formatOrderDisplayId(rawId?: string | null): string {
+  return `#${getShortOrderUuid(rawId)}`;
+}

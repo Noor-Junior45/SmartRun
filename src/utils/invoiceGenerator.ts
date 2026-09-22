@@ -1,6 +1,7 @@
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { Order } from '../types';
+import { getShortOrderUuid } from './cryptoHelper';
 
 export async function downloadInvoicePDF(order: Order): Promise<void> {
   // 1. Calculate pricing metrics
@@ -53,7 +54,8 @@ export async function downloadInvoicePDF(order: Order): Promise<void> {
     hour12: false
   });
 
-  const invoiceNumber = `INV-${order.id.slice(-8).toUpperCase()}`;
+  const shortOrderCode = getShortOrderUuid(order.id || (order as any).order_id || order.orderId);
+  const invoiceNumber = `INV-${shortOrderCode}`;
 
   // 2. Pagination Calculation for Standard A4
   // Page 1 can comfortably hold header, metadata, up to 6 items, plus totals & footer.
@@ -132,8 +134,11 @@ export async function downloadInvoicePDF(order: Order): Promise<void> {
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;">
             <div>
-              <span style="font-size: 10px; color: #94a3b8; letter-spacing: 1px; display: block; margin-bottom: 2px;">INVOICE ID</span>
-              <strong style="font-size: 15px; color: #0f172a; font-weight: 700;">${invoiceNumber}</strong>
+              <span style="font-size: 10px; color: #94a3b8; letter-spacing: 1px; display: block; margin-bottom: 2px;">ORDER / INVOICE ID</span>
+              <strong style="font-size: 15px; color: #0f172a; font-weight: 700;">#${shortOrderCode}</strong>
+              <div style="font-size: 11px; color: #64748b; font-family: -apple-system, sans-serif; margin-top: 2px;">
+                Ref: ${invoiceNumber}
+              </div>
             </div>
             <div style="text-align: right;">
               <span style="font-size: 10px; color: #94a3b8; letter-spacing: 1px; display: block; margin-bottom: 2px;">TIMESTAMP</span>
@@ -313,7 +318,7 @@ export async function downloadInvoicePDF(order: Order): Promise<void> {
     }
 
     // Save and trigger direct browser download
-    const cleanFileName = `SmartRun-Invoice-${order.id.slice(-6).toUpperCase()}.pdf`;
+    const cleanFileName = `SmartRun-Invoice-${shortOrderCode}.pdf`;
     pdf.save(cleanFileName);
   } finally {
     if (document.body.contains(container)) {

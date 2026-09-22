@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Order, UserProfile } from '../types';
 import { getOrderWhatsAppUrl } from '../services/emailService';
+import { getShortOrderUuid, formatOrderDisplayId } from '../utils/cryptoHelper';
 import { deleteFirestoreOrder, clearAllUserOrders, updateOrderStatusInFirestore, saveUserProfile, getUserScopeKeyFromUser, getActiveUserScope } from '../services/supabaseService';
 import { supabase } from '../lib/supabaseClient';
 import { initiateRazorpayRefund } from '../services/razorpayService';
@@ -35,6 +36,11 @@ import { OrderTrackingTimeline } from './OrderTrackingTimeline';
 import { downloadInvoicePDF } from '../utils/invoiceGenerator';
 import { PullToRefresh } from './PullToRefresh';
 import { showToast } from '../utils/toast';
+import {
+  RiderDetailsCard,
+  RiderReviewCard,
+  OrderProductReviewCard
+} from './orders/OrderReviewComponents';
 
 interface OrderHistoryViewProps {
   orders: Order[];
@@ -65,6 +71,11 @@ export const OrderHistoryView = ({
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'delivered'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
+
+  // Rider & Review State for Selected Order Detail View
+  const [selectedOrderRider, setSelectedOrderRider] = useState<any | null>(null);
+  const [selectedOrderRiderReview, setSelectedOrderRiderReview] = useState<any | null>(null);
+  const [selectedOrderProductReview, setSelectedOrderProductReview] = useState<any | null>(null);
 
   // Live 1-second tick to update 2-minute cancellation countdown in real-time
   useEffect(() => {
@@ -102,11 +113,7 @@ export const OrderHistoryView = ({
   }, [ratingsStorageKey]);
 
   const getOrderDisplayNumber = (order: Order): string => {
-    if (order.trackingNumber) return order.trackingNumber;
-    if (order.orderNumber) return order.orderNumber;
-    if (order.id.startsWith('GP-')) return order.id;
-    if (order.id.length > 10) return `GP-${order.id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
-    return order.id;
+    return getShortOrderUuid(order.id || (order as any).order_id || order.orderId || order.trackingNumber);
   };
 
   const handleRate = (orderId: string, star: number, e: React.MouseEvent) => {
@@ -126,6 +133,54 @@ export const OrderHistoryView = ({
     if (!selectedOrderId) return null;
     return orders.find((o) => o.id === selectedOrderId) || null;
   }, [orders, selectedOrderId]);
+
+  // Fetch rider details and reviews when an order is opened in details view
+  useEffect(() => {
+    if (!selectedOrderId) {
+      setSelectedOrderRider(null);
+      setSelectedOrderRiderReview(null);
+      setSelectedOrderProductReview(null);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchRiderAndReviews = async () => {
+      try {
+        const [riderRes, reviewRes] = await Promise.all([
+          fetch(`/api/orders/${encodeURIComponent(selectedOrderId)}/rider`),
+          fetch(`/api/orders/${encodeURIComponent(selectedOrderId)}/reviews`)
+        ]);
+
+        if (riderRes.ok) {
+          const rData = await riderRes.json();
+          if (isMounted && rData.success && rData.assigned && rData.rider) {
+            setSelectedOrderRider(rData.rider);
+          } else if (isMounted && selectedOrder) {
+            const raw = selectedOrder.delivery?.delivery_partner || selectedOrder.deliveryPartner;
+            if (raw && raw.name) setSelectedOrderRider(raw);
+          }
+        }
+
+        if (reviewRes.ok) {
+          const revData = await reviewRes.json();
+          if (isMounted && revData.success) {
+            if (revData.riderReview) setSelectedOrderRiderReview(revData.riderReview);
+            if (revData.productReview) setSelectedOrderProductReview(revData.productReview);
+          }
+        }
+      } catch {
+        if (isMounted && selectedOrder) {
+          const raw = selectedOrder.delivery?.delivery_partner || selectedOrder.deliveryPartner;
+          if (raw && raw.name) setSelectedOrderRider(raw);
+        }
+      }
+    };
+
+    fetchRiderAndReviews();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedOrderId, selectedOrder]);
 
   const handleDirectDownloadPDF = async (order: Order) => {
     try {
@@ -152,10 +207,15 @@ export const OrderHistoryView = ({
       // Search query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
+        const shortId = getShortOrderUuid(order.id).toLowerCase();
         const matchesId =
           String(order.id).toLowerCase().includes(query) ||
+          (order.orderId || '').toLowerCase().includes(query) ||
+          ((order as any).order_id || '').toLowerCase().includes(query) ||
           (order.trackingNumber || '').toLowerCase().includes(query) ||
-          (order.orderNumber || '').toLowerCase().includes(query);
+          (order.orderNumber || '').toLowerCase().includes(query) ||
+          shortId.includes(query.replace(/^#/, '')) ||
+          `#${shortId}`.includes(query);
         const matchesItems = order.items.some((item) =>
           (item.product?.name || '').toLowerCase().includes(query) ||
           (item.product?.brand || '').toLowerCase().includes(query)
@@ -695,6 +755,19 @@ export const OrderHistoryView = ({
 
     const rawPartner = selectedOrder.delivery?.delivery_partner || selectedOrder.deliveryPartner;
     const partner = rawPartner && rawPartner.name && !rawPartner.name.toLowerCase().includes('bikash') ? rawPartner : undefined;
+    const activeRider =
+      selectedOrderRider ||
+      partner ||
+      ((selectedOrder as any)?.assignedTo
+        ? {
+            name: (selectedOrder as any).assignedTo,
+            rating: 4.9,
+            vehicleType: (selectedOrder as any).vehicleType || (selectedOrder as any).vehicle_type || 'Express Delivery Bike',
+            vehicleNumber: (selectedOrder as any).vehicleNumber || (selectedOrder as any).vehicle_number || (selectedOrder as any).vehicle_no,
+            avatarUrl: (selectedOrder as any).avatarUrl || (selectedOrder as any).avatar_url || null,
+            phone: '+91 87774 00280'
+          }
+        : null);
 
     // Items and Financial Calculations
     const itemsSubtotal = selectedOrder.subtotal || selectedOrder.itemTotal || selectedOrder.items.reduce((sum, item) => {
@@ -905,6 +978,19 @@ export const OrderHistoryView = ({
             })}
           </div>
         </div>
+
+        {/* Product / Order Review Card (Appears directly below order section when order is completed) */}
+        {isDelivered && (
+          <div className="pt-2 border-t border-slate-100">
+            <OrderProductReviewCard
+              orderId={selectedOrder.id}
+              itemsCount={selectedOrder.items.length}
+              items={selectedOrder.items}
+              existingReview={selectedOrderProductReview}
+              onReviewSubmitted={(rev) => setSelectedOrderProductReview(rev)}
+            />
+          </div>
+        )}
 
         {/* 3. Financial Breakdown (Subtotal, Delivery, GST, Handling, Total Amount Paid) */}
         <div className="space-y-2 pt-2 border-t border-slate-100 text-xs text-slate-600">
@@ -1133,6 +1219,21 @@ export const OrderHistoryView = ({
             </div>
           )}
         </div>
+
+        {/* 5.5. Assigned Rider Details & Rider Review Card (Above Delivery Address Box) */}
+        {activeRider && (
+          <div className="pt-3 border-t border-slate-100 space-y-3">
+            <RiderDetailsCard rider={activeRider} />
+            {isDelivered && (
+              <RiderReviewCard
+                orderId={selectedOrder.id}
+                riderName={activeRider.name}
+                existingReview={selectedOrderRiderReview}
+                onReviewSubmitted={(rev) => setSelectedOrderRiderReview(rev)}
+              />
+            )}
+          </div>
+        )}
 
         {/* 6. Delivery Address & Contact Details */}
         <div className="pt-3 border-t border-slate-100 space-y-1.5 text-xs">

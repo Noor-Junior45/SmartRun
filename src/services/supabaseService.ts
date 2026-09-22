@@ -1998,10 +1998,13 @@ export function normalizeDeliveryPartner(raw: any): DeliveryPartner | undefined 
     name: cleanName,
     phone: String(phone || ''),
     vehicleNumber,
+    vehicle_number: vehicleNumber,
     vehicleType,
+    vehicle_type: vehicleType,
     rating,
     currentHub,
-    avatar_url: avatarUrl
+    avatar_url: avatarUrl,
+    avatarUrl: avatarUrl
   };
 }
 
@@ -2237,8 +2240,15 @@ export async function fetchUserOrders(): Promise<Order[]> {
 
           const partnerData = normalizeDeliveryPartner(rawPartner);
 
+          const resolvedUuid = isValidUUID(oid) ? oid : (isValidUUID(row.id) ? row.id : (isValidUUID(row.order_id) ? row.order_id : oid));
+          const shortDisplayId = '#' + resolvedUuid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
+
           return {
-            id: oid,
+            id: resolvedUuid,
+            orderId: resolvedUuid,
+            order_id: resolvedUuid,
+            orderNumber: shortDisplayId,
+            trackingNumber: row.tracking_number || shortDisplayId,
             customerName: row.recipient_name || row.customer_name || 'Customer',
             recipientName: row.recipient_name || row.customer_name || 'Customer',
             phone: row.recipient_phone || row.phone || '',
@@ -2520,12 +2530,13 @@ export async function createFirestoreOrder(order: Order): Promise<Order> {
 
   // Guarantee order has a valid UUID primary key for Supabase UUID columns
   const orderDbId = isValidUUID(order.id) ? order.id : generateUUID();
-  const humanReadableNumber = order.id && order.id.startsWith('GP-') ? order.id : generateSecureOrderNumber();
+  const shortDisplayId = '#' + orderDbId.slice(0, 8).toUpperCase();
   
   order.id = orderDbId;
-  if (!order.trackingNumber) {
-    order.trackingNumber = humanReadableNumber;
-  }
+  order.orderId = orderDbId;
+  order.order_id = orderDbId;
+  order.orderNumber = shortDisplayId;
+  order.trackingNumber = shortDisplayId;
 
   // If this order ID was previously in deleted list, remove it from blacklist
   if (order.id) {
@@ -2595,6 +2606,9 @@ export async function createFirestoreOrder(order: Order): Promise<Order> {
   // 3. Insert into Supabase `orders` and `order_items` tables
   const orderRowPayload: Record<string, any> = {
     id: orderDbId,
+    order_id: orderDbId,
+    order_number: shortDisplayId,
+    tracking_number: shortDisplayId,
     user_id: userId,
     customer_name: order.customerName || order.recipientName || 'Customer',
     recipient_name: order.recipientName || order.customerName || 'Customer',
@@ -2629,7 +2643,6 @@ export async function createFirestoreOrder(order: Order): Promise<Order> {
     razorpay_order_id: (order as any).razorpay_order_id || order.razorpayOrderId || null,
     razorpay_signature: (order as any).razorpay_signature || order.razorpaySignature || null,
     status: order.status || 'pending',
-    tracking_number: order.trackingNumber || humanReadableNumber,
     placed_at: order.createdAt || new Date().toISOString(),
     updated_at: order.createdAt || new Date().toISOString(),
     packed_at: null,
