@@ -27,7 +27,7 @@ const config: CapacitorConfig = {
   },
   plugins: {
     App: {
-      // Custom URL scheme deep link handling (buildnow://product/:id)
+      // Custom URL scheme deep link handling (smartrun://product/:id or https://www.smartrun.in/...)
     },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],

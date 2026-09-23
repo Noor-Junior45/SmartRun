@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
 import { Navigation, ZoomIn, ZoomOut } from 'lucide-react';
 
@@ -58,6 +58,8 @@ interface LiveOrderRealMapProps {
     updatedAt?: string;
   } | null;
   deliveryPartnerName?: string;
+  riderAvatarUrl?: string | null;
+  riderBikeNumber?: string | null;
 }
 
 export const LiveOrderRealMap = ({
@@ -67,7 +69,9 @@ export const LiveOrderRealMap = ({
   isOutForDelivery,
   isPartnerAssigned,
   riderLocation,
-  deliveryPartnerName
+  deliveryPartnerName,
+  riderAvatarUrl,
+  riderBikeNumber
 }: LiveOrderRealMapProps) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -78,6 +82,47 @@ export const LiveOrderRealMap = ({
   const routeGlowRef = useRef<L.Polyline | null>(null);
   const riderIconRef = useRef<L.DivIcon | null>(null);
   const [currentZoom, setCurrentZoom] = useState<number>(13);
+
+  // Delivery Rider Pin generator (uses avatar if present, else crisp bike icon)
+  const createRiderIcon = useCallback((avatar?: string | null, bikeNo?: string | null) => {
+    const cleanAvatar = avatar && avatar.trim() ? avatar.trim() : null;
+    const cleanBikeNo = bikeNo && bikeNo.trim() ? bikeNo.trim() : null;
+    return L.divIcon({
+      className: 'bg-transparent border-none',
+      html: `
+        <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+          <div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;">
+            <svg width="44" height="44" viewBox="0 0 34 44" fill="none" xmlns="http://www.w3.org/2000/svg" style="position:absolute;top:0;left:0;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.35));">
+              <path d="M17 0C7.61 0 0 7.61 0 17c0 11.55 14.88 25.4 15.51 25.99a2.02 2.02 0 0 0 2.98 0C19.12 42.4 34 28.55 34 17 34 7.61 26.39 0 17 0z" fill="#059669" stroke="#ffffff" stroke-width="2"/>
+            </svg>
+            ${
+              cleanAvatar
+                ? `<div style="position:relative;z-index:2;width:24px;height:24px;border-radius:50%;overflow:hidden;border:1.5px solid #ffffff;background:#ffffff;margin-top:-6px;">
+                    <img src="${cleanAvatar}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'" />
+                  </div>`
+                : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="position:relative;z-index:2;margin-top:-6px;">
+                    <circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
+                  </svg>`
+            }
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:-2px;">
+            <span style="font-size:9px;font-weight:800;background:#047857;color:#ffffff;padding:1px 5px;border-radius:3px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.2);">
+              Rider
+            </span>
+            ${
+              cleanBikeNo
+                ? `<span style="font-size:8px;font-weight:800;font-family:monospace;background:#ffffff;color:#0f172a;padding:0.5px 4px;border-radius:2px;white-space:nowrap;border:1px solid #cbd5e1;box-shadow:0 1px 2px rgba(0,0,0,0.15);">
+                    ${cleanBikeNo}
+                  </span>`
+                : ''
+            }
+          </div>
+        </div>
+      `,
+      iconSize: [50, 60],
+      iconAnchor: [25, 42]
+    });
+  }, []);
 
   // Initialize Leaflet Map once
   useEffect(() => {
@@ -164,26 +209,6 @@ export const LiveOrderRealMap = ({
       iconAnchor: [35, 43]
     });
 
-    // Delivery Rider Pin
-    const riderIcon = L.divIcon({
-      className: 'bg-transparent border-none',
-      html: `
-        <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
-          <svg width="30" height="40" viewBox="0 0 34 44" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter:drop-shadow(0 3px 5px rgba(0,0,0,0.3));">
-            <path d="M17 0C7.61 0 0 7.61 0 17c0 11.55 14.88 25.4 15.51 25.99a2.02 2.02 0 0 0 2.98 0C19.12 42.4 34 28.55 34 17 34 7.61 26.39 0 17 0z" fill="#059669" stroke="#ffffff" stroke-width="2"/>
-            <g transform="translate(5, 5)" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
-            </g>
-          </svg>
-          <span style="margin-top:1px;font-size:9px;font-weight:800;background:#047857;color:#ffffff;padding:1px 5px;border-radius:3px;white-space:nowrap;">
-            Rider
-          </span>
-        </div>
-      `,
-      iconSize: [50, 56],
-      iconAnchor: [25, 40]
-    });
-
     // Markers
     const warehouseMarker = L.marker([warehouse.lat, warehouse.lng], { icon: warehouseIcon }).addTo(map);
     warehouseMarker.bindPopup(`<b>${warehouse.name}</b><br/>${warehouse.area}`);
@@ -192,6 +217,9 @@ export const LiveOrderRealMap = ({
     const destMarker = L.marker([destination.lat, destination.lng], { icon: destinationIcon }).addTo(map);
     destMarker.bindPopup(`<b>Delivery Destination</b><br/>${destination.name}`);
     destMarkerRef.current = destMarker;
+
+    const riderIcon = createRiderIcon(riderAvatarUrl, riderBikeNumber);
+    riderIconRef.current = riderIcon;
 
     // Route coordinates: connect Warehouse -> Rider (if live GPS reported by backend) -> Destination
     const routeCoords: [number, number][] = [[warehouse.lat, warehouse.lng]];
@@ -324,17 +352,21 @@ export const LiveOrderRealMap = ({
         !isNaN(riderLocation.lng);
 
       if (hasRealRiderLocation) {
+        const dynamicIcon = createRiderIcon(riderAvatarUrl, riderBikeNumber);
+        riderIconRef.current = dynamicIcon;
+
         if (riderMarkerRef.current) {
+          riderMarkerRef.current.setIcon(dynamicIcon);
           riderMarkerRef.current.setLatLng([riderLocation.lat, riderLocation.lng]);
           riderMarkerRef.current.setPopupContent(
-            `<b>${deliveryPartnerName || 'Delivery Partner'}</b><br/>Live GPS: ${riderLocation.lat.toFixed(4)}, ${riderLocation.lng.toFixed(4)}`
+            `<b>${deliveryPartnerName || 'Delivery Partner'}</b><br/>${riderBikeNumber ? `Bike: ${riderBikeNumber}<br/>` : ''}Live GPS: ${riderLocation.lat.toFixed(4)}, ${riderLocation.lng.toFixed(4)}`
           );
-        } else if (riderIconRef.current) {
+        } else {
           const newRiderMarker = L.marker([riderLocation.lat, riderLocation.lng], {
-            icon: riderIconRef.current
+            icon: dynamicIcon
           }).addTo(map);
           newRiderMarker.bindPopup(
-            `<b>${deliveryPartnerName || 'Delivery Partner'}</b><br/>Live GPS: ${riderLocation.lat.toFixed(4)}, ${riderLocation.lng.toFixed(4)}`
+            `<b>${deliveryPartnerName || 'Delivery Partner'}</b><br/>${riderBikeNumber ? `Bike: ${riderBikeNumber}<br/>` : ''}Live GPS: ${riderLocation.lat.toFixed(4)}, ${riderLocation.lng.toFixed(4)}`
           );
           riderMarkerRef.current = newRiderMarker;
         }
@@ -371,6 +403,8 @@ export const LiveOrderRealMap = ({
     riderLocation?.lat,
     riderLocation?.lng,
     deliveryPartnerName,
+    riderAvatarUrl,
+    riderBikeNumber,
     isOutForDelivery,
     isPartnerAssigned
   ]);

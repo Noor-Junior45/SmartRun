@@ -2828,16 +2828,23 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Order ID is required." });
       }
 
-      const { name, phone, rating, vehicleType, vehicleNumber, avatarUrl, partnerId } = req.body || {};
+      const { name, phone, rating, vehicleType, vehicle_type, vehicleNumber, vehicle_number, avatarUrl, avatar_url, partnerId } = req.body || {};
+      const chosenVehicleNumber = vehicleNumber || vehicle_number || "WB 02 AR 4491";
+      const chosenVehicleType = vehicleType || vehicle_type || "Express Delivery Bike";
+      const chosenAvatarUrl = avatarUrl || avatar_url || null;
+
       const riderObj = {
         id: partnerId || `rider_${Date.now()}`,
         name: (name || "Debabrata Das").trim(),
         phone: (phone || "+91 87774 00280").trim(),
         rating: typeof rating === "number" ? rating : 4.9,
         totalDeliveries: 168,
-        vehicleType: vehicleType || "Express Delivery Bike",
-        vehicleNumber: vehicleNumber || "WB 02 AR 4491",
-        avatarUrl: avatarUrl || null,
+        vehicleType: chosenVehicleType,
+        vehicle_type: chosenVehicleType,
+        vehicleNumber: chosenVehicleNumber,
+        vehicle_number: chosenVehicleNumber,
+        avatarUrl: chosenAvatarUrl,
+        avatar_url: chosenAvatarUrl,
         assignedAt: new Date().toISOString()
       };
 

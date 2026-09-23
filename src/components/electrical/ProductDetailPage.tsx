@@ -210,13 +210,81 @@ export const ProductDetailPage = ({
   const colorOptions = useMemo(() => (product ? getProductColorOptions(product) : []), [product]);
   const hasColorOptions = colorOptions.length > 0;
 
+  // Active selected color option details (may include custom variant price, mrp, and image_url)
+  const activeColorOption = useMemo(() => {
+    if (!hasColorOptions) return null;
+    return colorOptions.find((c) => c.name.toLowerCase() === (selectedWireColor || '').toLowerCase()) || colorOptions[0] || null;
+  }, [colorOptions, selectedWireColor, hasColorOptions]);
+
+  // Dynamic price & MRP based on selected colour variant if specified
+  const effectivePrice = useMemo(() => {
+    if (activeColorOption && typeof activeColorOption.price === 'number' && activeColorOption.price > 0) {
+      return activeColorOption.price;
+    }
+    return product?.price || 0;
+  }, [activeColorOption, product?.price]);
+
+  const effectiveMrp = useMemo(() => {
+    if (activeColorOption && typeof activeColorOption.mrp === 'number' && activeColorOption.mrp > 0) {
+      return activeColorOption.mrp;
+    }
+    return product?.mrp || 0;
+  }, [activeColorOption, product?.mrp]);
+
+  const effectiveDiscountPercent = useMemo(() => {
+    if (activeColorOption && typeof activeColorOption.discount_percent === 'number') {
+      return activeColorOption.discount_percent;
+    }
+    if (effectiveMrp > effectivePrice) {
+      return Math.round(((effectiveMrp - effectivePrice) / effectiveMrp) * 100);
+    }
+    return product?.discount_percent || 0;
+  }, [activeColorOption, effectivePrice, effectiveMrp, product?.discount_percent]);
+
+  // Dynamic gallery images: if selected color has linked photo(s), prioritize them in gallery
+  const effectiveImageUrls = useMemo(() => {
+    if (!product) return [];
+    const baseImages = Array.isArray(product.image_urls) && product.image_urls.length > 0 ? product.image_urls : [];
+    
+    // If the active color has its own image or image_urls
+    if (activeColorOption) {
+      const variantImages: string[] = [];
+      if (Array.isArray(activeColorOption.image_urls) && activeColorOption.image_urls.length > 0) {
+        variantImages.push(...activeColorOption.image_urls.filter(Boolean));
+      } else if (Array.isArray(activeColorOption.images) && activeColorOption.images.length > 0) {
+        variantImages.push(...activeColorOption.images.filter(Boolean));
+      } else if (activeColorOption.image_url) {
+        variantImages.push(activeColorOption.image_url);
+      } else if (activeColorOption.imageUrl) {
+        variantImages.push(activeColorOption.imageUrl);
+      }
+
+      if (variantImages.length > 0) {
+        // Return variant image(s) first, then other base images (excluding duplicates)
+        const combined = [...variantImages, ...baseImages.filter((img) => !variantImages.includes(img))];
+        return combined.filter(Boolean);
+      }
+    }
+
+    return baseImages.length > 0
+      ? baseImages
+      : ['https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop'];
+  }, [product, activeColorOption]);
+
   // Set default color when product changes
   useEffect(() => {
     if (product) {
       const def = getDefaultProductColor(product);
       if (def) setSelectedWireColor(def);
+      setSelectedImageIndex(0);
     }
   }, [product]);
+
+  // Reset selected image index when user switches colour variant
+  const handleSelectColor = (colorName: string) => {
+    setSelectedWireColor(colorName);
+    setSelectedImageIndex(0);
+  };
 
   // Adapt for App's Cart system
   const adaptToCartProduct = (ep: ElectricalProduct): Product => ({
@@ -225,14 +293,16 @@ export const ProductDetailPage = ({
     brand: ep.brand,
     category: isPipe ? 'construction' : 'electrical',
     subCategory: ep.subcategory,
-    price: ep.price,
-    originalPrice: ep.mrp,
-    discountPercentage: ep.discount_percent,
+    price: effectivePrice,
+    originalPrice: effectiveMrp,
+    discountPercentage: effectiveDiscountPercent,
     unit: '1 unit',
     rating: ep.rating_avg,
     reviewsCount: ep.rating_count,
     deliveryMinutes: 60,
-    image: ep.image_urls[0] || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop',
+    image: effectiveImageUrls[0] || ep.image_urls[0] || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop',
+    images: effectiveImageUrls,
+    image_urls: effectiveImageUrls,
     inStock: ep.stock_quantity > 0,
     stockCount: ep.stock_quantity,
     isEmergency: false,
@@ -245,6 +315,7 @@ export const ProductDetailPage = ({
     colors: ep.colors || [],
     colours: ep.colours || ep.colors || [],
     color_options: ep.color_options,
+    color_variants: ep.color_variants,
     selectedColor: hasColorOptions ? selectedWireColor : undefined
   });
 
@@ -392,21 +463,21 @@ export const ProductDetailPage = ({
   }
 
   const currentImage =
-    product.image_urls[selectedImageIndex] ||
-    product.image_urls[0] ||
+    effectiveImageUrls[selectedImageIndex] ||
+    effectiveImageUrls[0] ||
     'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop';
 
   return (
     <div className="min-h-screen bg-[#f1f3f6] text-slate-900 pb-32 sm:pb-36 font-sans relative">
       <SEOHead
         title={`${product.name} - Buy Online at Best Price in Kolkata | Giriraj Power`}
-        description={`Buy authentic ${product.brand} ${product.subcategory}, ₹${product.price} in Kolkata. Fast 60-min delivery, genuine manufacturer warranty, and certified quality from Giriraj Power.`}
+        description={`Buy authentic ${product.brand} ${product.subcategory}, ₹${effectivePrice} in Kolkata. Fast 60-min delivery, genuine manufacturer warranty, and certified quality from Giriraj Power.`}
         keywords={`${product.name}, ${product.brand}, ${product.subcategory}, buy ${product.name} Kolkata, wholesale electrical shop near me`}
         image={currentImage}
         productData={{
           name: product.name,
           description: product.description,
-          price: product.price,
+          price: effectivePrice,
           brand: product.brand,
           image: currentImage,
           inStock: product.stock_quantity > 0,
@@ -439,10 +510,10 @@ export const ProductDetailPage = ({
             <div className="flex flex-col-reverse sm:flex-row gap-3">
               
               {/* Thumbnail Strip with Up/Down and Left/Right Scroll Arrows */}
-              {product.image_urls.length > 1 && (
+              {effectiveImageUrls.length > 1 && (
                 <div className="flex sm:flex-col items-center justify-center relative select-none">
                   {/* Desktop Up Scroll Button (shown when 5+ images) */}
-                  {product.image_urls.length >= 5 && (
+                  {effectiveImageUrls.length >= 5 && (
                     <button
                       type="button"
                       onClick={() => scrollThumbnails('prev')}
@@ -455,7 +526,7 @@ export const ProductDetailPage = ({
                   )}
 
                   {/* Mobile Left Scroll Button (shown when 5+ images) */}
-                  {product.image_urls.length >= 5 && (
+                  {effectiveImageUrls.length >= 5 && (
                     <button
                       type="button"
                       onClick={() => scrollThumbnails('prev')}
@@ -472,7 +543,7 @@ export const ProductDetailPage = ({
                     ref={thumbnailContainerRef}
                     className="flex sm:flex-col gap-2 overflow-x-auto sm:overflow-y-auto sm:max-h-96 px-6 sm:px-0 py-0.5 sm:py-1 scrollbar-none scroll-smooth"
                   >
-                    {product.image_urls.map((imgUrl, idx) => (
+                    {effectiveImageUrls.map((imgUrl, idx) => (
                       <button
                         key={idx}
                         onClick={() => setSelectedImageIndex(idx)}
@@ -494,7 +565,7 @@ export const ProductDetailPage = ({
                   </div>
 
                   {/* Desktop Down Scroll Button (shown when 5+ images) */}
-                  {product.image_urls.length >= 5 && (
+                  {effectiveImageUrls.length >= 5 && (
                     <button
                       type="button"
                       onClick={() => scrollThumbnails('next')}
@@ -507,7 +578,7 @@ export const ProductDetailPage = ({
                   )}
 
                   {/* Mobile Right Scroll Button (shown when 5+ images) */}
-                  {product.image_urls.length >= 5 && (
+                  {effectiveImageUrls.length >= 5 && (
                     <button
                       type="button"
                       onClick={() => scrollThumbnails('next')}
@@ -531,23 +602,23 @@ export const ProductDetailPage = ({
                   className="w-full h-full object-contain"
                   containerClassName="w-full h-full"
                   onSwipeLeft={() => {
-                    if (product.image_urls.length > 1) {
-                      setSelectedImageIndex((prev) => (prev + 1) % product.image_urls.length);
+                    if (effectiveImageUrls.length > 1) {
+                      setSelectedImageIndex((prev) => (prev + 1) % effectiveImageUrls.length);
                     }
                   }}
                   onSwipeRight={() => {
-                    if (product.image_urls.length > 1) {
-                      setSelectedImageIndex((prev) => (prev === 0 ? product.image_urls.length - 1 : prev - 1));
+                    if (effectiveImageUrls.length > 1) {
+                      setSelectedImageIndex((prev) => (prev === 0 ? effectiveImageUrls.length - 1 : prev - 1));
                     }
                   }}
                 />
 
                 {/* Left & Right on-image navigation buttons if multiple images exist */}
-                {product.image_urls.length > 1 && (
+                {effectiveImageUrls.length > 1 && (
                   <>
                     <button
                       type="button"
-                      onClick={() => setSelectedImageIndex((prev) => (prev === 0 ? product.image_urls.length - 1 : prev - 1))}
+                      onClick={() => setSelectedImageIndex((prev) => (prev === 0 ? effectiveImageUrls.length - 1 : prev - 1))}
                       className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow-md border border-slate-200 cursor-pointer active:scale-90 transition-all opacity-0 group-hover:opacity-100 z-10"
                       title="Previous image"
                     >
@@ -555,7 +626,7 @@ export const ProductDetailPage = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedImageIndex((prev) => (prev + 1) % product.image_urls.length)}
+                      onClick={() => setSelectedImageIndex((prev) => (prev + 1) % effectiveImageUrls.length)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow-md border border-slate-200 cursor-pointer active:scale-90 transition-all opacity-0 group-hover:opacity-100 z-10"
                       title="Next image"
                     >
@@ -564,7 +635,7 @@ export const ProductDetailPage = ({
 
                     {/* Image indicator pill */}
                     <div className="absolute bottom-2 right-2 bg-slate-900/70 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-xs z-10">
-                      {selectedImageIndex + 1} / {product.image_urls.length}
+                      {selectedImageIndex + 1} / {effectiveImageUrls.length}
                     </div>
                   </>
                 )}
@@ -578,7 +649,7 @@ export const ProductDetailPage = ({
                 {/* Left Product Quick Info (Shown on tablets and desktop) */}
                 <div className="hidden sm:flex items-center gap-3 min-w-0">
                   <img
-                    src={product.image_urls[0] || currentImage}
+                    src={effectiveImageUrls[0] || currentImage}
                     alt={product.name}
                     className="w-11 h-11 object-contain rounded-lg border border-slate-200 bg-white p-1 shrink-0"
                   />
@@ -588,11 +659,11 @@ export const ProductDetailPage = ({
                     </p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="font-black text-sm text-slate-950">
-                        ₹{product.price.toLocaleString('en-IN')}
+                        ₹{effectivePrice.toLocaleString('en-IN')}
                       </span>
-                      {product.mrp > product.price && (
+                      {effectiveMrp > effectivePrice && (
                         <span className="text-[11px] text-slate-400 line-through">
-                          ₹{product.mrp.toLocaleString('en-IN')}
+                          ₹{effectiveMrp.toLocaleString('en-IN')}
                         </span>
                       )}
                       <span className={`text-[11px] font-bold ${product.stock_quantity > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -739,16 +810,16 @@ export const ProductDetailPage = ({
             <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-1">
               <div className="flex items-baseline gap-3 flex-wrap">
                 <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  ₹{product.price.toLocaleString('en-IN')}
+                  ₹{effectivePrice.toLocaleString('en-IN')}
                 </span>
-                {product.mrp > product.price && (
+                {effectiveMrp > effectivePrice && (
                   <span className="text-sm text-slate-400 line-through font-semibold">
-                    ₹{product.mrp.toLocaleString('en-IN')}
+                    ₹{effectiveMrp.toLocaleString('en-IN')}
                   </span>
                 )}
-                {product.discount_percent > 0 && (
+                {effectiveDiscountPercent > 0 && (
                   <span className="text-sm font-black text-[#388e3c]">
-                    {product.discount_percent}% off
+                    {effectiveDiscountPercent}% off
                   </span>
                 )}
               </div>
@@ -778,7 +849,7 @@ export const ProductDetailPage = ({
                       <button
                         key={opt.name}
                         type="button"
-                        onClick={() => setSelectedWireColor(opt.name)}
+                        onClick={() => handleSelectColor(opt.name)}
                         className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center relative ${
                           isSelected
                             ? 'border-slate-900 bg-white ring-2 ring-slate-900 shadow-sm'
@@ -803,9 +874,15 @@ export const ProductDetailPage = ({
                           <span className="block text-[11px] font-black text-slate-900 leading-tight truncate">
                             {opt.name}
                           </span>
-                          <span className="block text-[9px] font-semibold text-slate-500 truncate">
-                            {opt.shortRole}
-                          </span>
+                          {typeof opt.price === 'number' && opt.price > 0 ? (
+                            <span className="block text-[10px] font-black text-emerald-700 truncate">
+                              ₹{opt.price.toLocaleString('en-IN')}
+                            </span>
+                          ) : (
+                            <span className="block text-[9px] font-semibold text-slate-500 truncate">
+                              {opt.shortRole}
+                            </span>
+                          )}
                         </div>
                       </button>
                     );
@@ -836,18 +913,18 @@ export const ProductDetailPage = ({
                 Available Offers
               </h3>
               <div className="space-y-2 text-xs text-slate-700">
-                {product.discount_percent > 0 ? (
+                {effectiveDiscountPercent > 0 ? (
                   <>
                     <div className="flex items-start gap-2">
                       <Tag className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                       <span>
-                        <strong className="font-bold text-slate-900">Special Product Discount:</strong> {product.discount_percent}% instant off on MRP ₹{product.mrp.toLocaleString('en-IN')}. You save ₹{(product.mrp - product.price).toLocaleString('en-IN')} per unit.
+                        <strong className="font-bold text-slate-900">Special Product Discount:</strong> {effectiveDiscountPercent}% instant off on MRP ₹{effectiveMrp.toLocaleString('en-IN')}. You save ₹{(effectiveMrp - effectivePrice).toLocaleString('en-IN')} per unit.
                       </span>
                     </div>
                     <div className="flex items-start gap-2">
                       <Tag className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                       <span>
-                        <strong className="font-bold text-slate-900">Wholesale Direct Price:</strong> Buy at ₹{product.price.toLocaleString('en-IN')} with manufacturer standard warranty &amp; authentic tax invoice.
+                        <strong className="font-bold text-slate-900">Wholesale Direct Price:</strong> Buy at ₹{effectivePrice.toLocaleString('en-IN')} with manufacturer standard warranty &amp; authentic tax invoice.
                       </span>
                     </div>
                   </>
@@ -855,7 +932,7 @@ export const ProductDetailPage = ({
                   <div className="flex items-start gap-2">
                     <Tag className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     <span>
-                      <strong className="font-bold text-slate-900">Best Direct Price:</strong> Genuine manufacturer-direct price of ₹{product.price.toLocaleString('en-IN')} with GST invoice.
+                      <strong className="font-bold text-slate-900">Best Direct Price:</strong> Genuine manufacturer-direct price of ₹{effectivePrice.toLocaleString('en-IN')} with GST invoice.
                     </span>
                   </div>
                 )}

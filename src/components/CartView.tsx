@@ -282,14 +282,25 @@ export const CartView = ({
 
   const totalMRP = useMemo(() => {
     return activeItemsForBill.reduce((acc, curr) => {
-      const mrp = Number(curr.product.originalPrice || curr.product.price || 0);
+      const availableColors = getProductColorOptions(curr.product);
+      const currentColor = curr.selectedColor || curr.product.selectedColor;
+      const colorObj = availableColors.find((c) => c.name.toLowerCase() === (currentColor || '').toLowerCase());
+      const mrp = (colorObj && typeof colorObj.mrp === 'number' && colorObj.mrp > 0)
+        ? colorObj.mrp
+        : Number(curr.product.originalPrice || curr.product.price || 0);
       return acc + mrp * curr.quantity;
     }, 0);
   }, [activeItemsForBill]);
 
   const totalSellingPrice = useMemo(() => {
     return activeItemsForBill.reduce((acc, curr) => {
-      return acc + Number(curr.product.price || 0) * curr.quantity;
+      const availableColors = getProductColorOptions(curr.product);
+      const currentColor = curr.selectedColor || curr.product.selectedColor;
+      const colorObj = availableColors.find((c) => c.name.toLowerCase() === (currentColor || '').toLowerCase());
+      const price = (colorObj && typeof colorObj.price === 'number' && colorObj.price > 0)
+        ? colorObj.price
+        : Number(curr.product.price || 0);
+      return acc + price * curr.quantity;
     }, 0);
   }, [activeItemsForBill]);
 
@@ -540,8 +551,42 @@ export const CartView = ({
   const handlePlaceOrder = async (e?: React.FormEvent, overrideOption?: typeof paymentMethod) => {
     if (e && e.preventDefault) e.preventDefault();
     const activeOption = overrideOption || paymentMethod;
-    const orderItems = checkoutMode === 'single' && singleCheckoutItem ? [singleCheckoutItem] : items;
-    if (orderItems.length === 0) return;
+    const rawOrderItems = checkoutMode === 'single' && singleCheckoutItem ? [singleCheckoutItem] : items;
+    if (rawOrderItems.length === 0) return;
+
+    // Snapshot variant price, mrp, and image so order receipt and backend order have exact purchased variant pricing
+    const orderItems: CartItem[] = rawOrderItems.map((it) => {
+      const availableColors = getProductColorOptions(it.product);
+      const currentColor = it.selectedColor || it.product.selectedColor;
+      const colorObj = availableColors.find((c) => c.name.toLowerCase() === (currentColor || '').toLowerCase());
+
+      const finalPrice = (colorObj && typeof colorObj.price === 'number' && colorObj.price > 0)
+        ? colorObj.price
+        : Number(it.product.price || 0);
+
+      const finalMrp = (colorObj && typeof colorObj.mrp === 'number' && colorObj.mrp > 0)
+        ? colorObj.mrp
+        : Number(it.product.originalPrice || it.product.price || 0);
+
+      const finalDiscount = typeof colorObj?.discount_percent === 'number'
+        ? colorObj.discount_percent
+        : it.product.discountPercentage || (finalMrp > finalPrice ? Math.round(((finalMrp - finalPrice) / finalMrp) * 100) : 0);
+
+      const finalImage = colorObj?.image_url || colorObj?.imageUrl || it.product.image;
+
+      return {
+        ...it,
+        selectedColor: currentColor,
+        product: {
+          ...it.product,
+          price: finalPrice,
+          originalPrice: finalMrp,
+          discountPercentage: finalDiscount,
+          image: finalImage,
+          selectedColor: currentColor
+        }
+      };
+    });
 
     const resolvedAddress =
       address.trim() ||
@@ -924,7 +969,21 @@ export const CartView = ({
             const availableColors = getProductColorOptions(product);
             const hasColorOptions = availableColors.length > 0;
             const currentColor = item.selectedColor || product.selectedColor || (hasColorOptions ? availableColors[0].name : undefined);
-            const currentColorObj = hasColorOptions ? availableColors.find((c) => c.name === currentColor) || availableColors[0] : null;
+            const currentColorObj = hasColorOptions ? availableColors.find((c) => c.name.toLowerCase() === (currentColor || '').toLowerCase()) || availableColors[0] : null;
+
+            const itemPrice = typeof currentColorObj?.price === 'number' && currentColorObj.price > 0
+              ? currentColorObj.price
+              : Number(product.price || 0);
+
+            const itemMrp = typeof currentColorObj?.mrp === 'number' && currentColorObj.mrp > 0
+              ? currentColorObj.mrp
+              : Number(product.originalPrice || product.price || 0);
+
+            const itemDiscountPct = typeof currentColorObj?.discount_percent === 'number'
+              ? currentColorObj.discount_percent
+              : product.discountPercentage || (itemMrp > itemPrice ? Math.round(((itemMrp - itemPrice) / itemMrp) * 100) : 0);
+
+            const itemImage = currentColorObj?.image_url || currentColorObj?.imageUrl || product.image || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=400&auto=format&fit=crop';
 
             return (
               <SwipeableItem
@@ -943,7 +1002,7 @@ export const CartView = ({
                   {/* Thumbnail Image */}
                   <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-xl bg-slate-50 border border-slate-100 p-1 shrink-0 flex items-center justify-center overflow-hidden relative">
                     <img
-                      src={product.image || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=400&auto=format&fit=crop'}
+                      src={itemImage}
                       alt={product.name}
                       className={`w-full h-full object-contain mix-blend-multiply ${isOutOfStock ? 'opacity-60 grayscale' : ''}`}
                       loading="lazy"
@@ -966,18 +1025,18 @@ export const CartView = ({
 
                     {/* Price Row with Green Discount Badge */}
                     <div className="flex items-baseline gap-1.5 sm:gap-2 mt-1 flex-wrap">
-                      {discountPct > 0 && (
+                      {itemDiscountPct > 0 && (
                         <span className="inline-flex items-center gap-0.5 text-[10px] sm:text-xs font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                          ↓{discountPct}% off
+                          ↓{itemDiscountPct}% off
                         </span>
                       )}
-                      {mrp > price && (
+                      {itemMrp > itemPrice && (
                         <span className="text-[11px] sm:text-sm text-slate-400 line-through">
-                          ₹{mrp.toLocaleString('en-IN')}
+                          ₹{itemMrp.toLocaleString('en-IN')}
                         </span>
                       )}
                       <span className="text-sm sm:text-lg font-black text-slate-900">
-                        ₹{price.toLocaleString('en-IN')}
+                        ₹{itemPrice.toLocaleString('en-IN')}
                       </span>
                     </div>
 

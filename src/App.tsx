@@ -665,7 +665,7 @@ export default function App() {
     };
   }, []);
 
-  // Deep Link Listener for Native Capacitor App (buildnow://product/:id, etc.)
+  // Deep Link Listener for Native Capacitor App (smartrun://product/:id, smartrun://login, etc.)
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
@@ -791,31 +791,54 @@ export default function App() {
         }
 
         let path = '';
+        let queryParams: URLSearchParams | null = null;
         if (urlStr.startsWith('smartrun://')) {
           const raw = urlStr.replace('smartrun://', '');
-          path = raw.startsWith('/') ? raw : `/${raw}`;
+          const parts = raw.split('?');
+          path = parts[0].startsWith('/') ? parts[0] : `/${parts[0]}`;
+          if (parts[1]) queryParams = new URLSearchParams(parts[1]);
         } else if (urlStr.startsWith('buildnow://')) {
           const raw = urlStr.replace('buildnow://', '');
-          path = raw.startsWith('/') ? raw : `/${raw}`;
+          const parts = raw.split('?');
+          path = parts[0].startsWith('/') ? parts[0] : `/${parts[0]}`;
+          if (parts[1]) queryParams = new URLSearchParams(parts[1]);
         } else {
-          const parsed = new URL(urlStr);
-          path = parsed.pathname;
+          try {
+            const parsed = new URL(urlStr);
+            path = parsed.pathname;
+            queryParams = parsed.searchParams;
+          } catch {
+            path = urlStr;
+          }
         }
 
         const cleanPath = path.replace(/\/+$/, '');
         const segments = cleanPath.split('/').filter(Boolean);
 
-        // Case 1: Product deep link e.g. buildnow://product/:id
+        // Check if item_id is provided in query params (e.g. ?item_id=b5d951fa-88f8-4b21-8c5e-cf7a2cbefa0a)
+        const queryItemId = queryParams?.get('item_id');
+
+        // Case 1: Product deep link e.g. /electrical/product/:id, /construction/product/:id, or /product/:id
         if (segments.includes('product')) {
           const prodIdx = segments.indexOf('product');
-          const productId = segments[prodIdx + 1];
+          const productId = segments[prodIdx + 1] || queryItemId;
           if (productId) {
-            navigate(`/product/${encodeURIComponent(productId)}`);
+            const isConstruction = segments.includes('construction');
+            const targetRoute = isConstruction
+              ? `/construction/product/${encodeURIComponent(productId)}`
+              : `/electrical/product/${encodeURIComponent(productId)}`;
+            navigate(targetRoute);
             return;
           }
         }
 
-        // Case 2: Standard route deep links (e.g. buildnow://electrical, buildnow://orders, etc.)
+        // Case 1b: item_id query parameter present without product in path
+        if (queryItemId) {
+          navigate(`/electrical/product/${encodeURIComponent(queryItemId)}`);
+          return;
+        }
+
+        // Case 2: Standard route deep links (e.g. smartrun://electrical, smartrun://orders, etc.)
         if (segments.length > 0) {
           navigate(`/${segments.join('/')}`);
         }

@@ -347,6 +347,8 @@ export const ElectricalListingPage = ({
     colors: ep.colors || [],
     colours: ep.colours || ep.colors || [],
     color_options: ep.color_options,
+    color_variants: ep.color_variants,
+    colorVariants: ep.color_variants,
     selectedColor: ep.selectedColor || ep.selected_color
   });
 

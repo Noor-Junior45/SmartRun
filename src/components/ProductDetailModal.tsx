@@ -58,13 +58,62 @@ export const ProductDetailModal = ({
 
   const thumbnailContainerRef = useRef<HTMLDivElement>(null);
 
-  const allImages = product
-    ? (Array.isArray(product.images) && product.images.length > 0
-        ? product.images
-        : Array.isArray(product.image_urls) && product.image_urls.length > 0
-        ? product.image_urls
-        : [product.image])
-    : [];
+  const activeColorObj = useMemo(() => {
+    if (!hasColorOptions) return null;
+    return colorOptions.find((c) => c.name.toLowerCase() === (selectedWireColor || '').toLowerCase()) || colorOptions[0] || null;
+  }, [colorOptions, selectedWireColor, hasColorOptions]);
+
+  const effectivePrice = useMemo(() => {
+    if (activeColorObj && typeof activeColorObj.price === 'number' && activeColorObj.price > 0) {
+      return activeColorObj.price;
+    }
+    return product?.price || 0;
+  }, [activeColorObj, product?.price]);
+
+  const effectiveOriginalPrice = useMemo(() => {
+    if (activeColorObj && typeof activeColorObj.mrp === 'number' && activeColorObj.mrp > 0) {
+      return activeColorObj.mrp;
+    }
+    return product?.originalPrice || 0;
+  }, [activeColorObj, product?.originalPrice]);
+
+  const effectiveDiscountPercentage = useMemo(() => {
+    if (activeColorObj && typeof activeColorObj.discount_percent === 'number') {
+      return activeColorObj.discount_percent;
+    }
+    if (effectiveOriginalPrice > effectivePrice) {
+      return Math.round(((effectiveOriginalPrice - effectivePrice) / effectiveOriginalPrice) * 100);
+    }
+    return product?.discountPercentage || 0;
+  }, [activeColorObj, effectivePrice, effectiveOriginalPrice, product?.discountPercentage]);
+
+  const allImages = useMemo(() => {
+    if (!product) return [];
+    const baseImages = Array.isArray(product.images) && product.images.length > 0
+      ? product.images
+      : Array.isArray(product.image_urls) && product.image_urls.length > 0
+      ? product.image_urls
+      : [product.image];
+
+    if (activeColorObj) {
+      const variantImages: string[] = [];
+      if (Array.isArray(activeColorObj.image_urls) && activeColorObj.image_urls.length > 0) {
+        variantImages.push(...activeColorObj.image_urls.filter(Boolean));
+      } else if (Array.isArray(activeColorObj.images) && activeColorObj.images.length > 0) {
+        variantImages.push(...activeColorObj.images.filter(Boolean));
+      } else if (activeColorObj.image_url) {
+        variantImages.push(activeColorObj.image_url);
+      } else if (activeColorObj.imageUrl) {
+        variantImages.push(activeColorObj.imageUrl);
+      }
+
+      if (variantImages.length > 0) {
+        return [...variantImages, ...baseImages.filter((img) => !variantImages.includes(img))].filter(Boolean);
+      }
+    }
+
+    return baseImages;
+  }, [product, activeColorObj]);
 
   useEffect(() => {
     if (product) {
@@ -74,6 +123,11 @@ export const ProductDetailModal = ({
       trackProductView(product);
     }
   }, [product]);
+
+  const handleSelectColor = (colorName: string) => {
+    setSelectedWireColor(colorName);
+    setSelectedImageIndex(0);
+  };
 
   if (!product) return null;
 
@@ -120,12 +174,16 @@ export const ProductDetailModal = ({
     hapticMedium();
     onAddToCart({
       ...product,
+      price: effectivePrice,
+      originalPrice: effectiveOriginalPrice,
+      discountPercentage: effectiveDiscountPercentage,
+      image: allImages[0] || product.image,
+      images: allImages,
       selectedColor: hasColorOptions ? selectedWireColor : undefined
     });
   };
 
-  const activeColorObj = colorOptions.find((c) => c.name === selectedWireColor);
-  const currentImage = allImages[selectedImageIndex] || product.image;
+  const currentImage = allImages[selectedImageIndex] || allImages[0] || product.image;
 
   // Mobile Bottom Sheet Drag-to-Dismiss Gesture
   const {
@@ -345,16 +403,16 @@ export const ProductDetailModal = ({
                 <div className="text-xs font-semibold text-slate-600">Special Quick-Commerce Price:</div>
                 <div className="flex items-baseline gap-2 mt-0.5">
                   <span className="text-2xl font-black text-slate-950">
-                    ₹{product.price.toLocaleString('en-IN')}
+                    ₹{effectivePrice.toLocaleString('en-IN')}
                   </span>
-                  {product.originalPrice > product.price && (
+                  {effectiveOriginalPrice > effectivePrice && (
                     <span className="text-sm text-slate-400 line-through">
-                      ₹{product.originalPrice.toLocaleString('en-IN')}
+                      ₹{effectiveOriginalPrice.toLocaleString('en-IN')}
                     </span>
                   )}
-                  {product.discountPercentage > 0 && (
+                  {effectiveDiscountPercentage > 0 && (
                     <span className="text-xs font-extrabold text-green-700 bg-green-100 px-2 py-0.5 rounded">
-                      Save {product.discountPercentage}%
+                      Save {effectiveDiscountPercentage}%
                     </span>
                   )}
                 </div>
@@ -388,7 +446,7 @@ export const ProductDetailModal = ({
                         <button
                           key={opt.name}
                           type="button"
-                          onClick={() => setSelectedWireColor(opt.name)}
+                          onClick={() => handleSelectColor(opt.name)}
                           className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center ${
                             isSelected
                               ? 'border-slate-900 bg-white ring-2 ring-slate-900 shadow-xs'
@@ -412,9 +470,15 @@ export const ProductDetailModal = ({
                           <span className="text-[10px] font-bold text-slate-900 leading-tight">
                             {opt.name}
                           </span>
-                          <span className="text-[9px] font-semibold text-slate-500 line-clamp-1">
-                            {opt.shortRole}
-                          </span>
+                          {typeof opt.price === 'number' && opt.price > 0 ? (
+                            <span className="text-[10px] font-black text-emerald-700 leading-tight">
+                              ₹{opt.price.toLocaleString('en-IN')}
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-semibold text-slate-500 line-clamp-1">
+                              {opt.shortRole}
+                            </span>
+                          )}
                         </button>
                       );
                     })}

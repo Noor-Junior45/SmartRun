@@ -4045,20 +4045,27 @@ export async function fetchProductsFromSupabase(): Promise<Product[]> {
           isEmergency: !!(row.is_emergency ?? row.isEmergency),
           isBestSeller: !!(row.is_best_seller ?? row.isBestSeller),
           specs: row.specs || (typeof row.specifications === 'object' ? row.specifications : {}),
-          colors: Array.isArray(row.colors)
+          colors: Array.isArray(row.color_variants)
+            ? row.color_variants
+            : Array.isArray(row.colors)
             ? row.colors
             : typeof row.colors === 'string'
             ? [row.colors]
             : Array.isArray(row.colours)
             ? row.colours
             : undefined,
-          colours: Array.isArray(row.colors)
+          colours: Array.isArray(row.color_variants)
+            ? row.color_variants
+            : Array.isArray(row.colors)
             ? row.colors
             : typeof row.colors === 'string'
             ? [row.colors]
             : Array.isArray(row.colours)
             ? row.colours
             : undefined,
+          color_options: Array.isArray(row.color_variants) ? row.color_variants : Array.isArray(row.color_options) ? row.color_options : undefined,
+          color_variants: row.color_variants || row.colorVariants,
+          colorVariants: row.color_variants || row.colorVariants,
           selectedColor: row.selectedColor || row.selected_color,
           description: row.description || ''
         };

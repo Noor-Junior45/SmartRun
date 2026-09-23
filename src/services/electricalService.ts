@@ -67,25 +67,30 @@ export function transformToElectricalProduct(item: any): ElectricalProduct {
     } catch {}
   }
 
-  // Parse color options from database row
-  let colors: string[] | undefined = undefined;
-  if (Array.isArray(item.colors) && item.colors.length > 0) {
-    colors = item.colors
-      .map((c: any) => (typeof c === 'string' ? c.trim() : c?.name || c?.label || String(c)))
-      .filter((c: string) => Boolean(c && c.length > 0));
-  } else if (Array.isArray(item.colours) && item.colours.length > 0) {
-    colors = item.colours
-      .map((c: any) => (typeof c === 'string' ? c.trim() : c?.name || c?.label || String(c)))
-      .filter((c: string) => Boolean(c && c.length > 0));
+  // Parse color options & variants from database row
+  let colors: any[] | undefined = undefined;
+  const rawVariants = item.color_variants || item.colorVariants || item.color_options || item.colorOptions || item.colors || item.colours;
+
+  if (Array.isArray(item.color_variants) && item.color_variants.length > 0) {
+    colors = item.color_variants;
+  } else if (Array.isArray(item.colorVariants) && item.colorVariants.length > 0) {
+    colors = item.colorVariants;
   } else if (Array.isArray(item.color_options) && item.color_options.length > 0) {
-    colors = item.color_options
-      .map((c: any) => (typeof c === 'string' ? c.trim() : c?.name || c?.label || String(c)))
-      .filter((c: string) => Boolean(c && c.length > 0));
+    colors = item.color_options;
+  } else if (Array.isArray(item.colors) && item.colors.length > 0) {
+    colors = item.colors;
+  } else if (Array.isArray(item.colours) && item.colours.length > 0) {
+    colors = item.colours;
+  } else if (typeof item.color_variants === 'string' && item.color_variants.trim()) {
+    try {
+      const parsed = JSON.parse(item.color_variants);
+      if (Array.isArray(parsed)) colors = parsed;
+    } catch {}
   } else if (typeof item.colors === 'string' && item.colors.trim()) {
     try {
       const parsed = JSON.parse(item.colors);
       if (Array.isArray(parsed)) {
-        colors = parsed.map((c: any) => (typeof c === 'string' ? c.trim() : String(c))).filter(Boolean);
+        colors = parsed;
       } else {
         colors = item.colors.split(/[,/|]+/).map((s: string) => s.trim()).filter(Boolean);
       }
@@ -96,7 +101,7 @@ export function transformToElectricalProduct(item: any): ElectricalProduct {
     try {
       const parsed = JSON.parse(item.colours);
       if (Array.isArray(parsed)) {
-        colors = parsed.map((c: any) => (typeof c === 'string' ? c.trim() : String(c))).filter(Boolean);
+        colors = parsed;
       } else {
         colors = item.colours.split(/[,/|]+/).map((s: string) => s.trim()).filter(Boolean);
       }
@@ -106,6 +111,12 @@ export function transformToElectricalProduct(item: any): ElectricalProduct {
   } else if (typeof item.color === 'string' && item.color.trim()) {
     colors = [item.color.trim()];
   }
+
+  const colorVariants = Array.isArray(rawVariants)
+    ? rawVariants
+    : typeof rawVariants === 'string' && rawVariants.startsWith('[')
+    ? (() => { try { return JSON.parse(rawVariants); } catch { return undefined; } })()
+    : undefined;
 
   return {
     id: String(item.id),
@@ -125,6 +136,8 @@ export function transformToElectricalProduct(item: any): ElectricalProduct {
     rating_count: Number(item.rating_count || item.reviewsCount || item.reviews_count || 32),
     colors,
     colours: colors,
+    color_options: colors,
+    color_variants: colorVariants,
     selectedColor: item.selectedColor || item.selected_color,
     selected_color: item.selected_color || item.selectedColor,
     created_at: item.created_at || new Date().toISOString()

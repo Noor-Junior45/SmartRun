@@ -17,6 +17,7 @@ export interface ElectricalProduct {
   colors?: string[];
   colours?: string[];
   color_options?: any[];
+  color_variants?: any[];
   selectedColor?: string;
   selected_color?: string;
   created_at?: string;

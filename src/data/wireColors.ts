@@ -7,6 +7,13 @@ export interface ProductColorOption {
   twRing: string;
   description: string;
   standard?: string;
+  price?: number;
+  mrp?: number;
+  discount_percent?: number;
+  image_url?: string;
+  imageUrl?: string;
+  images?: string[];
+  image_urls?: string[];
 }
 
 export type WireColorOption = ProductColorOption;
@@ -499,6 +506,17 @@ const COLOR_FINISH_DICTIONARY: Record<
 export function resolveColorOption(rawName: string | any): ProductColorOption {
   if (typeof rawName === 'object' && rawName !== null) {
     const name = rawName.name || rawName.label || rawName.color || 'Custom';
+    const price = typeof rawName.price === 'number' && !isNaN(rawName.price) ? rawName.price : undefined;
+    const mrp = typeof rawName.mrp === 'number' && !isNaN(rawName.mrp) ? rawName.mrp : undefined;
+    const discount_percent = typeof rawName.discount_percent === 'number'
+      ? rawName.discount_percent
+      : (price && mrp && mrp > price)
+      ? Math.round(((mrp - price) / mrp) * 100)
+      : undefined;
+
+    const imageUrl = rawName.image_url || rawName.imageUrl || rawName.image || (Array.isArray(rawName.images) ? rawName.images[0] : undefined);
+    const imageUrls = Array.isArray(rawName.image_urls) ? rawName.image_urls : (Array.isArray(rawName.images) ? rawName.images : (imageUrl ? [imageUrl] : undefined));
+
     return {
       name,
       label: rawName.label || name,
@@ -507,7 +525,14 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
       twBg: rawName.twBg || 'bg-slate-200',
       twRing: rawName.twRing || 'ring-slate-400',
       description: rawName.description || `${name} finish`,
-      standard: rawName.standard
+      standard: rawName.standard,
+      price,
+      mrp,
+      discount_percent,
+      image_url: imageUrl,
+      imageUrl,
+      images: imageUrls,
+      image_urls: imageUrls
     };
   }
 
@@ -652,22 +677,34 @@ export function getProductColorOptions(product?: {
 }): ProductColorOption[] {
   if (!product) return [];
 
-  // 1. Direct product.colors / colours / color_options array or string set by backend app
+  // 1. Direct product.color_variants / colors / colours / color_options array or string set by backend app
   let rawColors: any[] = [];
   const prodAny = product as any;
 
-  if (Array.isArray(prodAny.colors) && prodAny.colors.length > 0) {
-    rawColors = prodAny.colors;
-  } else if (Array.isArray(prodAny.colours) && prodAny.colours.length > 0) {
-    rawColors = prodAny.colours;
+  if (Array.isArray(prodAny.color_variants) && prodAny.color_variants.length > 0) {
+    rawColors = prodAny.color_variants;
+  } else if (Array.isArray(prodAny.colorVariants) && prodAny.colorVariants.length > 0) {
+    rawColors = prodAny.colorVariants;
   } else if (Array.isArray(prodAny.color_options) && prodAny.color_options.length > 0) {
     rawColors = prodAny.color_options;
   } else if (Array.isArray(prodAny.colorOptions) && prodAny.colorOptions.length > 0) {
     rawColors = prodAny.colorOptions;
+  } else if (Array.isArray(prodAny.colors) && prodAny.colors.length > 0) {
+    rawColors = prodAny.colors;
+  } else if (Array.isArray(prodAny.colours) && prodAny.colours.length > 0) {
+    rawColors = prodAny.colours;
   } else if (Array.isArray(prodAny.available_colors) && prodAny.available_colors.length > 0) {
     rawColors = prodAny.available_colors;
   } else if (Array.isArray(prodAny.availableColors) && prodAny.availableColors.length > 0) {
     rawColors = prodAny.availableColors;
+  } else if (typeof prodAny.color_variants === 'string' && prodAny.color_variants.trim()) {
+    try {
+      const parsed = JSON.parse(prodAny.color_variants);
+      if (Array.isArray(parsed)) rawColors = parsed;
+      else rawColors = prodAny.color_variants.split(/[,/|]+/).map((s: string) => s.trim()).filter(Boolean);
+    } catch {
+      rawColors = prodAny.color_variants.split(/[,/|]+/).map((s: string) => s.trim()).filter(Boolean);
+    }
   } else if (typeof prodAny.colors === 'string' && prodAny.colors.trim()) {
     try {
       const parsed = JSON.parse(prodAny.colors);

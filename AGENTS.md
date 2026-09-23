@@ -142,7 +142,8 @@
   - Enforced single-line badges and tags (`whitespace-nowrap inline-flex`) across all statuses and alerts to prevent multiline wrapping on mobile viewports.
 - [x] **Delivery Partner Details & Dual Review System (Rider & Order)**:
   - **Backend API**: Added `/api/orders/:id/rider`, `/api/orders/:id/assign-rider`, `/api/orders/:id/reviews`, `/api/orders/:id/rider-review`, and `/api/orders/:id/product-review` with persistent storage in `rider_assignments.json` and `order_reviews.json`.
-  - **Minimalist Rider Card**: Placed directly above the Delivery Destination box on both `LiveOrderPage` and `OrderHistoryView`. Shows clean heading "Delivery Partner", rider name, star rating with star icon, express vehicle info, and quick call shortcut.
+  - **Minimalist Rider Card**: Placed directly above the Delivery Destination box on both `LiveOrderPage` and `OrderHistoryView`. Shows clean heading "Delivery Partner", rider name, star rating with star icon, express vehicle info, bike registration number badge (e.g. `WB 02 AR 4491`), profile avatar with fallback bike icon, and quick call shortcut.
+  - **Map Rider Pin Integration**: Live tracking map pin displays the rider's profile avatar if provided (or delivery bike icon fallback) along with their vehicle registration number badge directly below the marker.
   - **Contextual Review Cards**: When order status is `delivered`:
     - Rider review card appears directly below the Rider details section.
     - Product / order review card appears directly below the Purchased items section.
@@ -156,4 +157,26 @@
     - `FloatingLiveOrderButton`: Quick tracking pill.
     - `invoiceGenerator`: A4 PDF invoice header metadata and clean download file name (`SmartRun-Invoice-DE7A0E6C.pdf`).
     - `emailService` & `server.ts`: Automated WhatsApp alert messages and customer email notifications.
+- [x] **Native Android Share Sheet & Public Domain Link Resolution**:
+  - **Issue**: In the native Android app (Capacitor WebView with `androidScheme: 'https'`), `window.location.origin` is `https://localhost`. When users shared a product, the generated link was `https://localhost/electrical/product/...`, which failed in external browsers. Furthermore, `navigator.share` inside the Android WebView container does not reliably trigger the native OS share sheet (Instagram, WhatsApp, Messages, etc.).
+  - **Fix**:
+    - Installed official `@capacitor/share` plugin.
+    - Updated `src/utils/shareProduct.ts` with `PRODUCTION_WEB_DOMAIN = 'https://www.smartrun.in'` and `getPublicShareOrigin()`, which sanitizes and forces public domain resolution so share links are always `https://www.smartrun.in/electrical/product/<id>?...`.
+    - Integrated `CapShare.share(...)` as priority handler inside native Android platform, triggering the native Android system bottom share sheet (WhatsApp, Instagram, Telegram, Gmail, Messages, etc.).
+    - Enhanced deep link routing in `src/App.tsx` (`handleDeepUrl`) to support both `/electrical/product/:id`, `/construction/product/:id`, and `item_id` query parameters across `smartrun://` and web URLs.
+- [x] **Dynamic Colour Variants with Linked Photos & Custom Pricing**:
+  - **Architecture**: Implemented Option A (zero new database tables). Extends the existing `products` table in Supabase by adding an optional `color_variants` `JSONB` column.
+  - **Data Schema**:
+    ```json
+    [
+      { "color": "Red", "price": 1650, "mrp": 2100, "discount_percent": 21, "image_urls": ["https://.../red1.jpg"] },
+      { "color": "Black", "price": 1600, "mrp": 2050, "discount_percent": 22, "image_urls": ["https://.../black1.jpg"] }
+    ]
+    ```
+  - **Data Layer & Fallbacks**: `resolveColorOption` in `src/data/wireColors.ts` checks for matching color variant by name/hex. If a variant defines custom `price`, `mrp`, `discount_percent`, or `image_urls`, they override the product's base price and gallery. If not specified, standard product pricing and images seamlessly apply as fallback.
+  - **UI Integration**:
+    - `ProductDetailPage.tsx`: Reactive `effectivePrice`, `effectiveMrp`, `effectiveDiscountPercent`, and `effectiveImageUrls` adapt instantaneously when clicking any color swatch. Main gallery zooms and resets smoothly to the variant's photo. Bottom floating action bar and price block reflect variant prices in real time.
+    - `ProductDetailModal.tsx`: Synchronized with `effectivePrice`, `effectiveOriginalPrice`, and dynamic photo gallery.
+    - `CartView.tsx`: Displays variant-specific photo, pricing, and discount badge; bill breakdown dynamically sums each line item according to its selected variant price. Orders snapshot the variant pricing into `orderItems` for invoices and order tracking.
 - [x] **Persistent Project Memory**: Created `AGENTS.md` to permanently store all system rules, package details, and fix history.
+

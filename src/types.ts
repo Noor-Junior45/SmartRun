@@ -24,6 +24,8 @@ export interface Product {
   colors?: string[];
   colours?: string[];
   color_options?: any[];
+  color_variants?: any[];
+  colorVariants?: any[];
   selectedColor?: string;
   deliveryCharge?: number;
   handlingCharge?: number;
@@ -145,6 +147,7 @@ export interface DeliveryPartner {
   totalCompleted?: number;
   is_active?: boolean;
   avatar_url?: string | null;
+  avatarUrl?: string | null;
   currentHub?: string;
   lat?: number;
   lng?: number;

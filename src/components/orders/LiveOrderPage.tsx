@@ -797,6 +797,8 @@ export const LiveOrderPage = ({
           isPartnerAssigned={isPartnerAssigned}
           riderLocation={liveRiderLocation}
           deliveryPartnerName={deliveryPartnerName}
+          riderAvatarUrl={assignedRider?.avatarUrl || (assignedRider as any)?.avatar_url || null}
+          riderBikeNumber={(assignedRider as any)?.vehicleNumber || (assignedRider as any)?.vehicle_number || (assignedRider as any)?.vehicle_no || null}
         />
       </div>
 
