@@ -178,5 +178,15 @@
     - `ProductDetailPage.tsx`: Reactive `effectivePrice`, `effectiveMrp`, `effectiveDiscountPercent`, and `effectiveImageUrls` adapt instantaneously when clicking any color swatch. Main gallery zooms and resets smoothly to the variant's photo. Bottom floating action bar and price block reflect variant prices in real time.
     - `ProductDetailModal.tsx`: Synchronized with `effectivePrice`, `effectiveOriginalPrice`, and dynamic photo gallery.
     - `CartView.tsx`: Displays variant-specific photo, pricing, and discount badge; bill breakdown dynamically sums each line item according to its selected variant price. Orders snapshot the variant pricing into `orderItems` for invoices and order tracking.
+- [x] **Product Details Top Navbar, Scroll-Collapse, and Header Back Arrow**:
+  - Enabled top `<Header>` visibility on all product detail routes (`/electrical/product/:id`, `/construction/product/:id`, `/product/:id`).
+  - Implemented smooth scroll collapse: when scrolling past 20px on product detail pages, the first line (brand "SmartRun", location selector, cart icon, and avatar) collapses smoothly (`max-h-0 opacity-0`), keeping only the focused search bar and filter/sort buttons sticky at the top.
+  - Shifted the back button directly into the sticky top navbar on the left side of the search bar as a clean, minimal arrow icon (`<ArrowLeft />` with zero background boxes). Removed the obsolete floating back button from `ProductDetailPage.tsx` to eliminate button clash.
+  - Enhanced filter and sort buttons on product details so clicking them seamlessly navigates to the store and opens the respective filter drawer or sort menu.
+- [x] **Android Share Sheet Duplicate Link Fix**:
+  - Fixed duplicate URL bug in `src/utils/shareProduct.ts`: Capacitor on Android concatenates `text` and `url` when both are supplied to `CapShare.share(...)`. We previously provided `text: `${shareText} ${fullShareUrl}`` and `url: fullShareUrl`, causing two links. Changed to `text: shareText` so only a single link is produced.
+- [x] **Shared Product Link Back Navigation Fallback**:
+  - Resolved issue where clicking the arrow back button or Android hardware back button on a product page opened from an external shared link (WhatsApp, SMS, etc.) failed to go back.
+  - Integrated smart history fallback (`window.history.state?.idx > 0 ? navigate(-1) : navigate(isConstruction ? '/construction' : '/electrical')`) across Header arrow button, `useEdgeSwipeBack` gesture, and Capacitor Android hardware back button handler in `App.tsx`. Users are never stuck on product pages.
 - [x] **Persistent Project Memory**: Created `AGENTS.md` to permanently store all system rules, package details, and fix history.
 

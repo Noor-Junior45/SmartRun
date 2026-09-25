@@ -417,7 +417,13 @@ export const ProductDetailPage = ({
 
   // Mobile edge swipe back gesture (declared before any early returns to satisfy React Hook rules)
   useEdgeSwipeBack({
-    onBack: () => navigate(catalogBackRoute),
+    onBack: () => {
+      if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+        navigate(-1);
+      } else {
+        navigate(catalogBackRoute);
+      }
+    },
     disabled: loading || !product
   });
 
@@ -486,17 +492,6 @@ export const ProductDetailPage = ({
         }}
       />
       
-      {/* Floating Back Button to easily go back to Store catalog from anywhere */}
-      <button
-        type="button"
-        onClick={() => navigate(catalogBackRoute)}
-        className="fixed top-4 sm:top-5 left-4 sm:left-6 z-50 p-2.5 sm:p-3 rounded-full bg-white text-slate-800 hover:bg-yellow-400 hover:text-slate-950 shadow-xl hover:shadow-2xl transition-all border border-slate-300 backdrop-blur-md cursor-pointer active:scale-90 flex items-center justify-center group"
-        title={catalogBackTitle}
-        aria-label={catalogBackTitle}
-      >
-        <ArrowLeft className="w-5 h-5 stroke-[2.5] group-hover:-translate-x-0.5 transition-transform" />
-      </button>
-
       {/* Main Two-Column Layout */}
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-3 sm:py-5">
         <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">

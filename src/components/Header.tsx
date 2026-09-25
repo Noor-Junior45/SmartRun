@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Zap, ShoppingBag, User, ChevronDown, Home, Briefcase, Building2, MapPin, Wrench, Search, X, SlidersHorizontal, ArrowUpDown, ArrowRight, Check } from 'lucide-react';
+import { Zap, ShoppingBag, User, ChevronDown, Home, Briefcase, Building2, MapPin, Wrench, Search, X, SlidersHorizontal, ArrowUpDown, ArrowRight, ArrowLeft, Check } from 'lucide-react';
 import { KolkataArea, SavedAddress, UserProfile, Product } from '../types';
 import { detectQueryCategory, searchAllProducts } from '../utils/searchHelper';
 import { isConstructionProduct } from '../utils/categoryHelper';
@@ -86,6 +86,60 @@ export const Header = ({
 
   // Show All Filters button strictly on Electrical, Construction, and Technicians pages (Hidden on Home and others)
   const currentPath = location.pathname.toLowerCase();
+  const isProductDetailPage = currentPath.includes('/product/');
+  const isConstructionDetailPage =
+    isProductDetailPage && currentPath.includes('/construction');
+
+  // Track window scroll to collapse brand/location/avatar row when viewing product details
+  const [isScrolled, setIsScrolled] = useState(false);
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrolled = window.scrollY > 20;
+      setIsScrolled(scrolled);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const handleProductBack = () => {
+    hapticLight();
+    // 1. If user arrived from within our app history, go back to previous screen
+    if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+      return;
+    }
+    // 2. Otherwise (e.g. opened directly from shared WhatsApp/SMS/native link), navigate to the corresponding store
+    const fallbackPath = isConstructionDetailPage ? '/construction' : '/electrical';
+    navigate(fallbackPath);
+  };
+
+  const handleFilterClick = () => {
+    hapticSelection();
+    if (isProductDetailPage) {
+      const fallbackPath = isConstructionDetailPage ? '/construction' : '/electrical';
+      navigate(fallbackPath);
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('open-all-filters'));
+      }, 120);
+    } else {
+      window.dispatchEvent(new CustomEvent('open-all-filters'));
+    }
+  };
+
+  const handleSortClick = () => {
+    hapticSelection();
+    if (isProductDetailPage) {
+      const fallbackPath = isConstructionDetailPage ? '/construction' : '/electrical';
+      navigate(fallbackPath);
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('open-sort-dropdown'));
+      }, 120);
+    } else {
+      window.dispatchEvent(new CustomEvent('open-sort-dropdown'));
+    }
+  };
+
   const isTechniciansPage =
     activeTab === 'technicians' ||
     activeTab === 'technician' ||
@@ -96,7 +150,8 @@ export const Header = ({
     activeTab === 'construction' ||
     isTechniciansPage ||
     currentPath.startsWith('/electrical') ||
-    currentPath.startsWith('/construction');
+    currentPath.startsWith('/construction') ||
+    isProductDetailPage;
 
   // Close live search dropdown when clicking outside
   useEffect(() => {
@@ -235,9 +290,16 @@ export const Header = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 transition-all shadow-2xs">
-      {/* Main Brand & Action Bar */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 sm:py-2.5">
-        <div className="flex items-center justify-between gap-2 sm:gap-4">
+      {/* Main Brand & Action Bar (collapses smoothly on product detail page scroll) */}
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+          isProductDetailPage && isScrolled
+            ? 'max-h-0 opacity-0 pointer-events-none py-0'
+            : 'max-h-24 opacity-100 py-2 sm:py-2.5'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-3 sm:px-6">
+          <div className="flex items-center justify-between gap-2 sm:gap-4">
           
           {/* Brand Title & Location Header */}
           <div className="flex items-center shrink-0">
@@ -337,10 +399,25 @@ export const Header = ({
           </div>
         </div>
       </div>
+    </div>
 
       {/* Row 2: Fixed Liquid Glass Search Bar + Right-side All Filters Button (Visible strictly on Electrical, Construction & Wiring, NOT on Home) */}
       <div className="border-t border-slate-100/80 bg-gradient-to-b from-white/80 to-white/95 backdrop-blur-md px-3 sm:px-6 py-2 sm:py-2.5">
         <div className="max-w-3xl mx-auto w-full flex items-center gap-2 sm:gap-3">
+          {/* Back Button beside search bar when viewing product details - only arrow and nothing */}
+          {isProductDetailPage && (
+            <button
+              id="header-product-back-btn"
+              type="button"
+              onClick={handleProductBack}
+              className="p-1.5 sm:p-2 -ml-1 text-slate-800 hover:text-black hover:bg-slate-100 active:bg-slate-200 rounded-full transition-colors cursor-pointer flex items-center justify-center shrink-0 active:scale-90"
+              title={isConstructionDetailPage ? 'Back to Construction Store' : 'Back to Electrical Store'}
+              aria-label="Back"
+            >
+              <ArrowLeft className="w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[2.5]" />
+            </button>
+          )}
+
           {/* Reduced Search Bar */}
           <form
             ref={searchDropdownRef}
@@ -509,9 +586,7 @@ export const Header = ({
               <button
                 id="top-navbar-all-filters-btn"
                 type="button"
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('open-all-filters'));
-                }}
+                onClick={handleFilterClick}
                 className="p-1.5 sm:p-2 flex items-center justify-center text-slate-700 hover:text-amber-600 border-0 bg-transparent transition-colors active:scale-95 cursor-pointer"
                 title="All Filters"
                 aria-label="All Filters"
@@ -523,9 +598,7 @@ export const Header = ({
               <button
                 id="top-navbar-relevance-sort-btn"
                 type="button"
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('open-sort-dropdown'));
-                }}
+                onClick={handleSortClick}
                 className="p-1.5 sm:p-2 flex items-center justify-center text-slate-700 hover:text-blue-600 border-0 bg-transparent transition-colors active:scale-95 cursor-pointer"
                 title="Sort & Relevance"
                 aria-label="Sort and Relevance"

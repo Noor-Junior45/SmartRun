@@ -140,7 +140,7 @@ export async function shareProductDetails(options: ShareProductOptions): Promise
 
       const capResult = await CapShare.share({
         title: shareTitle,
-        text: `${shareText} ${fullShareUrl}`,
+        text: shareText,
         url: fullShareUrl,
         dialogTitle: 'Share with'
       });

@@ -928,7 +928,16 @@ export default function App() {
 
       // If user is not at home root, navigate back
       if (currentPath !== '/' && currentPath !== '' && currentPath !== '/login') {
-        navigate(-1);
+        if (currentPath.includes('/product/')) {
+          if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+            navigate(-1);
+          } else {
+            const isConst = currentPath.includes('/construction');
+            navigate(isConst ? '/construction' : '/electrical');
+          }
+        } else {
+          navigate(-1);
+        }
       } else {
         CapApp.exitApp();
       }
@@ -1437,10 +1446,9 @@ export default function App() {
       <SEOHead />
       <AndroidAppBridgePrompt />
       
-      {/* Top Header - Hidden when viewing profile, live-order, product details, cart, or delete account */}
+      {/* Top Header - Hidden when viewing profile, live-order, cart, or delete account */}
       {location.pathname !== '/profile' &&
         !location.pathname.startsWith('/live-order') &&
-        !location.pathname.includes('/product/') &&
         !location.pathname.startsWith('/cart') &&
         !location.pathname.startsWith('/delete') &&
         !location.pathname.startsWith('/account-deletion') &&
