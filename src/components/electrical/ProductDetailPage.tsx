@@ -110,7 +110,6 @@ export const ProductDetailPage = ({
   // Review Form State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
-  const [reviewTitle, setReviewTitle] = useState('');
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
@@ -353,7 +352,12 @@ export const ProductDetailPage = ({
   // Submit Review Handler
   const handleOpenReviewModal = async () => {
     const { data } = await supabase.auth.getUser();
-    if (!data?.user) {
+    const hasCachedProfile =
+      typeof window !== 'undefined' &&
+      (Boolean(window.localStorage.getItem('smartrun_user_profile')) ||
+       Boolean(window.localStorage.getItem('giriraj_supabase_auth_session')));
+
+    if (!data?.user && !userProfile && !hasCachedProfile) {
       onOpenAuth();
       return;
     }
@@ -365,28 +369,28 @@ export const ProductDetailPage = ({
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!product) return;
-    if (!reviewTitle.trim() || !reviewComment.trim()) {
-      setReviewError('Please provide both a review title and comment.');
-      return;
-    }
 
     setIsSubmittingReview(true);
     setReviewError(null);
 
+    const cleanComment = reviewComment.trim();
+    const cleanTitle = cleanComment ? cleanComment.slice(0, 50) : `${reviewRating} Star Rating`;
+
     const res = await submitProductReview({
       product_id: product.id,
       rating: reviewRating,
-      title: reviewTitle,
-      comment: reviewComment
+      title: cleanTitle,
+      comment: cleanComment,
+      user_name: userProfile?.name || undefined
     });
 
     setIsSubmittingReview(false);
 
     if (res.success && res.review) {
-      setReviews((prev) => [res.review!, ...prev]);
+      setReviews((prev) => [res.review!, ...prev.filter((r) => r.id !== res.review!.id)]);
       setReviewSuccess(true);
-      setReviewTitle('');
       setReviewComment('');
+      setReviewRating(5);
       setTimeout(() => {
         setIsReviewModalOpen(false);
         setReviewSuccess(false);
@@ -945,7 +949,7 @@ export const ProductDetailPage = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2 text-xs font-black text-slate-900">
                   <MapPin className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span>Delivery &amp; Service Availability</span>
+                  <span>Delivery</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -1003,35 +1007,14 @@ export const ProductDetailPage = ({
 
                   return (
                     <div className="p-3 bg-rose-50/90 border border-rose-200 rounded-lg space-y-1.5 text-xs animate-in fade-in duration-150">
-                      <div className="flex items-start gap-1.5 text-rose-800 font-bold">
+                      <div className="flex items-start gap-2 text-rose-800 font-bold">
                         <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                         <div>
-                          <span>Delivery Not Available for PIN: {pincode || 'Entered Area'}</span>
+                          <span>Delivery Not Available ({pincode || 'Entered Area'})</span>
                           <p className="text-[11px] font-normal text-rose-700 mt-0.5 leading-relaxed">
-                            Giriraj Power currently delivers <strong>exclusively to Kolkata &amp; Howrah region</strong> (PIN 700001–700160 &amp; 711101–711106). We do not deliver to other states or outside Kolkata at this time.
+                            Sorry, we currently do not deliver to this location. We are expanding rapidly and will start delivering to your locality soon!
                           </p>
                         </div>
-                      </div>
-                      <div className="pl-5 pt-1 border-t border-rose-200/60 flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[10px] font-bold text-rose-600">Try Kolkata Pincode:</span>
-                        {[
-                          { code: '700091', label: 'Salt Lake' },
-                          { code: '700001', label: 'Central' },
-                          { code: '700019', label: 'Ballygunge' },
-                          { code: '700156', label: 'New Town' }
-                        ].map((sample) => (
-                          <button
-                            key={sample.code}
-                            type="button"
-                            onClick={() => {
-                              setPincode(sample.code);
-                              setPincodeChecked(true);
-                            }}
-                            className="px-1.5 py-0.5 bg-white hover:bg-rose-100/70 border border-rose-300 text-rose-900 rounded text-[10px] font-mono font-bold cursor-pointer transition"
-                          >
-                            {sample.code} ({sample.label})
-                          </button>
-                        ))}
                       </div>
                     </div>
                   );
@@ -1276,9 +1259,11 @@ export const ProductDetailPage = ({
                           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#388e3c] text-white text-[11px] font-black">
                             {rev.rating} <Star className="w-2.5 h-2.5 fill-white" />
                           </span>
-                          <span className="font-black text-slate-900 text-xs">
-                            {rev.title}
-                          </span>
+                          {rev.title && !rev.title.endsWith('Star Rating') && (
+                            <span className="font-black text-slate-900 text-xs">
+                              {rev.title}
+                            </span>
+                          )}
                         </div>
                         <span className="text-[10px] text-slate-400 font-medium">
                           {new Date(rev.created_at).toLocaleDateString('en-IN', {
@@ -1289,9 +1274,11 @@ export const ProductDetailPage = ({
                         </span>
                       </div>
 
-                      <p className="text-slate-700 leading-relaxed text-xs">
-                        {rev.comment}
-                      </p>
+                      {rev.comment && rev.comment.trim() && (
+                        <p className="text-slate-700 leading-relaxed text-xs">
+                          {rev.comment}
+                        </p>
+                      )}
 
                       <div className="flex items-center gap-3 pt-1 text-[11px] text-slate-500 font-semibold">
                         <span className="flex items-center gap-1 text-slate-800">
@@ -1444,30 +1431,14 @@ export const ProductDetailPage = ({
                     </div>
                   </div>
 
-                  {/* Review Title */}
+                  {/* Review (Optional) */}
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">
-                      Review Title / Summary
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Excellent 100% Copper Quality & Fast Delivery"
-                      value={reviewTitle}
-                      onChange={(e) => setReviewTitle(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-hidden font-medium"
-                    />
-                  </div>
-
-                  {/* Review Comment */}
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">
-                      Detailed Review
+                      Review (Optional)
                     </label>
                     <textarea
                       rows={4}
-                      required
-                      placeholder="Describe your installation experience, insulation quality, brand authenticity, or delivery speed..."
+                      placeholder="Write your review here (optional)..."
                       value={reviewComment}
                       onChange={(e) => setReviewComment(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-hidden font-medium resize-none"

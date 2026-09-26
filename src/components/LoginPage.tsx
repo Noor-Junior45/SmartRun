@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '../lib/supabaseClient';
+import { apiUrl } from '../lib/apiBase';
 import { isAndroidAppEnvironment } from '../utils/platformDetection';
 import {
   saveUserProfile,
@@ -488,7 +489,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         } catch {}
 
         // Push to server-side profile store
-        fetch('/api/user-profile', {
+        fetch(apiUrl('/api/user-profile'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

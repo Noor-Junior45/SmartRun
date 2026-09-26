@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabaseClient';
 import { Technician, TechnicianReview } from '../types/technician';
 import { DEMO_TECHNICIANS } from '../data/demoTechnicians';
+import { apiUrl } from '../lib/apiBase';
 
 export function deriveTechnicianId(row: any, index: number = 1): string {
   if (row.id && typeof row.id === 'string' && row.id.trim().length > 0) {
@@ -260,7 +261,7 @@ export async function submitTechnicianReview(
 
 export async function generateTechnicianDescription(tech: Partial<Technician>): Promise<string> {
   try {
-    const res = await fetch('/api/technicians/generate-description', {
+    const res = await fetch(apiUrl('/api/technicians/generate-description'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

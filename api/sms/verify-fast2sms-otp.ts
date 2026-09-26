@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 // Serverless endpoint for Vercel: /api/sms/verify-fast2sms-otp
 declare global {
   // eslint-disable-next-line no-var
@@ -29,7 +31,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { phone, otp } = req.body || {};
+    const { phone, otp, token } = req.body || {};
     const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
     const cleanOtp = String(otp || "").trim();
 
@@ -40,6 +42,55 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ success: false, error: "Please enter a valid 6-digit OTP." });
     }
 
+    const secret = (process.env.FAST2SMS_API_KEY || "smartrun-otp-secret-key").trim();
+
+    // 1. Primary Verification: Stateless Cryptographic Token (HMAC-SHA256)
+    // 100% resilient across serverless lambdas, cold starts, and container boundaries!
+    if (token && typeof token === "string" && token.includes(".")) {
+      const parts = token.split(".");
+      const expiresAt = Number(parts[0]);
+      const signature = parts[1];
+
+      if (isNaN(expiresAt) || !signature) {
+        return res.status(400).json({
+          success: false,
+          error: "Malformed verification token. Please tap 'Resend OTP'."
+        });
+      }
+
+      if (Date.now() > expiresAt) {
+        return res.status(400).json({
+          success: false,
+          error: "OTP code has expired. Please tap 'Resend OTP'."
+        });
+      }
+
+      const expectedSignature = crypto
+        .createHmac("sha256", secret)
+        .update(`${cleanPhone}:${cleanOtp}:${expiresAt}`)
+        .digest("hex");
+
+      if (expectedSignature !== signature) {
+        return res.status(400).json({
+          success: false,
+          error: "Incorrect OTP code. Please enter the valid code received on your phone."
+        });
+      }
+
+      // Validated via cryptographic proof!
+      if (otpStore.has(cleanPhone)) {
+        otpStore.delete(cleanPhone);
+      }
+
+      return res.status(200).json({
+        success: true,
+        verified: true,
+        phone: `+91${cleanPhone}`,
+        message: "Phone number verified successfully."
+      });
+    }
+
+    // 2. Secondary Fallback: In-memory warm container cache
     const cached = otpStore.get(cleanPhone);
     if (!cached) {
       return res.status(400).json({
@@ -76,6 +127,8 @@ export default async function handler(req: any, res: any) {
     otpStore.delete(cleanPhone);
     return res.status(200).json({
       success: true,
+      verified: true,
+      phone: `+91${cleanPhone}`,
       message: "Phone number verified successfully."
     });
   } catch (err: any) {

@@ -20,6 +20,7 @@ import {
   safeSetItem
 } from './supabaseService';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { apiUrl } from '../lib/apiBase';
 
 // Initialize Firebase App singleton
 export const firebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -30,6 +31,7 @@ let activeConfirmationResult: ConfirmationResult | null = null;
 let activeRecaptchaVerifier: RecaptchaVerifier | null = null;
 let lastSentPhoneNumber: string | null = null;
 let isFast2SmsSession = false;
+let activeFast2smsToken: string | null = null;
 
 /**
  * Format any Indian phone number into strict E.164 (+91XXXXXXXXXX)
@@ -129,7 +131,7 @@ export async function sendFast2SmsPhoneOtp(rawPhone: string): Promise<SendFireba
   const formattedPhone = formatToE164Phone(digits);
 
   try {
-    const res = await fetch('/api/sms/send-fast2sms-otp', {
+    const res = await fetch(apiUrl('/api/sms/send-fast2sms-otp'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone: digits })
@@ -149,12 +151,13 @@ export async function sendFast2SmsPhoneOtp(rawPhone: string): Promise<SendFireba
     lastSentPhoneNumber = formattedPhone;
     isFast2SmsSession = true;
     activeConfirmationResult = null;
+    activeFast2smsToken = data.token || null;
 
     return {
       success: true,
       formattedPhone,
       provider: 'fast2sms',
-      message: data.message || `OTP sent via Fast2SMS Quick SMS service to ${formattedPhone}.`
+      message: data.message || `OTP sent via Fast2SMS to ${formattedPhone}.`
     };
   } catch (err: any) {
     console.warn('[Fast2SMS Client] Network error:', err);
@@ -177,10 +180,10 @@ export async function verifyFast2SmsPhoneOtp(
   const cleanCode = (otpCode || '').trim();
 
   try {
-    const res = await fetch('/api/sms/verify-fast2sms-otp', {
+    const res = await fetch(apiUrl('/api/sms/verify-fast2sms-otp'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: digits, otp: cleanCode })
+      body: JSON.stringify({ phone: digits, otp: cleanCode, token: activeFast2smsToken })
     });
 
     const data = await res.json().catch(() => null);
@@ -192,6 +195,7 @@ export async function verifyFast2SmsPhoneOtp(
       };
     }
 
+    activeFast2smsToken = null;
     return { success: true };
   } catch (err: any) {
     return {
@@ -466,7 +470,7 @@ export async function bridgeVerifiedPhoneToSupabase(
   let preResolvedCashback = 0;
 
   try {
-    const resolveRes = await fetch('/api/auth/resolve-phone-user', {
+    const resolveRes = await fetch(apiUrl('/api/auth/resolve-phone-user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone: clean10 })
@@ -682,7 +686,7 @@ export async function bridgeVerifiedPhoneToSupabase(
     } catch {}
 
     // Synchronize to backend server-side store
-    fetch('/api/user-profile', {
+    fetch(apiUrl('/api/user-profile'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

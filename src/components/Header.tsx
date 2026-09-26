@@ -342,11 +342,11 @@ export const Header = ({
 
           {/* Right Action Icons: Cart Button, Profile Button */}
           <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
-            {/* Cart Button (Borderless, icon only with badge, no circular/oval background) */}
+            {/* Cart Button (Hidden on mobile small screens, visible on larger screens) */}
             <button
               id="top-navbar-cart-btn"
               onClick={handleCartClick}
-              className={`relative p-1.5 sm:p-2 flex items-center justify-center transition-colors cursor-pointer border-0 bg-transparent ${
+              className={`relative p-1.5 sm:p-2 hidden sm:flex items-center justify-center transition-colors cursor-pointer border-0 bg-transparent ${
                 activeTab === 'cart'
                   ? 'text-amber-600'
                   : 'text-slate-800 hover:text-amber-600'

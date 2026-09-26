@@ -1804,6 +1804,9 @@ export default function App() {
           activeCategory={activeCategory}
           onTabChange={handleTabChange}
           onSelectCategory={handleCategorySelect}
+          cartCount={cartCount}
+          cartTotal={cartTotal}
+          onOpenCart={() => navigate('/cart')}
         />
       )}
 

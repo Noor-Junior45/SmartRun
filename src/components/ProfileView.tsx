@@ -779,17 +779,6 @@ export const ProfileView = ({
             )}
           </button>
         </div>
-
-        {/* App Version Tag & Build Status */}
-        <div className="text-center pt-6 pb-2 space-y-1">
-          <p className="text-[11px] font-bold text-slate-500">
-            SmartRun App Version 2.4.0
-          </p>
-          <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Live Server Deployment Sync Active</span>
-          </div>
-        </div>
       </div>
 
       {/* EDIT PROFILE MODAL */}

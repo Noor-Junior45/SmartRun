@@ -188,5 +188,29 @@
 - [x] **Shared Product Link Back Navigation Fallback**:
   - Resolved issue where clicking the arrow back button or Android hardware back button on a product page opened from an external shared link (WhatsApp, SMS, etc.) failed to go back.
   - Integrated smart history fallback (`window.history.state?.idx > 0 ? navigate(-1) : navigate(isConstruction ? '/construction' : '/electrical')`) across Header arrow button, `useEdgeSwipeBack` gesture, and Capacitor Android hardware back button handler in `App.tsx`. Users are never stuck on product pages.
+- [x] **Fast2SMS Android App & Serverless "No Active OTP Found" Fix**:
+  - **Android App Issue**: In the Capacitor Android APK (`androidScheme: 'https'`), `window.location.origin` is `https://localhost`. Relative calls to `fetch('/api/sms/send-fast2sms-otp')` resolved to `https://localhost`, failing with network error and triggering `"Fast2sms was unable to deliver SMS to this number"`. Resolved by adopting `apiUrl(...)` from `src/lib/apiBase.ts` across `firebaseAuthService.ts`, `supabaseService.ts`, and `LoginPage.tsx` so requests on Android route to `https://www.smartrun.in`.
+  - **Live Website Issue**: On Vercel / serverless deployments, `/api/sms/send-fast2sms-otp` and `/api/sms/verify-fast2sms-otp` run in separate, isolated Lambda containers. In-memory `Map` storage in the send container was not accessible to the verify container, causing `"No active OTP found or code expired"`. Resolved by implementing stateless cryptographic verification tokens (HMAC-SHA256): the server returns a signed token `expiresAt.signature`, and `verify-fast2sms-otp` verifies the signature cryptographically without depending on shared container memory.
+  - **Route Optimization**: Prioritized Fast2SMS dedicated `otp` route (pre-approved DLT template, delivers to both DND and Non-DND numbers, ₹0.20 per SMS) over the restricted `q` route (blocked on DND numbers, ₹5.00 per SMS).
+- [x] **Profile Page Footer Cleanup**:
+  - Removed "SmartRun App Version 2.4.0" and "Live Server Deployment Sync Active" footer text from the bottom of `ProfileView.tsx` for a clean, consumer-facing profile appearance.
+- [x] **Bottom Floating Cart Tab & Top Navbar Indicator Synergy**:
+  - Added dedicated **Cart** tab to `FloatingBottomNav.tsx` positioned directly beside the Technician tab in the natural thumb reach zone on mobile screens.
+  - Cart tab includes real-time `cartCount` badge, active highlighting, and haptic feedback on tap.
+  - Top `<Header>` cart button is responsive (`hidden sm:flex`): hidden on small mobile screens to keep the mobile header uncluttered, and automatically appears on larger screens (tablets, laptops, and desktop).
+- [x] **Floating Bottom Nav Dimensions & Zero-Gap Refinements**:
+  - Reduced horizontal length (`w-[84vw] max-w-[315px] sm:max-w-[330px]`) for a compact, snug fit.
+  - Removed gaps between all 5 buttons (`gap-0 px-0`) so all items sit flush side by side.
+  - Increased vertical height (`py-2 sm:py-2.5` on container, `py-1.5 sm:py-2` on buttons, and `w-5.5 h-5.5` icons) for a taller, premium dock appearance.
+- [x] **Delivery Section Header & Non-Serviceable Pincode Redesign**:
+  - Renamed "Delivery & Service Availability" section to clean "Delivery".
+  - Replaced the lengthy restriction text with a concise and forward-looking message: *"Sorry, we currently do not deliver to this location. We are expanding rapidly and will start delivering to your locality soon!"* across both `ProductDetailPage.tsx` and `ProductDetailModal.tsx`.
+- [x] **Removed Kolkata Quick-Select Pincode Chips**:
+  - Removed the `Try Kolkata Pincode:` sample chips (`Salt Lake`, `Central`, `Ballygunge`, `New Town`) from the non-serviceable delivery status container in `ProductDetailPage.tsx` so users see only the clean, minimal delivery notice.
+- [x] **Product Review Form Redesign & Optional Review Support**:
+  - Removed the redundant "Review Title / Summary" section and input box entirely.
+  - Renamed "Detailed Review" to "Review (Optional)".
+  - Made the review textarea optional (`required` removed, placeholder updated to "Write your review here (optional)...") so customers can either type feedback or submit a fast star-only rating (e.g. 5 stars) with a single tap.
+  - Updated `submitProductReview` and `fetchProductReviews` with automatic fallback title generation, robust authentication resolution (Supabase session + cached profile), and offline/local fallback storage (`smartrun_local_reviews_<id>`) so reviews always succeed, display immediately, and persist across reloads.
 - [x] **Persistent Project Memory**: Created `AGENTS.md` to permanently store all system rules, package details, and fix history.
 

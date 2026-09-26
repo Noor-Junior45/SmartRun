@@ -79,26 +79,24 @@ export const ProductReviewsSection = ({
       return;
     }
 
-    if (!title.trim() || !comment.trim()) {
-      setErrorMsg('Please provide a review summary and detailed feedback.');
-      return;
-    }
-
     setIsSubmitting(true);
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    const cleanComment = comment.trim();
+    const cleanTitle = cleanComment ? cleanComment.slice(0, 50) : `${rating} Star Rating`;
+
     const result = await submitProductReview({
       product_id: productId,
       rating,
-      title: title.trim(),
-      comment: comment.trim()
+      title: cleanTitle,
+      comment: cleanComment
     });
 
     setIsSubmitting(false);
 
     if (result.success && result.review) {
-      setReviews((prev) => [result.review!, ...prev]);
+      setReviews((prev) => [result.review!, ...prev.filter((r) => r.id !== result.review!.id)]);
       setSuccessMsg('Thank you! Your review and rating have been posted.');
       setTitle('');
       setComment('');
@@ -265,33 +263,16 @@ export const ProductReviewsSection = ({
             </div>
           </div>
 
-          {/* Title Input */}
+          {/* Review (Optional) */}
           <div>
             <label className="block text-[11px] font-bold text-slate-700 mb-1">
-              Review Title
-            </label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Genuine Quality, Fast Delivery in Kolkata"
-              className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none font-medium text-slate-900"
-              maxLength={100}
-            />
-          </div>
-
-          {/* Detailed Comment Input */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">
-              Detailed Experience / Comments
+              Review (Optional)
             </label>
             <textarea
               rows={3}
-              required
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="Tell other builders & electricians about build quality, copper thickness, ease of installation, or packaging..."
+              placeholder="Write your review here (optional)..."
               className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none font-medium text-slate-900 resize-none"
               maxLength={1000}
             />
@@ -351,9 +332,11 @@ export const ProductReviewsSection = ({
                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-700 text-white text-[10px] font-black">
                     {rev.rating} <Star className="w-2.5 h-2.5 fill-white" />
                   </span>
-                  <span className="font-bold text-slate-900 text-xs">
-                    {rev.title}
-                  </span>
+                  {rev.title && !rev.title.endsWith('Star Rating') && (
+                    <span className="font-bold text-slate-900 text-xs">
+                      {rev.title}
+                    </span>
+                  )}
                 </div>
                 <span className="text-[10px] text-slate-400">
                   {new Date(rev.created_at).toLocaleDateString('en-IN', {
@@ -364,9 +347,11 @@ export const ProductReviewsSection = ({
                 </span>
               </div>
 
-              <p className="text-slate-700 leading-relaxed text-[11px]">
-                {rev.comment}
-              </p>
+              {rev.comment && rev.comment.trim() && (
+                <p className="text-slate-700 leading-relaxed text-[11px]">
+                  {rev.comment}
+                </p>
+              )}
 
               <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px] text-slate-500">
                 <div className="flex items-center gap-1 text-slate-700 font-semibold">

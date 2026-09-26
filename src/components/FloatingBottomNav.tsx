@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Zap, Building2 } from 'lucide-react';
+import { Home, Zap, Building2, ShoppingBag } from 'lucide-react';
 import { hapticSelection } from '../utils/haptics';
 
 interface FloatingBottomNavProps {
@@ -7,12 +7,15 @@ interface FloatingBottomNavProps {
   activeCategory: string;
   onTabChange: (tab: string) => void;
   onSelectCategory: (category: string) => void;
+  cartCount?: number;
+  cartTotal?: number;
+  onOpenCart?: () => void;
 }
 
 // Person Logo Component based strictly on user's reference logo (1.jpeg)
 const PersonNavIcon = ({
   isActive,
-  className = 'w-5 h-5 sm:w-5.5 sm:h-5.5 mb-0.5'
+  className = 'w-5.5 h-5.5 sm:w-6 sm:h-6 mb-1'
 }: { isActive: boolean; className?: string }) => {
   if (isActive) {
     return (
@@ -51,19 +54,24 @@ export const FloatingBottomNav = ({
   activeCategory,
   onTabChange,
   onSelectCategory,
+  cartCount = 0,
+  cartTotal = 0,
+  onOpenCart
 }: FloatingBottomNavProps) => {
   const isHomeActive = activeTab === 'home' || (activeTab === 'catalog' && activeCategory === 'all');
   const isElectricalActive = activeTab === 'electrical' || (activeTab === 'catalog' && activeCategory === 'electrical');
   const isConstructionActive = activeTab === 'construction' || (activeTab === 'catalog' && activeCategory === 'construction');
   const isTechnicianActive = activeTab === 'technicians' || activeTab === 'technician';
+  const isCartActive = activeTab === 'cart';
 
   return (
     <nav
       id="floating-liquid-bottom-navbar"
       aria-label="Bottom Navigation"
-      className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 w-[84vw] max-w-[310px] sm:max-w-[330px]"
+      className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 w-[84vw] max-w-[315px] sm:max-w-[330px]"
     >
-      <div className="flex items-center justify-between gap-1 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-full bg-white/60 backdrop-blur-2xl backdrop-saturate-200 border border-white/60 shadow-[0_16px_40px_rgba(0,0,0,0.12),0_4px_12px_rgba(0,0,0,0.04),inset_0_1.5px_2px_rgba(255,255,255,0.8),inset_0_-1px_2px_rgba(0,0,0,0.02)] ring-1 ring-black/5 transition-all duration-300">
+      {/* Increased vertical height, compact side-by-side with zero gap */}
+      <div className="flex items-center justify-between gap-0 px-1 py-2 sm:py-2.5 rounded-full bg-white/80 backdrop-blur-2xl backdrop-saturate-200 border border-white/80 shadow-[0_16px_40px_rgba(0,0,0,0.14),0_4px_12px_rgba(0,0,0,0.06),inset_0_1.5px_2px_rgba(255,255,255,0.85),inset_0_-1px_2px_rgba(0,0,0,0.02)] ring-1 ring-black/5 transition-all duration-300">
         {/* 1. Home Button */}
         <button
           id="floating-nav-home"
@@ -75,7 +83,7 @@ export const FloatingBottomNav = ({
           }}
           title="Home"
           aria-label="Home"
-          className={`flex-1 min-w-0 flex flex-col items-center justify-center py-2 px-1 rounded-full transition-all duration-200 cursor-pointer bg-transparent border-0 outline-none ${
+          className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1.5 sm:py-2 px-0 rounded-full transition-all duration-200 cursor-pointer bg-transparent border-0 outline-none ${
             isHomeActive
               ? 'text-emerald-600 font-bold scale-[1.05]'
               : 'text-slate-700 hover:text-emerald-600 active:scale-95 font-medium'
@@ -96,7 +104,7 @@ export const FloatingBottomNav = ({
           }}
           title="Electrical Supplies"
           aria-label="Electrical Supplies"
-          className={`flex-1 min-w-0 flex flex-col items-center justify-center py-2 px-1 rounded-full transition-all duration-200 cursor-pointer bg-transparent border-0 outline-none ${
+          className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1.5 sm:py-2 px-0 rounded-full transition-all duration-200 cursor-pointer bg-transparent border-0 outline-none ${
             isElectricalActive
               ? 'text-blue-600 font-bold scale-[1.05]'
               : 'text-slate-700 hover:text-blue-600 active:scale-95 font-medium'
@@ -119,14 +127,14 @@ export const FloatingBottomNav = ({
           }}
           title="Construction Materials"
           aria-label="Construction Materials"
-          className={`flex-1 min-w-0 flex flex-col items-center justify-center py-2 px-1 rounded-full transition-all duration-200 cursor-pointer bg-transparent border-0 outline-none ${
+          className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1.5 sm:py-2 px-0 rounded-full transition-all duration-200 cursor-pointer bg-transparent border-0 outline-none ${
             isConstructionActive
               ? 'text-amber-600 font-bold scale-[1.05]'
               : 'text-slate-700 hover:text-amber-600 active:scale-95 font-medium'
           }`}
         >
           <Building2 className={`w-5.5 h-5.5 sm:w-6 sm:h-6 mb-1 transition-all ${isConstructionActive ? 'stroke-[2.6] text-amber-600' : 'stroke-[2]'}`} />
-          <span className="text-[10px] sm:text-[11px] leading-tight tracking-tight whitespace-nowrap font-medium">Construction</span>
+          <span className="text-[10px] sm:text-[11px] leading-tight tracking-tight whitespace-nowrap font-medium">Materials</span>
         </button>
 
         {/* 4. Technician Tab */}
@@ -139,7 +147,7 @@ export const FloatingBottomNav = ({
           }}
           title="Certified Technicians & Specialists"
           aria-label="Technicians"
-          className={`flex-1 min-w-0 flex flex-col items-center justify-center py-2 px-1 rounded-full transition-all duration-200 cursor-pointer bg-transparent border-0 outline-none ${
+          className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1.5 sm:py-2 px-0 rounded-full transition-all duration-200 cursor-pointer bg-transparent border-0 outline-none ${
             isTechnicianActive
               ? 'text-indigo-600 font-bold scale-[1.05]'
               : 'text-slate-700 hover:text-indigo-600 active:scale-95 font-medium'
@@ -150,6 +158,49 @@ export const FloatingBottomNav = ({
             className={`w-5.5 h-5.5 sm:w-6 sm:h-6 mb-1 ${isTechnicianActive ? 'text-indigo-600' : 'text-slate-700'}`}
           />
           <span className="text-[10px] sm:text-[11px] leading-tight tracking-tight whitespace-nowrap font-medium">Technician</span>
+        </button>
+
+        {/* 5. Cart Tab (Primary interaction for mobile app thumb zone) */}
+        <button
+          id="floating-nav-cart"
+          type="button"
+          onClick={() => {
+            hapticSelection();
+            if (onOpenCart) {
+              onOpenCart();
+            } else {
+              onTabChange('cart');
+            }
+          }}
+          title={cartCount > 0 ? `Cart (${cartCount} items)` : 'View Cart'}
+          aria-label="Shopping Cart"
+          className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1.5 sm:py-2 px-0 rounded-full transition-all duration-200 cursor-pointer bg-transparent border-0 outline-none relative ${
+            isCartActive
+              ? 'text-emerald-600 font-bold scale-[1.05]'
+              : cartCount > 0
+              ? 'text-slate-900 hover:text-emerald-600 active:scale-95 font-semibold'
+              : 'text-slate-700 hover:text-emerald-600 active:scale-95 font-medium'
+          }`}
+        >
+          <div className="relative">
+            <ShoppingBag
+              className={`w-5.5 h-5.5 sm:w-6 sm:h-6 mb-1 transition-all ${
+                isCartActive
+                  ? 'stroke-[2.6] text-emerald-600'
+                  : cartCount > 0
+                  ? 'stroke-[2.3] text-slate-900'
+                  : 'stroke-[2]'
+              }`}
+            />
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-1.5 bg-red-600 text-white text-[9px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-1.5 border-white shadow-xs animate-in zoom-in-50 duration-150">
+                {cartCount > 99 ? '99+' : cartCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] sm:text-[11px] leading-tight tracking-tight whitespace-nowrap font-medium">
+            Cart
+          </span>
         </button>
       </div>
     </nav>

@@ -531,7 +531,7 @@ export const ProductDetailModal = ({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-xs font-black text-slate-900">
                     <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span>Delivery &amp; Service Availability</span>
+                    <span>Delivery</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <input
@@ -583,12 +583,12 @@ export const ProductDetailModal = ({
 
                     return (
                       <div className="p-2.5 bg-rose-50/90 border border-rose-200 rounded-lg space-y-1 text-xs animate-in fade-in duration-150">
-                        <div className="flex items-start gap-1 text-rose-800 font-bold text-[11px]">
+                        <div className="flex items-start gap-1.5 text-rose-800 font-bold text-[11px]">
                           <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
                           <div>
-                            <span>Delivery Not Available for PIN: {pincode || 'Entered Area'}</span>
+                            <span>Delivery Not Available ({pincode || 'Entered Area'})</span>
                             <p className="text-[10px] font-normal text-rose-700 mt-0.5 leading-relaxed">
-                              Giriraj Power provides delivery services <strong>exclusively within Kolkata &amp; Howrah region</strong> (PIN 700001–700160 &amp; 711101–711106).
+                              Sorry, we currently do not deliver to this location. We are expanding rapidly and will start delivering to your locality soon!
                             </p>
                           </div>
                         </div>

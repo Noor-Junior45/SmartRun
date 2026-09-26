@@ -7,7 +7,7 @@ import { isAndroidAppEnvironment } from '../utils/platformDetection';
 import { Order, OrderStatus, WiringServiceBooking, SavedAddress, UserProfile, Product, CartItem, DeliveryPartner } from '../types';
 import { soundService } from './sound';
 import { showToast } from '../utils/toast';
-import { API_BASE_URL } from '../lib/apiBase';
+import { API_BASE_URL, apiUrl } from '../lib/apiBase';
 import { generateUUID as secureGenerateUUID, generateSecureOrderNumber, generateSecureToken } from '../utils/cryptoHelper';
 
 // Offline Sync Queue Types & Constants
@@ -867,7 +867,7 @@ export async function sendEmailOtpForPhoneChange(
   customerName?: string
 ): Promise<{ success: boolean; message?: string; emailMasked?: string; devOtp?: string; error?: string }> {
   try {
-    const res = await fetch('/api/auth/send-email-otp', {
+    const res = await fetch(apiUrl('/api/auth/send-email-otp'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, phone: newPhone, customerName })
@@ -895,7 +895,7 @@ export async function verifyEmailOtpForPhoneChange(
   otp: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch('/api/auth/verify-email-otp', {
+    const res = await fetch(apiUrl('/api/auth/verify-email-otp'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, otp })
@@ -1601,7 +1601,7 @@ export async function saveUserProfile(
 
   // Always sync to server API
   try {
-    fetch('/api/user-profile', {
+    fetch(apiUrl('/api/user-profile'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

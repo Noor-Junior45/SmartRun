@@ -6165,18 +6165,28 @@ Respond ONLY with a valid JSON object matching the following structure:
         });
       }
 
+      // Generate cryptographic HMAC token valid across serverless cold starts & multiple instances
+      const secret = (process.env.FAST2SMS_API_KEY || "smartrun-otp-secret-key").trim();
+      const expiresAt = Date.now() + 10 * 60 * 1000;
+      const signature = crypto
+        .createHmac("sha256", secret)
+        .update(`${cleanPhone}:${generatedOtp}:${expiresAt}`)
+        .digest("hex");
+      const token = `${expiresAt}.${signature}`;
+
       // Save into store valid for 10 minutes
       fast2smsOtpStore.set(cleanPhone, {
         otp: generatedOtp,
-        expiresAt: Date.now() + 10 * 60 * 1000,
+        expiresAt,
         attempts: 0
       });
 
       return res.json({
         success: true,
         phone: cleanPhone,
+        token,
         routeUsed: result.routeUsed,
-        message: `OTP sent successfully via Fast2SMS Quick SMS service to +91 ${cleanPhone}.`
+        message: `OTP sent successfully via Fast2SMS to +91 ${cleanPhone}.`
       });
     } catch (err: any) {
       return res.status(500).json({
@@ -6189,11 +6199,11 @@ Respond ONLY with a valid JSON object matching the following structure:
   /**
    * Fast2SMS Verify OTP API Endpoint
    * POST /api/sms/verify-fast2sms-otp
-   * Request Body: { phone: "9876543210", otp: "123456" }
+   * Request Body: { phone: "9876543210", otp: "123456", token?: "..." }
    */
   app.post("/api/sms/verify-fast2sms-otp", (req, res) => {
     try {
-      const { phone, otp } = req.body || {};
+      const { phone, otp, token } = req.body || {};
       const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
       const cleanOtp = String(otp || "").trim();
 
@@ -6204,6 +6214,37 @@ Respond ONLY with a valid JSON object matching the following structure:
         return res.status(400).json({ success: false, error: "Please enter a valid 6-digit OTP." });
       }
 
+      const secret = (process.env.FAST2SMS_API_KEY || "smartrun-otp-secret-key").trim();
+
+      // 1. Primary: Cryptographic HMAC verification token (resilient across serverless containers)
+      if (token && typeof token === "string" && token.includes(".")) {
+        const [expiresAtStr, sig] = token.split(".");
+        const expiresAt = Number(expiresAtStr);
+        if (isNaN(expiresAt) || Date.now() > expiresAt) {
+          return res.status(400).json({
+            success: false,
+            error: "OTP code has expired. Please tap 'Resend OTP'."
+          });
+        }
+        const expectedSig = crypto
+          .createHmac("sha256", secret)
+          .update(`${cleanPhone}:${cleanOtp}:${expiresAt}`)
+          .digest("hex");
+        if (expectedSig !== sig) {
+          return res.status(400).json({
+            success: false,
+            error: "Incorrect OTP code. Please enter the valid code received on your phone."
+          });
+        }
+        fast2smsOtpStore.delete(cleanPhone);
+        return res.json({
+          success: true,
+          verified: true,
+          phone: `+91${cleanPhone}`
+        });
+      }
+
+      // 2. Secondary fallback: in-memory store
       const cached = fast2smsOtpStore.get(cleanPhone);
       if (!cached) {
         return res.status(400).json({
