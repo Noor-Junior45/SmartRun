@@ -212,5 +212,12 @@
   - Renamed "Detailed Review" to "Review (Optional)".
   - Made the review textarea optional (`required` removed, placeholder updated to "Write your review here (optional)...") so customers can either type feedback or submit a fast star-only rating (e.g. 5 stars) with a single tap.
   - Updated `submitProductReview` and `fetchProductReviews` with automatic fallback title generation, robust authentication resolution (Supabase session + cached profile), and offline/local fallback storage (`smartrun_local_reviews_<id>`) so reviews always succeed, display immediately, and persist across reloads.
+- [x] **Liquid Glass Floating Bottom Navbar & iPhone Size Enhancement**:
+  - Expanded dock width from `315px` to `w-[93vw] max-w-[390px] sm:max-w-[430px]` so it fills iPhone screens naturally without looking cramped.
+  - Increased dock height with enlarged icons (`w-6 h-6 sm:w-6.5 sm:h-6.5`), comfortable touch targets, and balanced labels (`text-[10.5px] sm:text-[11.5px]`).
+  - Added equal gaps between all 5 buttons with equal `flex-1 min-w-0` distribution.
+  - Removed box background design from all 5 buttons and removed top/bottom reflection lines for an ultra-clean, minimal aesthetic.
+  - Enhanced glassmorphism transparency (`bg-white/40 backdrop-blur-2xl backdrop-saturate-[180%] border-white/50 shadow-lg`) letting background content softly diffuse through.
+  - Added iOS safe-area bottom inset positioning (`bottom: max(1rem, env(safe-area-inset-bottom, 1rem))`) to avoid interference with the iPhone home swipe bar.
 - [x] **Persistent Project Memory**: Created `AGENTS.md` to permanently store all system rules, package details, and fix history.
 
