@@ -537,7 +537,7 @@ export async function signUpWithEmailPassword(
       password: password,
       options: {
         data: {
-          full_name: fullName?.trim() || 'Giriraj Customer'
+          full_name: fullName?.trim() || 'Customer'
         }
       }
     });
@@ -745,7 +745,7 @@ export async function verifyPhoneOtp(
 
     if (data.user) {
       // Sync user profile immediately
-      const defaultName = data.user.user_metadata?.full_name || 'Giriraj Customer';
+      const defaultName = data.user.user_metadata?.full_name || 'Customer';
       saveUserProfile({
         phone: formattedPhone,
         name: defaultName,
@@ -1310,7 +1310,7 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
             found = true;
           }
           if (!cloudName) {
-            cloudName = `Giriraj Member (${cloudPhone.slice(-4) || 'User'})`;
+            cloudName = 'Customer';
             found = true;
           }
         } else {

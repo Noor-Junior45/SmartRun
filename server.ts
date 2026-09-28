@@ -6504,19 +6504,36 @@ Respond ONLY with a valid JSON object matching the following structure:
       if (sb) {
         // 1. Check user_profiles table for any existing record matching this phone
         try {
+          const canonicalPhoneEmail = `phone_${cleanPhone}@girirajpower.internal`;
+          const canonicalPEmail = `p${cleanPhone}@girirajpower.internal`;
           const { data: profiles, error: pErr } = await sb
             .from("user_profiles")
             .select("*")
-            .or(`phone.eq.${formattedE164},phone.eq.${cleanPhone},phone.ilike.%${cleanPhone}%`)
+            .or(`phone.eq.${formattedE164},phone.eq.${cleanPhone},phone.ilike.%${cleanPhone}%,email.eq.${canonicalPhoneEmail},email.eq.${canonicalPEmail}`)
             .order("updated_at", { ascending: false })
             .limit(5);
 
           if (!pErr && Array.isArray(profiles) && profiles.length > 0) {
-            // Prefer row that has a genuine non-internal email
+            // Prefer row that has a genuine non-internal email or actual custom name
             const bestRow = profiles.find((p) => p.email && !p.email.includes("@girirajpower.internal")) || profiles[0];
+            let cleanFullName = bestRow.full_name || bestRow.name || resolvedProfile?.full_name || null;
+            if (
+              cleanFullName &&
+              (cleanFullName.toLowerCase().startsWith('giriraj power') ||
+               cleanFullName.toLowerCase().startsWith('giriraj member') ||
+               cleanFullName.toLowerCase().startsWith('giriraj customer') ||
+               cleanFullName.toLowerCase().startsWith('p9') ||
+               cleanFullName.toLowerCase().startsWith('p8') ||
+               cleanFullName.toLowerCase().startsWith('p7') ||
+               cleanFullName.toLowerCase().startsWith('p6') ||
+               cleanFullName.toLowerCase().startsWith('phone_'))
+            ) {
+              cleanFullName = null;
+            }
+
             resolvedProfile = {
               user_id: bestRow.user_id || resolvedProfile?.user_id || null,
-              full_name: bestRow.full_name || bestRow.name || resolvedProfile?.full_name || null,
+              full_name: cleanFullName,
               email: (bestRow.email && !bestRow.email.includes("@girirajpower.internal")) ? bestRow.email : (resolvedProfile?.email || null),
               phone: formattedE164,
               avatar_url: bestRow.avatar_url || resolvedProfile?.avatar_url || null,
@@ -6548,9 +6565,25 @@ Respond ONLY with a valid JSON object matching the following structure:
               const oEmail = (oBest.customer_email || oBest.recipient_email || "").trim().toLowerCase();
               const cleanOrderEmail = oEmail.includes("@girirajpower.internal") ? null : (oEmail || null);
 
+              let cleanOrderName = oBest.customer_name || oBest.recipient_name || null;
+              if (
+                cleanOrderName &&
+                (cleanOrderName.toLowerCase().startsWith('giriraj power') ||
+                 cleanOrderName.toLowerCase().startsWith('giriraj member') ||
+                 cleanOrderName.toLowerCase().startsWith('giriraj customer') ||
+                 cleanOrderName.toLowerCase().startsWith('customer') ||
+                 cleanOrderName.toLowerCase().startsWith('p9') ||
+                 cleanOrderName.toLowerCase().startsWith('p8') ||
+                 cleanOrderName.toLowerCase().startsWith('p7') ||
+                 cleanOrderName.toLowerCase().startsWith('p6') ||
+                 cleanOrderName.toLowerCase().startsWith('phone_'))
+              ) {
+                cleanOrderName = null;
+              }
+
               resolvedProfile = {
                 user_id: resolvedProfile?.user_id || oBest.user_id || null,
-                full_name: resolvedProfile?.full_name || oBest.customer_name || oBest.recipient_name || null,
+                full_name: resolvedProfile?.full_name || cleanOrderName,
                 email: resolvedProfile?.email || cleanOrderEmail,
                 phone: formattedE164,
                 avatar_url: resolvedProfile?.avatar_url || null,

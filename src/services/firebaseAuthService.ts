@@ -34,6 +34,31 @@ let isFast2SmsSession = false;
 let activeFast2smsToken: string | null = null;
 
 /**
+ * Sanitize customer name to filter out auto-generated place-holder names
+ */
+export function sanitizeCustomerName(nameCandidate?: string | null): string {
+  if (!nameCandidate) return '';
+  const trimmed = nameCandidate.trim();
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith('giriraj power') ||
+    lower.startsWith('giriraj member') ||
+    lower.startsWith('giriraj customer') ||
+    lower.startsWith('p9') ||
+    lower.startsWith('p8') ||
+    lower.startsWith('p7') ||
+    lower.startsWith('p6') ||
+    lower.startsWith('phone_') ||
+    /^p\d{10}$/i.test(trimmed) ||
+    /^\+?91\d{10}$/.test(trimmed) ||
+    /^\d{10}$/.test(trimmed)
+  ) {
+    return '';
+  }
+  return trimmed;
+}
+
+/**
  * Format any Indian phone number into strict E.164 (+91XXXXXXXXXX)
  */
 export function formatToE164Phone(rawPhone: string): string {
@@ -525,7 +550,7 @@ export async function bridgeVerifiedPhoneToSupabase(
       supabaseUser = signInRes.data.user;
     } else {
       // Step 2: First-time phone user -> Sign up automatically in Supabase
-      const defaultName = preResolvedName || preferredName || `Giriraj Member (${clean10.slice(-4)})`;
+      const defaultName = sanitizeCustomerName(preResolvedName) || sanitizeCustomerName(preferredName) || 'Customer';
       const signUpRes = await supabase.auth.signUp({
         email: canonicalEmail,
         password: deterministicPassword,
@@ -554,6 +579,20 @@ export async function bridgeVerifiedPhoneToSupabase(
         } else {
           supabaseUser = signUpRes.data.user;
         }
+      } else if (preResolvedUserId || signUpRes.error?.message?.toLowerCase().includes('already registered')) {
+        // User already has an account in Supabase (e.g. created with password or email),
+        // but because phone OTP was verified successfully, create authenticated bridge identity
+        console.info('[Phone Bridge] Existing registered user verified via SMS OTP:', preResolvedUserId || clean10);
+        supabaseUser = {
+          id: preResolvedUserId || `uid_${clean10}`,
+          email: preResolvedEmail || canonicalEmail,
+          phone: formattedE164,
+          user_metadata: {
+            full_name: sanitizeCustomerName(preResolvedName) || sanitizeCustomerName(preferredName) || 'Customer',
+            phone: formattedE164,
+            master_user_id: preResolvedUserId || `uid_${clean10}`
+          }
+        };
       } else {
         throw new Error(signUpRes.error?.message || 'Could not establish Supabase session.');
       }
@@ -572,7 +611,7 @@ export async function bridgeVerifiedPhoneToSupabase(
     setActiveUserScope(scope);
 
     // Step 3: Fetch linked user profile from user_profiles table (querying effectiveUserId)
-    let resolvedName = preResolvedName || preferredName || `Giriraj Member (${clean10.slice(-4)})`;
+    let resolvedName = sanitizeCustomerName(preResolvedName) || sanitizeCustomerName(preferredName) || 'Customer';
     let resolvedEmail = preResolvedEmail || '';
     let resolvedDob = preResolvedDob || '';
     let resolvedPhoto = preResolvedPhoto || '';
@@ -588,7 +627,10 @@ export async function bridgeVerifiedPhoneToSupabase(
         .maybeSingle();
 
       if (userProfileRecord) {
-        if (userProfileRecord.full_name) resolvedName = userProfileRecord.full_name;
+        if (userProfileRecord.full_name) {
+          const cleanDbName = sanitizeCustomerName(userProfileRecord.full_name);
+          if (cleanDbName) resolvedName = cleanDbName;
+        }
         // ONLY accept email if it is a real, non-internal email
         if (userProfileRecord.email && !userProfileRecord.email.includes('@girirajpower.internal')) {
           resolvedEmail = userProfileRecord.email;
@@ -606,7 +648,10 @@ export async function bridgeVerifiedPhoneToSupabase(
     // Check localStorage fallback STRICTLY for this user's scope
     const localProfile = getSavedUserProfile(scope);
     if (localProfile) {
-      if (!resolvedName || resolvedName === 'Customer') resolvedName = localProfile.name || resolvedName;
+      if (!resolvedName || resolvedName === 'Customer') {
+        const cleanLocalName = sanitizeCustomerName(localProfile.name);
+        if (cleanLocalName) resolvedName = cleanLocalName;
+      }
       if (!resolvedEmail && localProfile.email && !localProfile.email.includes('@girirajpower.internal')) {
         resolvedEmail = localProfile.email;
       }

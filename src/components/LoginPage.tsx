@@ -123,8 +123,15 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Signup method: 'password' | 'otp'
+  const [signupMethod, setSignupMethod] = useState<'password' | 'otp'>('password');
+  const [signupOtpSent, setSignupOtpSent] = useState(false);
+  const [signupOtpCode, setSignupOtpCode] = useState('');
+  const [signupOtpCooldown, setSignupOtpCooldown] = useState(0);
+
   // Progressive field reveal states
   const [showSecondField, setShowSecondField] = useState(false);
+  const [phoneUsePassword, setPhoneUsePassword] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [sentToPhone, setSentToPhone] = useState('');
 
@@ -193,6 +200,17 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     return () => clearInterval(interval);
   }, [otpCooldown]);
 
+  // Signup OTP cooldown timer
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (signupOtpCooldown > 0) {
+      interval = setInterval(() => {
+        setSignupOtpCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [signupOtpCooldown]);
+
   const resetMessages = () => {
     setError(null);
     setInfoMessage(null);
@@ -221,7 +239,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
   };
 
-  // --- 2. SEND PHONE OTP VIA FIREBASE ---
+  // --- 2. SEND PHONE OTP VIA FIREBASE (WITH DATABASE EXISTENCE CHECK) ---
   const handleSendPhoneOtp = async () => {
     resetMessages();
     let rawDigits = identifier.replace(/[^0-9]/g, '');
@@ -229,15 +247,96 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     if (rawDigits.length === 11 && rawDigits.startsWith('0')) {
       rawDigits = rawDigits.slice(1);
     }
+    const clean10 = rawDigits.slice(-10);
 
-    if (rawDigits.length < 10) {
+    if (clean10.length !== 10) {
       setError('Please enter a valid 10-digit mobile number.');
       return;
     }
 
     setIsLoading(true);
+
+    // Rule: Check if user is present in database BEFORE sending OTP
+    let userExists = false;
+    const formattedE164 = `+91${clean10}`;
+
+    // 1. Check server profile resolver (checks serverProfileStore, user_profiles, orders)
     try {
-      const res = await sendFirebasePhoneOtp(rawDigits, 'recaptcha-container');
+      const resolveRes = await fetch(apiUrl('/api/auth/resolve-phone-user'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: clean10 })
+      });
+
+      if (resolveRes.ok) {
+        const resolveData = await resolveRes.json().catch(() => null);
+        if (resolveData?.exists) {
+          userExists = true;
+        }
+      }
+    } catch (e) {
+      console.warn('[Phone resolve check error]:', e);
+    }
+
+    // 2. Direct Supabase user_profiles table check fallback
+    if (!userExists) {
+      try {
+        const canonicalPhoneEmail = `p${clean10}@girirajpower.internal`;
+        const canonicalLegacyEmail = `phone_${clean10}@girirajpower.internal`;
+        const { data: profiles } = await supabase
+          .from('user_profiles')
+          .select('id, user_id, phone, full_name, email')
+          .or(`phone.eq.${formattedE164},phone.eq.${clean10},phone.ilike.%${clean10}%,email.eq.${canonicalPhoneEmail},email.eq.${canonicalLegacyEmail}`)
+          .limit(1);
+
+        if (profiles && profiles.length > 0) {
+          userExists = true;
+        }
+      } catch (sbErr) {
+        console.warn('[Supabase user_profiles check error]:', sbErr);
+      }
+    }
+
+    // 3. Direct Supabase orders table check fallback
+    if (!userExists) {
+      try {
+        const { data: orderRows } = await supabase
+          .from('orders')
+          .select('id, user_id, phone')
+          .or(`phone.eq.${clean10},phone.eq.${formattedE164},recipient_phone.eq.${clean10},recipient_phone.eq.${formattedE164}`)
+          .limit(1);
+
+        if (orderRows && orderRows.length > 0) {
+          userExists = true;
+        }
+      } catch (ordErr) {
+        console.warn('[Orders check error]:', ordErr);
+      }
+    }
+
+    // 4. Local storage cached profile check fallback
+    if (!userExists) {
+      try {
+        const rawLocal = localStorage.getItem('smartrun_user_profile') || localStorage.getItem('giriraj_user_profile');
+        if (rawLocal) {
+          const parsed = JSON.parse(rawLocal);
+          const pDigits = (parsed?.phone || '').replace(/\D/g, '').slice(-10);
+          if (pDigits === clean10) {
+            userExists = true;
+          }
+        }
+      } catch {}
+    }
+
+    // STRICT CHECK: If user is not present in our database, do NOT send OTP!
+    if (!userExists) {
+      setIsLoading(false);
+      setError('No account found with this mobile number. Please create an account first to continue.');
+      return;
+    }
+
+    try {
+      const res = await sendFirebasePhoneOtp(clean10, 'recaptcha-container');
 
       if (!res.success) {
         if (res.isBillingRequired) {
@@ -249,7 +348,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           setError(res.error || 'Failed to send OTP to mobile number. Please try again.');
         }
       } else {
-        const phone = res.formattedPhone || formatToE164Phone(rawDigits);
+        const phone = res.formattedPhone || formatToE164Phone(clean10);
         setSentToPhone(phone);
         setOtpSent(true);
         setShowSecondField(true);
@@ -267,6 +366,84 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to send OTP.';
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- 2b. PASSWORD SIGN IN (MOBILE NUMBER) ---
+  const handlePhonePasswordLogin = async (clean10: string) => {
+    if (!password) {
+      setError('Please enter your account password.');
+      return;
+    }
+
+    setIsLoading(true);
+    resetMessages();
+    try {
+      let targetEmail = `p${clean10}@girirajpower.internal`;
+      let userFullName = '';
+
+      const resolveRes = await fetch(apiUrl('/api/auth/resolve-phone-user'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: clean10 })
+      }).catch(() => null);
+
+      if (resolveRes && resolveRes.ok) {
+        const resolveData = await resolveRes.json().catch(() => null);
+        if (!resolveData?.exists) {
+          setError('No account found with this mobile number. Please create an account first.');
+          setIsLoading(false);
+          return;
+        }
+        if (resolveData?.profile?.email && !resolveData.profile.email.includes('@girirajpower.internal')) {
+          targetEmail = resolveData.profile.email;
+        }
+        userFullName = resolveData?.profile?.full_name || '';
+      }
+
+      let { data, error: signInErr } = await supabase.auth.signInWithPassword({
+        email: targetEmail,
+        password: password
+      });
+
+      // If sign in with resolved email or p-canonical failed, try secondary canonical variants
+      if (signInErr) {
+        const candidates = [`p${clean10}@girirajpower.internal`, `phone_${clean10}@girirajpower.internal`];
+        for (const candidateEmail of candidates) {
+          if (candidateEmail === targetEmail) continue;
+          const fallbackRes = await supabase.auth.signInWithPassword({
+            email: candidateEmail,
+            password: password
+          });
+          if (!fallbackRes.error && fallbackRes.data?.user) {
+            data = fallbackRes.data;
+            signInErr = null;
+            targetEmail = candidateEmail;
+            break;
+          }
+        }
+      }
+
+      if (signInErr) {
+        setError(signInErr.message || 'Incorrect password for this mobile number.');
+      } else if (data?.user) {
+        const resolvedName =
+          userFullName ||
+          data.user.user_metadata?.full_name ||
+          data.user.user_metadata?.name ||
+          'Customer';
+        const formattedPhone = `+91${clean10}`;
+        const finalEmail = targetEmail.includes('@girirajpower.internal') ? undefined : targetEmail;
+
+        saveTermsAgreed(true);
+        navigate('/', { replace: true });
+        onAuthSuccess(formattedPhone, resolvedName, finalEmail, data.user);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Login failed. Please check your password.';
       setError(msg);
     } finally {
       setIsLoading(false);
@@ -293,9 +470,11 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         setError(result.error || 'The OTP code is invalid or has expired. Please try again.');
       } else {
         const profile = result.profile;
+        const rawName = profile?.name || '';
         const userFullName =
-          profile?.name ||
-          `Giriraj Member (${phone.slice(-4)})`;
+          rawName && !rawName.toLowerCase().startsWith('giriraj member') && !rawName.toLowerCase().startsWith('giriraj power')
+            ? rawName
+            : 'Customer';
         const finalPhone = profile?.phone || phone;
         const finalEmail = profile?.email || '';
 
@@ -397,7 +576,10 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
 
     if (isPhone) {
       // Mobile Number Flow
-      if (!otpSent || !showSecondField) {
+      const clean10 = cleanId.replace(/\D/g, '').slice(-10);
+      if (phoneUsePassword) {
+        await handlePhonePasswordLogin(clean10);
+      } else if (!otpSent || !showSecondField) {
         await handleSendPhoneOtp();
       } else {
         await handleVerifyPhoneOtp(e);
@@ -436,9 +618,22 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       return;
     }
 
+    const finalFullName = signupName.trim();
+    if (!finalFullName) {
+      setError('Please enter your full name.');
+      return;
+    }
+
+    const cleanPhone = signupPhone.replace(/\D/g, '').slice(-10);
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    const formattedPhone = `+91${cleanPhone}`;
+
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setError('Please enter a valid email address.');
+    if (cleanEmail && (!cleanEmail.includes('@') || !cleanEmail.includes('.'))) {
+      setError('Please enter a valid email address, or leave it blank.');
       return;
     }
 
@@ -452,21 +647,41 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       return;
     }
 
-    const cleanPhone = signupPhone.replace(/\D/g, '').slice(-10);
-    const formattedPhone = cleanPhone.length === 10 ? `+91${cleanPhone}` : null;
-    const finalFullName = signupName.trim() || cleanEmail.split('@')[0] || 'Giriraj Customer';
-
     setIsLoading(true);
+
+    // Rule: Check if account already exists with this mobile number
+    try {
+      const checkRes = await fetch(apiUrl('/api/auth/resolve-phone-user'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone })
+      }).catch(() => null);
+
+      if (checkRes && checkRes.ok) {
+        const checkData = await checkRes.json().catch(() => null);
+        if (checkData?.exists && checkData?.profile) {
+          setError('An account with this mobile number already exists. Please sign in instead.');
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // Continue if network check fails
+    }
+
+    const canonicalAuthEmail = cleanEmail || `p${cleanPhone}@girirajpower.internal`;
+
     try {
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email: cleanEmail,
+        email: canonicalAuthEmail,
         password: password,
         options: {
           emailRedirectTo: window.location.origin,
           data: {
             full_name: finalFullName,
             phone: formattedPhone,
-            contact_number: formattedPhone
+            contact_number: formattedPhone,
+            ...(cleanEmail ? { email: cleanEmail } : {})
           }
         },
       });
@@ -480,7 +695,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
             {
               user_id: data.user.id,
               full_name: finalFullName,
-              email: cleanEmail,
+              email: cleanEmail || null,
               phone: formattedPhone,
               updated_at: new Date().toISOString()
             },
@@ -495,21 +710,23 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           body: JSON.stringify({
             user_id: data.user.id,
             full_name: finalFullName,
-            email: cleanEmail,
+            email: cleanEmail || null,
             phone: formattedPhone
           })
         }).catch(() => {});
 
         saveTermsAgreed(true);
         navigate('/', { replace: true });
-        onAuthSuccess(formattedPhone || '', finalFullName, cleanEmail, data.user);
-        sendLoginNotificationEmail({
-          email: cleanEmail,
-          name: finalFullName,
-          userId: data.user.id,
-          loginMethod: 'New Account Creation & Password Sign-in',
-          force: true
-        }).catch((e) => console.debug('[Security Alert Trigger Note]:', e));
+        onAuthSuccess(formattedPhone, finalFullName, cleanEmail || undefined, data.user);
+        if (cleanEmail) {
+          sendLoginNotificationEmail({
+            email: cleanEmail,
+            name: finalFullName,
+            userId: data.user.id,
+            loginMethod: 'New Account Creation & Password Sign-in',
+            force: true
+          }).catch((e) => console.debug('[Security Alert Trigger Note]:', e));
+        }
       } else {
         if (data.user) {
           try {
@@ -517,7 +734,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
               {
                 user_id: data.user.id,
                 full_name: finalFullName,
-                email: cleanEmail,
+                email: cleanEmail || null,
                 phone: formattedPhone,
                 updated_at: new Date().toISOString()
               },
@@ -525,11 +742,174 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
             );
           } catch {}
         }
-        setInfoMessage(`Account created! We have sent a confirmation link to ${cleanEmail}.`);
+        if (cleanEmail) {
+          setInfoMessage(`Account created! We have sent a confirmation link to ${cleanEmail}. You can also sign in with your mobile number.`);
+        } else {
+          setInfoMessage('Account created successfully! Please sign in with your mobile number.');
+        }
         setMode('signin');
+        setIdentifier(cleanPhone);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create account.';
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- 6b. SEND OTP FOR SIGNUP VERIFICATION ---
+  const handleSendSignupPhoneOtp = async () => {
+    resetMessages();
+    const finalFullName = signupName.trim();
+    if (!finalFullName) {
+      setError('Please enter your full name first.');
+      return;
+    }
+
+    const cleanPhone = signupPhone.replace(/\D/g, '').slice(-10);
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    // Rule: Check if account already exists with this mobile number
+    try {
+      const checkRes = await fetch(apiUrl('/api/auth/resolve-phone-user'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone })
+      }).catch(() => null);
+
+      if (checkRes && checkRes.ok) {
+        const checkData = await checkRes.json().catch(() => null);
+        if (checkData?.exists && checkData?.profile) {
+          setError('An account with this mobile number already exists. Please sign in instead.');
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // Continue
+    }
+
+    try {
+      const res = await sendFirebasePhoneOtp(cleanPhone, 'recaptcha-container');
+      if (!res.success) {
+        setError(res.error || 'Failed to send OTP to mobile number. Please try again.');
+      } else {
+        const phone = res.formattedPhone || formatToE164Phone(cleanPhone);
+        setSignupOtpSent(true);
+        setSignupOtpCooldown(60);
+        setInfoMessage(`Verification OTP sent to ${phone}. Enter the 6-digit code below to create your account.`);
+        setSignupOtpCode('');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to send OTP.';
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- 6c. VERIFY OTP & CREATE ACCOUNT ---
+  const handleVerifySignupPhoneOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetMessages();
+
+    if (!termsAgreed) {
+      setError('Please agree to the Terms of service and Privacy policy to continue.');
+      return;
+    }
+
+    const finalFullName = signupName.trim();
+    if (!finalFullName) {
+      setError('Please enter your full name.');
+      return;
+    }
+
+    const cleanPhone = signupPhone.replace(/\D/g, '').slice(-10);
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    const formattedPhone = `+91${cleanPhone}`;
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail && (!cleanEmail.includes('@') || !cleanEmail.includes('.'))) {
+      setError('Please enter a valid email address, or leave it blank.');
+      return;
+    }
+
+    const cleanOtp = signupOtpCode.replace(/\D/g, '');
+    if (!cleanOtp || cleanOtp.length < 6) {
+      setError('Please enter the complete 6-digit verification code received on your mobile.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await verifyFirebaseOtpAndBridgeToSupabase(cleanOtp, finalFullName, formattedPhone);
+
+      if (!result.success) {
+        setError(result.error || 'The OTP code is invalid or has expired. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+
+      const targetUserId = result.user?.id;
+      if (targetUserId) {
+        try {
+          await supabase.from('user_profiles').upsert(
+            {
+              user_id: targetUserId,
+              full_name: finalFullName,
+              email: cleanEmail || null,
+              phone: formattedPhone,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'user_id' }
+          );
+        } catch {}
+
+        fetch(apiUrl('/api/user-profile'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: targetUserId,
+            full_name: finalFullName,
+            email: cleanEmail || null,
+            phone: formattedPhone
+          })
+        }).catch(() => {});
+      }
+
+      // If user also set an optional password, update it in Supabase Auth
+      if (password && password.length >= 6) {
+        try {
+          await supabase.auth.updateUser({ password });
+        } catch (pwErr) {
+          console.warn('[Optional Password Set Notice]:', pwErr);
+        }
+      }
+
+      saveTermsAgreed(true);
+      navigate('/', { replace: true });
+      onAuthSuccess(formattedPhone, finalFullName, cleanEmail || undefined, result.user);
+
+      if (cleanEmail) {
+        sendLoginNotificationEmail({
+          email: cleanEmail,
+          name: finalFullName,
+          userId: targetUserId || '',
+          loginMethod: 'New Account Creation via Verified Mobile OTP',
+          force: true
+        }).catch((e) => console.debug('[Security Alert Trigger Note]:', e));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to verify OTP and create account.';
       setError(msg);
     } finally {
       setIsLoading(false);
@@ -724,7 +1104,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
             <form onSubmit={handlePrimarySubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  EMAIL/PHONE
+                  MOBILE NUMBER / EMAIL
                 </label>
                 <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
                   {isPhone ? (
@@ -735,7 +1115,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   <input
                     type={isPhone ? 'tel' : 'text'}
                     autoComplete="username tel email"
-                    placeholder="your@email.com or 10-digit mobile"
+                    placeholder="10-digit mobile number or email"
                     value={identifier}
                     onChange={(e) => {
                       let val = e.target.value;
@@ -771,13 +1151,31 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 </div>
               </div>
 
+              {/* Toggle between OTP and Password for Mobile Number */}
+              {isPhone && !otpSent && (
+                <div className="flex justify-end pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !phoneUsePassword;
+                      setPhoneUsePassword(next);
+                      setShowSecondField(next);
+                      resetMessages();
+                    }}
+                    className="text-xs font-bold text-amber-700 hover:text-amber-800 transition-colors cursor-pointer"
+                  >
+                    {phoneUsePassword ? '← Sign in with SMS OTP instead' : 'Sign in with password instead'}
+                  </button>
+                </div>
+              )}
+
               {/* Refined Second Input: Appears according to user email or phone */}
               <div className={showSecondField ? 'space-y-1 block animate-in fade-in duration-200' : 'hidden'}>
                 <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  {isPhone ? 'SMS OTP Code' : 'Password'}
+                  {isPhone && !phoneUsePassword ? 'SMS OTP Code' : 'Password'}
                 </label>
 
-                {isPhone ? (
+                {isPhone && !phoneUsePassword ? (
                   /* Mobile OTP Fill Functions */
                   <div>
                     <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
@@ -806,7 +1204,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                           }
                         }}
                         className="w-full bg-transparent py-2 text-sm font-semibold tracking-widest text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                        required={showSecondField && isPhone}
+                        required={showSecondField && isPhone && !phoneUsePassword}
                       />
                       {otpCode.length > 0 && (
                         <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full shrink-0 select-none">
@@ -840,7 +1238,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                     </div>
                   </div>
                 ) : (
-                  /* Password Input for Email */
+                  /* Password Input for Email or Phone */
                   <div>
                     <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
                       <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
@@ -851,7 +1249,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                        required={showSecondField && !isPhone}
+                        required={showSecondField && (!isPhone || phoneUsePassword)}
                       />
                       <button
                         type="button"
@@ -868,12 +1266,13 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                         type="button"
                         onClick={() => {
                           setShowSecondField(false);
+                          setPhoneUsePassword(false);
                           setPassword('');
                           resetMessages();
                         }}
                         className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
                       >
-                        Change email
+                        {isPhone ? 'Change number' : 'Change email'}
                       </button>
 
                       <button
@@ -902,22 +1301,51 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">
-                    {isPhone
-                      ? (otpSent ? 'Verifying OTP...' : 'Sending OTP...')
+                    {isPhone && !phoneUsePassword
+                      ? (otpSent ? 'Verifying OTP...' : 'Checking & Sending OTP...')
                       : 'Signing In...'}
                   </span>
-                ) : !showSecondField ? (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    <span>{isPhone ? 'Get OTP' : 'Continue'}</span>
-                  </>
+                ) : isPhone && !phoneUsePassword ? (
+                  !showSecondField ? (
+                    <>
+                      <LogIn className="w-4 h-4" />
+                      <span>Get OTP</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="w-4 h-4" />
+                      <span>Verify OTP & Sign In</span>
+                    </>
+                  )
                 ) : (
                   <>
                     <LogIn className="w-4 h-4" />
-                    <span>{isPhone ? 'Verify OTP & Sign In' : 'Sign In'}</span>
+                    <span>Sign In</span>
                   </>
                 )}
               </button>
+
+              {/* No account found quick CTA card */}
+              {error && error.toLowerCase().includes('no account found') && isPhone && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-2 animate-in fade-in duration-200">
+                  <p className="text-xs text-amber-950 font-semibold">
+                    No account found for this mobile number. Please create an account to get started.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const clean10 = identifier.replace(/[^0-9]/g, '').slice(-10);
+                      setSignupPhone(clean10);
+                      setMode('signup');
+                      resetMessages();
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>Create Account with +91 {identifier.replace(/[^0-9]/g, '').slice(-10)}</span>
+                  </button>
+                </div>
+              )}
 
               {/* Create Account Helper Toggle */}
               <div className="text-center pt-1">
@@ -937,10 +1365,14 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
 
           {/* 2. SIGN UP MODE */}
           {mode === 'signup' && (
-            <form onSubmit={handlePasswordSignUp} className="space-y-4">
+            <form
+              onSubmit={signupMethod === 'password' ? handlePasswordSignUp : handleVerifySignupPhoneOtp}
+              className="space-y-4"
+            >
+              {/* Field 1: FULL NAME */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  FULL NAME
+                  FULL NAME <span className="text-red-500 font-black">*</span>
                 </label>
                 <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
                   <User className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
@@ -955,26 +1387,10 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 </div>
               </div>
 
+              {/* Field 2: MOBILE NUMBER (MANDATORY WITH RED STAR) */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  EMAIL ADDRESS
-                </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                  <Mail className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                  <input
-                    type="email"
-                    placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  MOBILE NUMBER (OPTIONAL)
+                  MOBILE NUMBER <span className="text-red-500 font-black">*</span>
                 </label>
                 <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
                   <Phone className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
@@ -983,78 +1399,258 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                     type="tel"
                     placeholder="10-digit mobile number"
                     value={signupPhone}
-                    onChange={(e) => setSignupPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setSignupPhone(val);
+                      if (signupOtpSent) {
+                        setSignupOtpSent(false);
+                        setSignupOtpCode('');
+                      }
+                    }}
+                    className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                    required
+                    maxLength={10}
+                  />
+                </div>
+              </div>
+
+              {/* Field 3: EMAIL ADDRESS (OPTIONAL) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                  EMAIL ADDRESS (OPTIONAL)
+                </label>
+                <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                  <Mail className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                  <input
+                    type="email"
+                    placeholder="your@email.com (optional)"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  CREATE PASSWORD
-                </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                  <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                    required
-                    minLength={6}
-                  />
+              {/* Method Switcher: Password or Sms Otp (Minimal Pill Shape Design) */}
+              <div className="pt-1">
+                <div className="flex rounded-full bg-slate-100 p-1 border border-slate-200/80">
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0"
-                    tabIndex={-1}
+                    onClick={() => {
+                      setSignupMethod('password');
+                      resetMessages();
+                    }}
+                    className={`flex-1 py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      signupMethod === 'password'
+                        ? 'bg-white text-slate-950 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    <Lock className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Password</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSignupMethod('otp');
+                      resetMessages();
+                    }}
+                    className={`flex-1 py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      signupMethod === 'otp'
+                        ? 'bg-white text-slate-950 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    <Phone className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Sms Otp</span>
                   </button>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  CONFIRM PASSWORD
-                </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                  <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                    required
-                    minLength={6}
-                  />
+              {/* METHOD A: PASSWORD SIGNUP (ONLY CREATE & CONFIRM PASSWORD LINES) */}
+              {signupMethod === 'password' && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* Field 4: CREATE PASSWORD */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                      CREATE PASSWORD <span className="text-red-500 font-black">*</span>
+                    </label>
+                    <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                      <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                        required={signupMethod === 'password'}
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Field 5: CONFIRM PASSWORD */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                      CONFIRM PASSWORD <span className="text-red-500 font-black">*</span>
+                    </label>
+                    <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                      <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                        required={signupMethod === 'password'}
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0"
+                        tabIndex={-1}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+
                   <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0"
-                    tabIndex={-1}
+                    type="submit"
+                    disabled={isAnyLoading}
+                    className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-2"
                   >
-                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {isLoading ? (
+                      'Signing up...'
+                    ) : (
+                      <>
+                        <UserPlus className="w-4 h-4" />
+                        <span>Sign up</span>
+                      </>
+                    )}
                   </button>
                 </div>
-              </div>
+              )}
 
-              <button
-                type="submit"
-                disabled={isAnyLoading}
-                className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-2"
-              >
-                {isLoading ? (
-                  'Creating Account...'
-                ) : (
-                  <>
-                    <UserPlus className="w-4 h-4" />
-                    <span>Create Account</span>
-                  </>
-                )}
-              </button>
+              {/* METHOD B: SMS OTP SIGNUP (SHOWS OTP FILLING BOX AT SAME PLACE) */}
+              {signupMethod === 'otp' && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* OTP FILLING BOX */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase">
+                        SMS OTP CODE <span className="text-red-500 font-black">*</span>
+                      </label>
+                      {signupOtpSent && (
+                        <button
+                          type="button"
+                          onClick={handleSendSignupPhoneOtp}
+                          disabled={signupOtpCooldown > 0 || isLoading}
+                          className="text-xs font-bold text-amber-700 hover:text-amber-800 disabled:text-slate-400 cursor-pointer"
+                        >
+                          {signupOtpCooldown > 0 ? `Resend (${signupOtpCooldown}s)` : 'Resend OTP'}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                      <KeyRound className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        pattern="[0-9]*"
+                        maxLength={6}
+                        placeholder="Enter 6-digit OTP"
+                        value={signupOtpCode}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
+                          setSignupOtpCode(digits);
+                          if (error) setError(null);
+                        }}
+                        className="w-full bg-transparent py-2 text-sm font-semibold tracking-widest text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                        required={signupMethod === 'otp'}
+                      />
+                      {!signupOtpSent ? (
+                        <button
+                          type="button"
+                          onClick={handleSendSignupPhoneOtp}
+                          disabled={isAnyLoading || !signupPhone || signupPhone.replace(/\D/g, '').length !== 10}
+                          className="px-3.5 py-1.5 rounded-full bg-amber-400 hover:bg-yellow-400 text-slate-950 font-bold text-xs shrink-0 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-xs active:scale-95"
+                        >
+                          {isLoading ? 'Sending...' : 'Send OTP'}
+                        </button>
+                      ) : (
+                        signupOtpCode.length > 0 && (
+                          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full shrink-0 select-none">
+                            {signupOtpCode.length}/6
+                          </span>
+                        )
+                      )}
+                    </div>
+                    {signupOtpSent && (
+                      <div className="flex justify-between items-center pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSignupOtpSent(false);
+                            setSignupOtpCode('');
+                            resetMessages();
+                          }}
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                        >
+                          Change mobile number
+                        </button>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          Sent to +91 {signupPhone.slice(-10)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Primary Action Button */}
+                  {!signupOtpSent ? (
+                    <button
+                      type="button"
+                      onClick={handleSendSignupPhoneOtp}
+                      disabled={isAnyLoading || !signupPhone || signupPhone.replace(/\D/g, '').length !== 10}
+                      className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-2"
+                    >
+                      {isLoading ? (
+                        'Sending OTP...'
+                      ) : (
+                        <>
+                          <Phone className="w-4 h-4" />
+                          <span>Confirm otp</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={isAnyLoading || signupOtpCode.length < 6}
+                      className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-2"
+                    >
+                      {isLoading ? (
+                        'Verifying OTP...'
+                      ) : (
+                        <>
+                          <Phone className="w-4 h-4" />
+                          <span>Confirm otp</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
 
               <div className="text-center pt-1">
                 <button

@@ -77,6 +77,7 @@ import { Browser } from '@capacitor/browser';
 import { initPushNotifications } from './services/pushNotificationService';
 import { showToast } from './utils/toast';
 import { AndroidAppBridgePrompt } from './components/AndroidAppBridgePrompt';
+import { sanitizeCustomerName } from './services/firebaseAuthService';
 
 export default function App() {
   const navigate = useNavigate();
@@ -387,12 +388,12 @@ export default function App() {
         }
 
         let name =
-          userMeta.full_name ||
-          userMeta.name ||
-          validLocal?.name ||
+          sanitizeCustomerName(userMeta.full_name) ||
+          sanitizeCustomerName(userMeta.name) ||
+          sanitizeCustomerName(validLocal?.name) ||
           (user.email && !user.email.includes('@girirajpower.internal')
             ? user.email.split('@')[0]
-            : (phone ? `Giriraj Member (${phone.slice(-4)})` : 'Customer'));
+            : 'Customer');
 
         const metaRealEmail = userMeta.real_email && !userMeta.real_email.includes('@girirajpower.internal') ? userMeta.real_email : '';
         const rawEmail = isInternalPhoneUser ? (metaRealEmail || validLocal?.email || '') : (user.email || validLocal?.email || '');
@@ -419,7 +420,7 @@ export default function App() {
               if (!isUserAdmin && (mergedPhone === '8777400280' || mergedPhone.endsWith('8777400280'))) {
                 mergedPhone = '';
               }
-              let mergedName = cloudProf.name || prof.name;
+              let mergedName = sanitizeCustomerName(cloudProf.name) || sanitizeCustomerName(prof.name) || 'Customer';
               let mergedPhoto = (!isUserAdmin && (userMeta.avatar_url || userMeta.picture)) ? (userMeta.avatar_url || userMeta.picture) : (cloudProf.photoURL || prof.photoURL);
 
               const cloudEmailClean =
@@ -528,12 +529,12 @@ export default function App() {
         }
 
         let name =
-          userMeta.full_name ||
-          userMeta.name ||
-          validLocal?.name ||
+          sanitizeCustomerName(userMeta.full_name) ||
+          sanitizeCustomerName(userMeta.name) ||
+          sanitizeCustomerName(validLocal?.name) ||
           (user.email && !user.email.includes('@girirajpower.internal')
             ? user.email.split('@')[0]
-            : (phone ? `Giriraj Member (${phone.slice(-4)})` : 'Customer'));
+            : 'Customer');
 
         const metaRealEmail = userMeta.real_email && !userMeta.real_email.includes('@girirajpower.internal') ? userMeta.real_email : '';
         const rawEmail = isInternalPhoneUser ? (metaRealEmail || validLocal?.email || '') : (user.email || validLocal?.email || '');
@@ -560,7 +561,7 @@ export default function App() {
               if (!isUserAdmin && (mergedPhone === '8777400280' || mergedPhone.endsWith('8777400280'))) {
                 mergedPhone = '';
               }
-              let mergedName = cloudProf.name || prof.name;
+              let mergedName = sanitizeCustomerName(cloudProf.name) || sanitizeCustomerName(prof.name) || 'Customer';
               let mergedPhoto = (!isUserAdmin && (userMeta.avatar_url || userMeta.picture)) ? (userMeta.avatar_url || userMeta.picture) : (cloudProf.photoURL || prof.photoURL);
 
               const cloudEmailClean =
@@ -1263,7 +1264,7 @@ export default function App() {
     // 1. Sanitize incoming parameters (strip internal placeholder domain)
     const cleanEmail = email && !email.includes('@girirajpower.internal') ? email : '';
     let finalPhone = phone ? cleanPhoneAutofill(phone) : '';
-    let finalName = name || '';
+    let finalName = sanitizeCustomerName(name) || 'Customer';
 
     // 2. Fetch authenticated Supabase user to establish scope and isolation
     let authUser: any = userObj || null;
@@ -1290,7 +1291,7 @@ export default function App() {
       id: authId,
       phone: finalPhone,
       phoneVerified: Boolean(finalPhone),
-      name: finalName || userMeta.full_name || userMeta.name || (finalPhone ? `Giriraj Member (${finalPhone.slice(-4)})` : 'Customer'),
+      name: finalName || userMeta.full_name || userMeta.name || 'Customer',
       email: resolvedCleanEmail,
       emailVerified: Boolean(resolvedCleanEmail),
       photoURL: userMeta.avatar_url || userMeta.picture || undefined,
