@@ -7,13 +7,15 @@ interface HelpCenterSubPageProps {
   orders?: Order[];
   savedAddresses?: SavedAddress[];
   onBack: () => void;
+  orderContext?: any;
 }
 
 export const HelpCenterSubPage = ({
   userProfile,
   orders = [],
   savedAddresses = [],
-  onBack
+  onBack,
+  orderContext
 }: HelpCenterSubPageProps) => {
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col overflow-hidden">
@@ -22,6 +24,7 @@ export const HelpCenterSubPage = ({
         orders={orders}
         savedAddresses={savedAddresses}
         onBack={onBack}
+        orderContext={orderContext}
       />
     </div>
   );

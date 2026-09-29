@@ -1659,6 +1659,7 @@ export default function App() {
               <LiveOrderPage
                 order={activeLiveOrder}
                 orders={orders}
+                userProfile={userProfile}
                 onBack={() => {
                   if (window.history.length > 1) {
                     navigate(-1);
@@ -1674,6 +1675,7 @@ export default function App() {
             element={
               <LiveOrderPage
                 orders={orders}
+                userProfile={userProfile}
                 onBack={() => {
                   if (window.history.length > 1) {
                     navigate(-1);

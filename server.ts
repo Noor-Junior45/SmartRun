@@ -4764,6 +4764,121 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
     }
   });
 
+  // Support Request / Help Alert endpoint for live orders via Resend
+  app.post("/api/support/order-help-alert", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const {
+        orderId,
+        orderNumber,
+        customerName,
+        customerPhone,
+        customerEmail,
+        status,
+        statusLabel,
+        riderName,
+        riderPhone,
+        riderLocation,
+        deliveryArea,
+        totalAmount
+      } = req.body || {};
+
+      const displayOrderNum = orderNumber || (orderId ? String(orderId).slice(0, 8).toUpperCase() : "LIVE");
+      const clientName = customerName || "Customer";
+      const clientPhone = customerPhone || "Not provided";
+      const subject = `🆘 [CUSTOMER HELP ALERT] Order #${displayOrderNum} (${statusLabel || status || "Processing"}) - ${clientName}`;
+
+      const riderLocText = riderLocation?.lat && riderLocation?.lng
+        ? `📍 Lat: ${riderLocation.lat.toFixed(4)}, Lng: ${riderLocation.lng.toFixed(4)}`
+        : "Kasba Central Depot";
+
+      const html = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff;">
+          <div style="background: #0f172a; padding: 20px 24px; border-bottom: 3px solid #f59e0b;">
+            <h2 style="color: #ffffff; margin: 0; font-size: 18px; font-weight: 800;">
+              🆘 Live Order Customer Support Alert
+            </h2>
+            <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 12px;">
+              Customer requested assistance on Order #${displayOrderNum}
+            </p>
+          </div>
+          
+          <div style="padding: 24px;">
+            <div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;">
+              <p style="margin: 0; font-size: 13px; font-weight: 700; color: #92400e;">
+                Current Process: ${statusLabel || status || 'In Progress'}
+              </p>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <tr>
+                <td style="padding: 8px 0; color: #64748b; width: 140px;">Order ID:</td>
+                <td style="padding: 8px 0; font-weight: 700; color: #0f172a;">#${displayOrderNum}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b;">Customer Name:</td>
+                <td style="padding: 8px 0; font-weight: 700; color: #0f172a;">${clientName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b;">Customer Phone:</td>
+                <td style="padding: 8px 0; font-weight: 700; color: #0f172a;">
+                  <a href="tel:${clientPhone}" style="color: #2563eb; text-decoration: none;">${clientPhone}</a>
+                </td>
+              </tr>
+              ${customerEmail ? `
+              <tr>
+                <td style="padding: 8px 0; color: #64748b;">Customer Email:</td>
+                <td style="padding: 8px 0; color: #0f172a;">${customerEmail}</td>
+              </tr>` : ''}
+              <tr>
+                <td style="padding: 8px 0; color: #64748b;">Delivery Area:</td>
+                <td style="padding: 8px 0; font-weight: 600; color: #0f172a;">${deliveryArea || 'Kolkata'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b;">Order Total:</td>
+                <td style="padding: 8px 0; font-weight: 700; color: #059669;">₹${totalAmount ? Number(totalAmount).toLocaleString('en-IN') : '0'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b;">Assigned Rider:</td>
+                <td style="padding: 8px 0; font-weight: 700; color: #0f172a;">${riderName ? `${riderName} (${riderPhone || '+91 87774 00280'})` : 'Not assigned yet'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #64748b;">Rider Location:</td>
+                <td style="padding: 8px 0; color: #0f172a;">${riderLocText}</td>
+              </tr>
+            </table>
+
+            <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; display: flex; gap: 12px;">
+              <a href="tel:${clientPhone}" style="display: inline-block; background: #0f172a; color: #ffffff; padding: 10px 18px; border-radius: 6px; font-weight: 700; font-size: 12px; text-decoration: none;">
+                📞 Call Customer
+              </a>
+              ${riderPhone ? `
+              <a href="tel:${riderPhone}" style="display: inline-block; background: #059669; color: #ffffff; padding: 10px 18px; border-radius: 6px; font-weight: 700; font-size: 12px; text-decoration: none;">
+                🛵 Call Rider
+              </a>` : ''}
+            </div>
+          </div>
+          
+          <div style="background: #f8fafc; padding: 12px 24px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0;">
+            Giriraj Power (SmartRun) • Kasba Central Warehouse Hub • 24/7 Support Desk
+          </div>
+        </div>
+      `;
+
+      const dispatchResult = await dispatchResendEmail({
+        to: ADMIN_EMAILS,
+        subject,
+        html,
+        text: `🆘 Customer Help Alert: ${clientName} (${clientPhone}) needs assistance on Order #${displayOrderNum}. Current stage: ${statusLabel || status}. Rider: ${riderName || 'None'}. Amount: ₹${totalAmount || 0}.`
+      });
+
+      return res.status(200).json({ success: true, dispatchResult });
+    } catch (err: any) {
+      console.warn("[Order Help Alert Email Notice]:", err);
+      return res.status(500).json({ success: false, message: err?.message || String(err) });
+    }
+  });
+
   // =========================================================================
   // REAL-TIME LOGIN SECURITY ALERT DISPATCH (BINANCE / UBER / ZOMATO STYLE)
   // Sends an immediate, beautifully styled security email when user logs in

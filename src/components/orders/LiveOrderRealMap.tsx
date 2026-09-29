@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { Navigation, ZoomIn, ZoomOut } from 'lucide-react';
+import { Navigation } from 'lucide-react';
 
 // Safety Patch for Leaflet: Prevent Uncaught TypeError: Cannot read properties of undefined (reading '_leaflet_pos')
 // This happens when React StrictMode unmounts/remounts or during animation callbacks on detached DOM nodes
@@ -82,6 +82,37 @@ export const LiveOrderRealMap = ({
   const routeGlowRef = useRef<L.Polyline | null>(null);
   const riderIconRef = useRef<L.DivIcon | null>(null);
   const [currentZoom, setCurrentZoom] = useState<number>(13);
+  const [roadDistanceKm, setRoadDistanceKm] = useState<number | null>(null);
+
+  // Helper to fetch real street-by-street road directions from OSRM
+  const fetchRoadRoute = useCallback(async (
+    start: { lat: number; lng: number },
+    end: { lat: number; lng: number },
+    via?: { lat: number; lng: number } | null
+  ): Promise<{ path: [number, number][]; distanceKm: number } | null> => {
+    try {
+      let url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
+      if (via && typeof via.lat === 'number' && typeof via.lng === 'number' && !isNaN(via.lat) && !isNaN(via.lng)) {
+        url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${via.lng},${via.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
+      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates?.length) {
+        const path: [number, number][] = data.routes[0].geometry.coordinates.map(
+          (pt: [number, number]) => [pt[1], pt[0]] as [number, number]
+        );
+        const distKm = Math.round((data.routes[0].distance / 1000) * 10) / 10;
+        return { path, distanceKm: distKm };
+      }
+    } catch {
+      // Ignore network errors or timeouts gracefully
+    }
+    return null;
+  }, []);
 
   // Delivery Rider Pin generator (uses avatar if present, else crisp bike icon)
   const createRiderIcon = useCallback((avatar?: string | null, bikeNo?: string | null) => {
@@ -242,24 +273,45 @@ export const LiveOrderRealMap = ({
 
     routeCoords.push([destination.lat, destination.lng]);
 
+    // Google Maps Navigation Polyline: Outer dark blue casing & inner vivid navigation blue
     const glow = L.polyline(routeCoords, {
-      color: '#a7f3d0',
-      weight: 6,
-      opacity: 0.7,
+      color: '#1d4ed8',
+      weight: 6.5,
+      opacity: 0.95,
       lineCap: 'round',
       lineJoin: 'round'
     }).addTo(map);
     routeGlowRef.current = glow;
 
     const routeLine = L.polyline(routeCoords, {
-      color: '#059669',
-      weight: 3.5,
-      dashArray: '8, 8',
-      opacity: 0.95,
+      color: '#3b82f6',
+      weight: 4.5,
+      opacity: 1,
       lineCap: 'round',
       lineJoin: 'round'
     }).addTo(map);
     routeLineRef.current = routeLine;
+
+    // Fetch real street road directions (Google Maps road path)
+    let isMounted = true;
+    fetchRoadRoute(warehouse, destination, riderLocation).then((res) => {
+      if (!isMounted) return;
+      try {
+        if (res && res.path && res.path.length > 1 && mapInstanceRef.current) {
+          routeGlowRef.current?.setLatLngs(res.path);
+          routeLineRef.current?.setLatLngs(res.path);
+          if (res.distanceKm > 0) {
+            setRoadDistanceKm(res.distanceKm);
+          }
+          const roadBounds = L.latLngBounds(res.path);
+          if (roadBounds.isValid()) {
+            mapInstanceRef.current.fitBounds(roadBounds, { padding: [35, 35], maxZoom: 16, animate: false });
+          }
+        }
+      } catch {
+        // ignore unmounted race condition
+      }
+    });
 
     // Fit bounds tightly framing store and user location without zooming out to all of Kolkata
     const bounds = L.latLngBounds([
@@ -303,6 +355,7 @@ export const LiveOrderRealMap = ({
     }
 
     return () => {
+      isMounted = false;
       clearTimeout(timer);
       if (resizeObserver) {
         resizeObserver.disconnect();
@@ -336,6 +389,7 @@ export const LiveOrderRealMap = ({
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
+    let isMounted = true;
 
     try {
       warehouseMarkerRef.current?.setLatLng([warehouse.lat, warehouse.lng]);
@@ -391,10 +445,36 @@ export const LiveOrderRealMap = ({
       if (hasRealRiderLocation) {
         bounds.extend([riderLocation.lat, riderLocation.lng]);
       }
-      map.fitBounds(bounds, { padding: [35, 35], maxZoom: 16, animate: false });
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [35, 35], maxZoom: 16, animate: false });
+      }
+
+      // Fetch real street road directions dynamically
+      fetchRoadRoute(warehouse, destination, hasRealRiderLocation ? riderLocation : null).then((res) => {
+        if (!isMounted) return;
+        try {
+          if (res && res.path && res.path.length > 1 && mapInstanceRef.current) {
+            routeGlowRef.current?.setLatLngs(res.path);
+            routeLineRef.current?.setLatLngs(res.path);
+            if (res.distanceKm > 0) {
+              setRoadDistanceKm(res.distanceKm);
+            }
+            const roadBounds = L.latLngBounds(res.path);
+            if (roadBounds.isValid()) {
+              mapInstanceRef.current.fitBounds(roadBounds, { padding: [35, 35], maxZoom: 16, animate: false });
+            }
+          }
+        } catch {
+          // ignore unmounted error
+        }
+      });
     } catch {
       // Safe update
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [
     warehouse.lat,
     warehouse.lng,
@@ -406,34 +486,9 @@ export const LiveOrderRealMap = ({
     riderAvatarUrl,
     riderBikeNumber,
     isOutForDelivery,
-    isPartnerAssigned
+    isPartnerAssigned,
+    fetchRoadRoute
   ]);
-
-  const handleZoomIn = () => {
-    if (mapInstanceRef.current) {
-      try {
-        const cur = mapInstanceRef.current.getZoom();
-        if (cur < MAX_ZOOM) {
-          mapInstanceRef.current.zoomIn();
-        }
-      } catch {
-        // ignore
-      }
-    }
-  };
-
-  const handleZoomOut = () => {
-    if (mapInstanceRef.current) {
-      try {
-        const cur = mapInstanceRef.current.getZoom();
-        if (cur > MIN_BENGAL_ZOOM) {
-          mapInstanceRef.current.zoomOut();
-        }
-      } catch {
-        // ignore
-      }
-    }
-  };
 
   const handleRecenter = () => {
     if (mapInstanceRef.current) {
@@ -450,18 +505,18 @@ export const LiveOrderRealMap = ({
   };
 
   return (
-    <div className="relative w-full h-[320px] sm:h-[380px] md:h-[420px] overflow-hidden bg-slate-100 select-none border-none rounded-none">
+    <div className="relative w-full aspect-square max-h-[480px] overflow-hidden bg-slate-100 select-none border-none rounded-none">
       {/* Real Map Canvas Container */}
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
       {/* Top Floating Badge: Distance and Backend GPS status */}
       <div className="absolute top-3 left-3 z-10 pointer-events-none flex items-center gap-2">
-        <div className="bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-2 text-xs font-black text-slate-800 border border-slate-200/60">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-emerald-700 font-bold">{distanceKm} km route</span>
+        <div className="bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-2 text-xs font-black text-slate-800 border border-slate-200/60">
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+          <span className="text-blue-700 font-bold">{roadDistanceKm || distanceKm} km road path</span>
         </div>
         {riderLocation && (
-          <div className="bg-emerald-600/95 text-white backdrop-blur-md px-2.5 py-1.5 rounded-xl shadow-sm flex items-center gap-1.5 text-xs font-bold border border-emerald-500">
+          <div className="bg-blue-600 text-white backdrop-blur-md px-2.5 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 text-xs font-bold border border-blue-500">
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
             <span>Live GPS</span>
           </div>
@@ -477,41 +532,15 @@ export const LiveOrderRealMap = ({
         </div>
       )}
 
-      {/* Floating Recenter & Zoom Controls */}
-      <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-1.5">
+      {/* Floating Recenter Route Control */}
+      <div className="absolute bottom-3 right-3 z-10">
         <button
           onClick={handleRecenter}
           aria-label="Recenter route"
-          className="w-8 h-8 rounded-xl bg-white/95 backdrop-blur-md shadow-sm hover:bg-white text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+          className="w-9 h-9 rounded-xl bg-white/95 backdrop-blur-md shadow-sm hover:bg-white text-slate-700 flex items-center justify-center transition-colors cursor-pointer border border-slate-200/60"
           title="Recenter Route"
         >
-          <Navigation className="w-4 h-4 text-emerald-600" />
-        </button>
-        <button
-          onClick={handleZoomIn}
-          disabled={currentZoom >= MAX_ZOOM}
-          aria-label="Zoom in"
-          className={`w-8 h-8 rounded-xl bg-white/95 backdrop-blur-md shadow-sm text-slate-700 flex items-center justify-center transition-colors ${
-            currentZoom >= MAX_ZOOM ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white cursor-pointer'
-          }`}
-          title={currentZoom >= MAX_ZOOM ? 'Maximum zoom level reached' : 'Zoom in'}
-        >
-          <ZoomIn className="w-4 h-4" />
-        </button>
-        <button
-          onClick={handleZoomOut}
-          disabled={currentZoom <= MIN_BENGAL_ZOOM}
-          aria-label="Zoom out"
-          className={`w-8 h-8 rounded-xl bg-white/95 backdrop-blur-md shadow-sm text-slate-700 flex items-center justify-center transition-colors ${
-            currentZoom <= MIN_BENGAL_ZOOM ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white cursor-pointer'
-          }`}
-          title={
-            currentZoom <= MIN_BENGAL_ZOOM
-              ? 'Minimum zoom reached (West Bengal state boundary - cannot zoom out to other states)'
-              : 'Zoom out'
-          }
-        >
-          <ZoomOut className="w-4 h-4" />
+          <Navigation className="w-4.5 h-4.5 text-blue-600" />
         </button>
       </div>
     </div>

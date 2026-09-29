@@ -69,6 +69,21 @@ export interface HelpCenterChatProps {
   orders?: Order[];
   savedAddresses?: SavedAddress[];
   onBack?: () => void;
+  orderContext?: {
+    orderId?: string;
+    orderNumber?: string;
+    status?: string;
+    statusLabel?: string;
+    riderName?: string;
+    riderPhone?: string;
+    riderVehicle?: string;
+    riderLocation?: { lat: number; lng: number } | null;
+    deliveryArea?: string;
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    totalAmount?: number;
+  };
 }
 
 const CHAT_STORAGE_KEY = 'smartrun_support_chat_history_v5';
@@ -120,9 +135,36 @@ export const HelpCenterChat = ({
   userProfile,
   orders = [],
   savedAddresses = [],
-  onBack
+  onBack,
+  orderContext
 }: HelpCenterChatProps) => {
   const userName = userProfile?.name?.split(' ')[0] || 'there';
+
+  const getOrderSpecificWelcomeMessage = (): Message => {
+    const process = orderContext?.statusLabel || 'Order Processing';
+    const riderName = orderContext?.riderName;
+    const riderLoc = orderContext?.riderLocation;
+    const orderNum = orderContext?.orderNumber || 'your order';
+
+    let riderText = '';
+    if (riderName) {
+      if (riderLoc?.lat && riderLoc?.lng) {
+        riderText = `\n\n🛵 **Delivery Partner**: ${riderName} is on the way! Live GPS: Lat ${riderLoc.lat.toFixed(4)}, Lng ${riderLoc.lng.toFixed(4)} heading towards ${orderContext?.deliveryArea || 'your address'}.`;
+      } else {
+        riderText = `\n\n🛵 **Delivery Partner**: ${riderName} is assigned to deliver your order from Kasba Hub.`;
+      }
+    } else {
+      riderText = `\n\n📍 **Depot Location**: Central Store & Depot, Kasba, Kolkata. Packing and partner assignment is underway.`;
+    }
+
+    return {
+      id: `order-welcome-${orderNum}-${Date.now()}`,
+      sender: 'assistant',
+      text: `Hi ${userName}! 👋 I checked this order #${orderNum}. Right now it is **${process}**.${riderText}\n\nOur Kasba operations desk has also received an alert regarding this order. How can I help you today?`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: new Date().toISOString()
+    };
+  };
 
   // Chat AI engine mode: 'auto' (Live Gemini with offline fallback) | 'offline' (Instant on-device)
   const [engineMode, setEngineMode] = useState<'auto' | 'offline'>(() => {
@@ -181,6 +223,21 @@ export const HelpCenterChat = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const isFirstRender = useRef(true);
+
+  // Proactively present order-specific status & rider location when opened for a live order
+  useEffect(() => {
+    if (orderContext && orderContext.orderNumber) {
+      const orderWelcome = getOrderSpecificWelcomeMessage();
+      setMessages((prev) => {
+        // If the latest message is already an order welcome for this exact order, don't duplicate
+        if (prev.length > 0 && prev[prev.length - 1].text.includes(`checked this order #${orderContext.orderNumber}`)) {
+          return prev;
+        }
+        return [...prev, orderWelcome];
+      });
+      setTimeout(() => scrollToBottom(true), 150);
+    }
+  }, [orderContext?.orderNumber, orderContext?.statusLabel]);
 
   // Persist mode preference
   const toggleEngineMode = () => {

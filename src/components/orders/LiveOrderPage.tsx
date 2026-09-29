@@ -16,9 +16,10 @@ import {
   AlertCircle,
   CreditCard,
   Banknote,
-  Loader2
+  Loader2,
+  ChevronRight
 } from 'lucide-react';
-import { Order } from '../../types';
+import { Order, UserProfile } from '../../types';
 import { KOLKATA_AREAS } from '../../data/kolkataAreas';
 import { LiveOrderRealMap } from './LiveOrderRealMap';
 import { supabase } from '../../lib/supabaseClient';
@@ -26,11 +27,13 @@ import { updateOrderStatusInFirestore, saveUserProfile } from '../../services/su
 import { getShortOrderUuid } from '../../utils/cryptoHelper';
 import { initiateRazorpayRefund } from '../../services/razorpayService';
 import { showToast } from '../../utils/toast';
+import { apiUrl } from '../../lib/apiBase';
 import {
   RiderDetailsCard,
   RiderReviewCard,
   OrderProductReviewCard
 } from './OrderReviewComponents';
+import { HelpCenterSubPage } from '../profile/HelpCenterSubPage';
 
 // Giriraj Power Kasba Central Warehouse Exact Coordinates
 const WAREHOUSE_LOCATION = {
@@ -44,12 +47,14 @@ interface LiveOrderPageProps {
   order?: Order | null;
   orders?: Order[];
   onBack?: () => void;
+  userProfile?: UserProfile | null;
 }
 
 export const LiveOrderPage = ({
   order: propOrder,
   orders = [],
-  onBack
+  onBack,
+  userProfile = null
 }: LiveOrderPageProps) => {
   const navigate = useNavigate();
   const { orderId } = useParams<{ orderId?: string }>();
@@ -289,6 +294,7 @@ export const LiveOrderPage = ({
   const [backendRider, setBackendRider] = useState<any | null>(null);
   const [riderReview, setRiderReview] = useState<any | null>(null);
   const [productReview, setProductReview] = useState<any | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   // Cancellation State
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -506,7 +512,7 @@ export const LiveOrderPage = ({
     let isMounted = true;
     const fetchBackendRider = async () => {
       try {
-        const res = await fetch(`/api/orders/${encodeURIComponent(order.id)}/rider`);
+        const res = await fetch(apiUrl(`/api/orders/${encodeURIComponent(order.id)}/rider`));
         if (!res.ok) return;
         const data = await res.json();
         if (isMounted && data.success && data.assigned && data.rider) {
@@ -544,7 +550,7 @@ export const LiveOrderPage = ({
     let isMounted = true;
     const fetchReviews = async () => {
       try {
-        const res = await fetch(`/api/orders/${encodeURIComponent(order.id)}/reviews`);
+        const res = await fetch(apiUrl(`/api/orders/${encodeURIComponent(order.id)}/reviews`));
         if (!res.ok) return;
         const data = await res.json();
         if (isMounted && data.success) {
@@ -672,6 +678,42 @@ export const LiveOrderPage = ({
     };
   }, [order, isPartnerAssigned]);
 
+  // Comprehensive Order Context for AI Assistant and Resend Admin Alerts
+  const orderContext = useMemo(() => {
+    if (!order) return null;
+    return {
+      orderId: order.id,
+      orderNumber,
+      status: order.status,
+      statusLabel: statusPill.label,
+      riderName: assignedRider?.name,
+      riderPhone: assignedRider?.phone,
+      riderVehicle: (assignedRider as any)?.vehicleNumber || assignedRider?.vehicleType,
+      riderLocation: liveRiderLocation,
+      deliveryArea: order.area || userLocation.name,
+      customerName: order.customerName,
+      customerPhone: order.phone,
+      customerEmail: order.customerEmail,
+      totalAmount
+    };
+  }, [order, orderNumber, statusPill.label, assignedRider, liveRiderLocation, userLocation.name, totalAmount]);
+
+  const handleOpenHelp = () => {
+    setIsHelpOpen(true);
+    // Send background Resend alert email to admin
+    if (orderContext) {
+      try {
+        fetch(apiUrl('/api/support/order-help-alert'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderContext)
+        }).catch((err) => console.warn('[Order Help Alert Dispatch Notice]:', err));
+      } catch {
+        // silent
+      }
+    }
+  };
+
   // Empty state if no order is found
   if (!order) {
     return (
@@ -718,27 +760,30 @@ export const LiveOrderPage = ({
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900">
-      {/* Top Sticky Header for Order Page (Borderless, Renamed to Order) */}
-      <div className="sticky top-0 z-30 bg-white px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-3">
+      {/* Top Sticky Header for Order Page: Shows Current Background Process */}
+      <div className="sticky top-0 z-30 bg-white px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-xs border-b border-slate-100">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={handleBack}
             aria-label="Go back"
-            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                Order
+              {statusPill.hasPulse && (
+                <span className="relative flex h-2.5 w-2.5 shrink-0">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${statusPill.dotClass}`} />
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${statusPill.dotClass}`} />
+                </span>
+              )}
+              <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
+                {statusPill.label}
               </h1>
-              <span className="text-xs font-mono font-black text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
-                #{orderNumber}
-              </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Real-time delivery progress &amp; route
+            <p className="text-[11px] text-slate-500 font-mono font-bold truncate">
+              #{orderNumber}
             </p>
           </div>
         </div>
@@ -748,7 +793,7 @@ export const LiveOrderPage = ({
           <button
             type="button"
             onClick={() => setShowCancelModal(true)}
-            className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold flex items-center gap-1.5 transition-colors border border-red-200 cursor-pointer shadow-2xs group active:scale-95"
+            className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold flex items-center gap-1.5 transition-colors border border-red-200 cursor-pointer shadow-2xs group active:scale-95 shrink-0"
             title="Cancel this order within 2 minutes of ordering"
           >
             <XCircle className="w-3.5 h-3.5 text-red-600 group-hover:scale-110 transition-transform shrink-0" />
@@ -772,23 +817,8 @@ export const LiveOrderPage = ({
         </div>
       )}
 
-      {/* Status Pill Display (Only one pill, centered in the middle of display above map, showing packaging, delivery boy assigned, etc. from backend) */}
-      <div className="w-full flex justify-center items-center py-2.5 sm:py-3 px-4 bg-slate-50 border-b border-slate-200/60">
-        <div
-          className={`inline-flex items-center gap-2 px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold shadow-xs transition-all duration-300 ${statusPill.bgClass} border ${statusPill.borderClass}`}
-        >
-          {statusPill.hasPulse && (
-            <span className="relative flex h-2 w-2">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${statusPill.dotClass}`} />
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${statusPill.dotClass}`} />
-            </span>
-          )}
-          <span>{statusPill.label}</span>
-        </div>
-      </div>
-
-      {/* Borderless Real Map touching both sides of the screen edge-to-edge */}
-      <div className="w-full border-b border-slate-200/80 overflow-hidden bg-slate-100">
+      {/* Borderless Equal Box Real Map touching both sides of the screen edge-to-edge */}
+      <div className="w-full border-none overflow-hidden bg-slate-100">
         <LiveOrderRealMap
           warehouse={WAREHOUSE_LOCATION}
           destination={mapDestination}
@@ -1046,6 +1076,29 @@ export const LiveOrderPage = ({
               </div>
             </div>
           </div>
+
+          {/* 3. Need Help Section: Single-line full-width tapable button with arrow */}
+          <button
+            type="button"
+            onClick={handleOpenHelp}
+            className="w-full bg-white hover:bg-slate-50 active:scale-[0.99] rounded-2xl p-3 sm:p-3.5 shadow-xs flex items-center justify-between gap-3 border border-slate-100 transition-all cursor-pointer group text-left whitespace-nowrap"
+          >
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <Phone className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex items-center gap-2 truncate">
+                <span className="text-xs sm:text-sm font-bold text-slate-900 shrink-0">
+                  Need help with this order?
+                </span>
+                <span className="text-[11px] text-slate-400 font-normal truncate">
+                  • 24/7 support
+                </span>
+              </div>
+            </div>
+
+            <ChevronRight className="w-4.5 h-4.5 text-slate-400 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+          </button>
         </div>
       </main>
 
@@ -1183,6 +1236,16 @@ export const LiveOrderPage = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Help Page Modal / SubPage */}
+      {isHelpOpen && (
+        <HelpCenterSubPage
+          userProfile={userProfile || null}
+          orders={order ? [order] : []}
+          orderContext={orderContext}
+          onBack={() => setIsHelpOpen(false)}
+        />
       )}
     </div>
   );
