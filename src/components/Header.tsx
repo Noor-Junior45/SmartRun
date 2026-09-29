@@ -307,11 +307,11 @@ export const Header = ({
             <div className="flex flex-col justify-center text-left">
               <button
                 onClick={() => onTabChange('home')}
-                className="text-lg sm:text-xl font-black tracking-tight leading-none flex items-center text-left cursor-pointer focus:outline-none font-sf-pro"
+                className="text-xl sm:text-2xl font-black tracking-tight leading-none flex items-center text-left cursor-pointer focus:outline-none font-baloo text-black"
+                style={{ fontFamily: "'Baloo 2', 'Baloo Bhai 2', cursive, sans-serif" }}
                 title="SmartRun - Home"
               >
-                <span className="text-black">Smart</span>
-                <span className="text-[#00875a]">Run</span>
+                <span className="text-black">SmartRun</span>
               </button>
 
               {/* Saved Address House Name Only / Location Selector */}

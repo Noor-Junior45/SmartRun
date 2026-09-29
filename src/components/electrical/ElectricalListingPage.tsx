@@ -361,7 +361,7 @@ export const ElectricalListingPage = ({
   const totalPages = Math.ceil(products.length / itemsPerPage) || 1;
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 pb-20 font-sans">
+    <div className="min-h-screen bg-white text-slate-900 pb-36 sm:pb-24 font-sans">
       
       {/* ACTIVE FILTER TAGS & RESET ROW (Top navbar now houses the All Filters & Sort buttons) */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-2 pb-2 mb-2 flex items-center justify-between gap-2 overflow-x-auto scrollbar-none">

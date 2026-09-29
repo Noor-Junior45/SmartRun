@@ -1008,16 +1008,18 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         <div className="flex flex-col items-center justify-center text-center space-y-2">
           <div>
             <img
-              src="/smartrun.jpeg"
+              src="/SmartRun.png"
               alt="SmartRun Logo"
               className="w-16 h-16 object-cover rounded-2xl shadow-sm border border-slate-100 p-0.5 bg-white"
             />
           </div>
 
           <div>
-            <div className="text-3xl font-bold font-bodoni flex items-center justify-center leading-none tracking-tight">
-              <span className="text-slate-950">Smart</span>
-              <span className="text-[#00875a]">Run</span>
+            <div
+              className="text-3xl font-black font-baloo text-black flex items-center justify-center leading-none tracking-tight"
+              style={{ fontFamily: "'Baloo 2', 'Baloo Bhai 2', cursive, sans-serif" }}
+            >
+              <span className="text-black">SmartRun</span>
             </div>
             <p className="text-xs text-slate-500 font-semibold mt-1">
               Electrical &amp; Construction Materials Hub

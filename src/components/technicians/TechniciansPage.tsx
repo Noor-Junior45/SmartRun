@@ -392,7 +392,7 @@ export const TechniciansPage = ({
   };
 
   return (
-    <div className="min-h-[85vh] bg-slate-50 flex flex-col justify-start items-center px-4 pt-4 sm:pt-6 pb-28">
+    <div className="min-h-[85vh] bg-slate-50 flex flex-col justify-start items-center px-4 pt-4 sm:pt-6 pb-36 sm:pb-28">
       {/* Top Bar for Technician Quick Actions & Active Filter Badges */}
       <div className="w-full max-w-5xl mx-auto mb-3">
         {/* Active Filter Tags Row */}

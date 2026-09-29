@@ -1391,7 +1391,7 @@ export default function App() {
         <SEOHead />
         <div className="flex flex-col items-center space-y-3 animate-pulse">
           <img
-            src="/smartrun.jpeg"
+            src="/SmartRun.png"
             alt="SmartRun Logo"
             className="w-16 h-16 object-cover rounded-2xl shadow-sm border border-slate-200 bg-white p-0.5"
           />

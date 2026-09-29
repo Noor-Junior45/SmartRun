@@ -33,6 +33,10 @@
   .font-sf-pro {
     font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, sans-serif;
   }
+
+  .font-baloo {
+    font-family: 'Baloo 2', 'Baloo Bhai 2', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
 }
 
 /* =========================================================================
@@ -129,13 +133,42 @@
   background-size: 32px 32px;
 }
 
-/* Hide scrollbar for clean horizontal product & category sliders */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+/* Universally hide scrollbars everywhere across the entire app while maintaining natural smooth scrolling */
+*,
+*::before,
+*::after,
+html,
+body {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
 }
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+
+*::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track {
+  display: none !important;
+  background: transparent !important;
+}
+
+/* Hide scrollbar utility classes for backward compatibility */
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
 
 @keyframes pulse-subtle {
