@@ -772,15 +772,15 @@ export const LiveOrderPage = ({
           </button>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              {statusPill.hasPulse && (
-                <span className="relative flex h-2.5 w-2.5 shrink-0">
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${statusPill.dotClass}`} />
-                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${statusPill.dotClass}`} />
-                </span>
-              )}
               <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
                 {statusPill.label}
               </h1>
+              {statusPill.hasPulse && (
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${statusPill.dotClass}`} />
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${statusPill.dotClass}`} />
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-500 font-mono font-bold truncate">
               #{orderNumber}
