@@ -770,9 +770,9 @@ export const LiveOrderPage = ({
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
+          <div className="min-w-0 flex flex-col items-start justify-center text-left m-0 p-0">
+            <div className="flex items-center gap-2 m-0 p-0 text-left">
+              <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate m-0 p-0 leading-tight text-left">
                 {statusPill.label}
               </h1>
               {statusPill.hasPulse && (
@@ -782,7 +782,7 @@ export const LiveOrderPage = ({
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-500 font-mono font-bold truncate">
+            <p className="text-[11px] text-slate-500 font-mono font-bold truncate m-0 p-0 leading-none text-left mt-0.5">
               #{orderNumber}
             </p>
           </div>

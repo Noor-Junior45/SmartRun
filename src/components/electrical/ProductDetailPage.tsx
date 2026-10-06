@@ -20,7 +20,8 @@ import {
   Check,
   HelpCircle,
   Palette,
-  Heart
+  Heart,
+  Maximize2
 } from 'lucide-react';
 import { ElectricalProduct, ProductReview } from '../../types/electrical';
 import {
@@ -47,8 +48,10 @@ import { hapticLight, hapticMedium } from '../../utils/haptics';
 import { SEOHead } from '../SEOHead';
 import { shareProductDetails } from '../../utils/shareProduct';
 import { ZoomableImage } from '../ZoomableImage';
+import { FullscreenImageViewer } from '../FullscreenImageViewer';
 import { useEdgeSwipeBack } from '../../hooks/useEdgeSwipeBack';
 import { formatProductSpecifications, getFlattenedSpecifications } from '../../utils/productSpecifications';
+import { generateWireCoilSvg } from '../../data/productColorImages';
 
 interface ProductDetailPageProps {
   onAddToCart: (product: Product) => void;
@@ -74,6 +77,7 @@ export const ProductDetailPage = ({
   const [loading, setLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedWireColor, setSelectedWireColor] = useState<string>('Red');
+  const [isFullscreenImageViewerOpen, setIsFullscreenImageViewerOpen] = useState(false);
 
   const thumbnailContainerRef = useRef<HTMLDivElement>(null);
 
@@ -267,7 +271,7 @@ export const ProductDetailPage = ({
 
     return baseImages.length > 0
       ? baseImages
-      : ['https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop'];
+      : [product?.image_urls?.[0] || (product as any)?.image || generateWireCoilSvg('#DC2626', 'Red')];
   }, [product, activeColorOption]);
 
   // Set default color when product changes
@@ -475,7 +479,9 @@ export const ProductDetailPage = ({
   const currentImage =
     effectiveImageUrls[selectedImageIndex] ||
     effectiveImageUrls[0] ||
-    'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop';
+    product?.image_urls?.[0] ||
+    (product as any)?.image ||
+    generateWireCoilSvg('#DC2626', 'Red');
 
   return (
     <div className="min-h-screen bg-[#f1f3f6] text-slate-900 pb-32 sm:pb-36 font-sans relative">
@@ -598,8 +604,9 @@ export const ProductDetailPage = ({
                 <ZoomableImage
                   src={currentImage}
                   alt={product.name}
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-contain cursor-pointer"
                   containerClassName="w-full h-full"
+                  onClick={() => setIsFullscreenImageViewerOpen(true)}
                   onSwipeLeft={() => {
                     if (effectiveImageUrls.length > 1) {
                       setSelectedImageIndex((prev) => (prev + 1) % effectiveImageUrls.length);
@@ -611,6 +618,17 @@ export const ProductDetailPage = ({
                     }
                   }}
                 />
+
+                {/* Fullscreen Expand Button at top-left of image */}
+                <button
+                  type="button"
+                  onClick={() => setIsFullscreenImageViewerOpen(true)}
+                  className="absolute top-2.5 left-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-sm border border-slate-200/80 flex items-center justify-center active:scale-90 transition-all cursor-pointer z-20 backdrop-blur-xs"
+                  title="View full screen"
+                  aria-label="View full screen"
+                >
+                  <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+                </button>
 
                 {/* Left & Right on-image navigation buttons if multiple images exist */}
                 {effectiveImageUrls.length > 1 && (
@@ -1467,6 +1485,15 @@ export const ProductDetailPage = ({
           </div>
         </div>
       )}
+
+      {/* Fullscreen Image Viewer Modal (Flipkart / Amazon mobile style) */}
+      <FullscreenImageViewer
+        isOpen={isFullscreenImageViewerOpen}
+        onClose={() => setIsFullscreenImageViewerOpen(false)}
+        images={effectiveImageUrls}
+        initialIndex={selectedImageIndex}
+        productName={product.name}
+      />
     </div>
   );
 };

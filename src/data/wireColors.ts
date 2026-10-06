@@ -1,3 +1,5 @@
+import { generateWireCoilSvg, generatePipeSvg } from './productColorImages';
+
 export interface ProductColorOption {
   name: string;
   label: string;
@@ -18,7 +20,7 @@ export interface ProductColorOption {
 
 export type WireColorOption = ProductColorOption;
 
-// Indian Standard Wire Colors (IS 694 / IS 732)
+// Indian Standard Wire Colors (IS 694 / IS 732) with dynamic realistic rolled coil vector images
 export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
   {
     name: 'Red',
@@ -28,7 +30,11 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-red-600',
     twRing: 'ring-red-600',
     description: 'IS 694 Standard: Live / Phase conductor in single-phase & 3-phase circuits.',
-    standard: 'IS 694'
+    standard: 'IS 694',
+    image_url: generateWireCoilSvg('Red', '#DC2626'),
+    imageUrl: generateWireCoilSvg('Red', '#DC2626'),
+    images: [generateWireCoilSvg('Red', '#DC2626')],
+    image_urls: [generateWireCoilSvg('Red', '#DC2626')]
   },
   {
     name: 'Black',
@@ -38,7 +44,11 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-slate-950',
     twRing: 'ring-slate-950',
     description: 'IS 694 Standard: Neutral return conductor for AC electrical circuits.',
-    standard: 'IS 694'
+    standard: 'IS 694',
+    image_url: generateWireCoilSvg('Black', '#0F172A'),
+    imageUrl: generateWireCoilSvg('Black', '#0F172A'),
+    images: [generateWireCoilSvg('Black', '#0F172A')],
+    image_urls: [generateWireCoilSvg('Black', '#0F172A')]
   },
   {
     name: 'Green',
@@ -48,7 +58,11 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-green-600',
     twRing: 'ring-green-600',
     description: 'IS 694 Standard: Safety protective earth grounding conductor.',
-    standard: 'IS 694'
+    standard: 'IS 694',
+    image_url: generateWireCoilSvg('Green', '#16A34A'),
+    imageUrl: generateWireCoilSvg('Green', '#16A34A'),
+    images: [generateWireCoilSvg('Green', '#16A34A')],
+    image_urls: [generateWireCoilSvg('Green', '#16A34A')]
   },
   {
     name: 'Yellow',
@@ -58,7 +72,11 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-yellow-500',
     twRing: 'ring-yellow-500',
     description: 'IS 694 Standard: Y-Phase in 3-phase wiring & secondary switch live loops.',
-    standard: 'IS 694'
+    standard: 'IS 694',
+    image_url: generateWireCoilSvg('Yellow', '#EAB308'),
+    imageUrl: generateWireCoilSvg('Yellow', '#EAB308'),
+    images: [generateWireCoilSvg('Yellow', '#EAB308')],
+    image_urls: [generateWireCoilSvg('Yellow', '#EAB308')]
   },
   {
     name: 'Blue',
@@ -68,7 +86,11 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-blue-600',
     twRing: 'ring-blue-600',
     description: 'IS 694 Standard: B-Phase in 3-phase wiring & dedicated lighting loops.',
-    standard: 'IS 694'
+    standard: 'IS 694',
+    image_url: generateWireCoilSvg('Blue', '#2563EB'),
+    imageUrl: generateWireCoilSvg('Blue', '#2563EB'),
+    images: [generateWireCoilSvg('Blue', '#2563EB')],
+    image_urls: [generateWireCoilSvg('Blue', '#2563EB')]
   },
   {
     name: 'White',
@@ -78,7 +100,11 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-slate-200',
     twRing: 'ring-slate-400',
     description: 'Indian Residential Standard: Dedicated Inverter / UPS emergency backup phase.',
-    standard: 'IS 732'
+    standard: 'IS 732',
+    image_url: generateWireCoilSvg('White', '#F1F5F9'),
+    imageUrl: generateWireCoilSvg('White', '#F1F5F9'),
+    images: [generateWireCoilSvg('White', '#F1F5F9')],
+    image_urls: [generateWireCoilSvg('White', '#F1F5F9')]
   }
 ];
 
@@ -92,7 +118,11 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-slate-100',
     twRing: 'ring-slate-400',
     description: 'Standard residential & commercial concealed or exposed conduit wiring (IS 9537 Part 3).',
-    standard: 'IS 9537'
+    standard: 'IS 9537',
+    image_url: generatePipeSvg('Ivory / White', '#F8FAFC'),
+    imageUrl: generatePipeSvg('Ivory / White', '#F8FAFC'),
+    images: [generatePipeSvg('Ivory / White', '#F8FAFC')],
+    image_urls: [generatePipeSvg('Ivory / White', '#F8FAFC')]
   },
   {
     name: 'Black',
@@ -102,7 +132,11 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-slate-950',
     twRing: 'ring-slate-950',
     description: 'Outdoor weather-proof, industrial slab casting & high UV sunlight-resistant conduit.',
-    standard: 'IS 9537'
+    standard: 'IS 9537',
+    image_url: generatePipeSvg('Black', '#0F172A'),
+    imageUrl: generatePipeSvg('Black', '#0F172A'),
+    images: [generatePipeSvg('Black', '#0F172A')],
+    image_urls: [generatePipeSvg('Black', '#0F172A')]
   },
   {
     name: 'Grey',
@@ -112,7 +146,11 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-slate-500',
     twRing: 'ring-slate-600',
     description: 'High impact resistance for RCC concrete ceiling slab embedding and wall chasing.',
-    standard: 'IS 9537'
+    standard: 'IS 9537',
+    image_url: generatePipeSvg('Grey', '#64748B'),
+    imageUrl: generatePipeSvg('Grey', '#64748B'),
+    images: [generatePipeSvg('Grey', '#64748B')],
+    image_urls: [generatePipeSvg('Grey', '#64748B')]
   },
   {
     name: 'Blue',
@@ -122,7 +160,11 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-blue-600',
     twRing: 'ring-blue-600',
     description: 'Dedicated identification conduit for CAT6 internet, telephone, and CCTV cabling.',
-    standard: 'Commercial'
+    standard: 'Commercial',
+    image_url: generatePipeSvg('Blue', '#2563EB'),
+    imageUrl: generatePipeSvg('Blue', '#2563EB'),
+    images: [generatePipeSvg('Blue', '#2563EB')],
+    image_urls: [generatePipeSvg('Blue', '#2563EB')]
   },
   {
     name: 'Red / Orange',
@@ -132,7 +174,11 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-orange-600',
     twRing: 'ring-orange-600',
     description: 'Mandatory color-coded conduit pathway for fire alarm systems and emergency backup power.',
-    standard: 'Fire Code'
+    standard: 'Fire Code',
+    image_url: generatePipeSvg('Red / Orange', '#EA580C'),
+    imageUrl: generatePipeSvg('Red / Orange', '#EA580C'),
+    images: [generatePipeSvg('Red / Orange', '#EA580C')],
+    image_urls: [generatePipeSvg('Red / Orange', '#EA580C')]
   },
   {
     name: 'Yellow',
@@ -142,7 +188,11 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-yellow-500',
     twRing: 'ring-yellow-500',
     description: 'Solar rooftop DC cable protection and caution safety conduit routes.',
-    standard: 'MNRE Std'
+    standard: 'MNRE Std',
+    image_url: generatePipeSvg('Yellow', '#EAB308'),
+    imageUrl: generatePipeSvg('Yellow', '#EAB308'),
+    images: [generatePipeSvg('Yellow', '#EAB308')],
+    image_urls: [generatePipeSvg('Yellow', '#EAB308')]
   }
 ];
 
@@ -554,6 +604,7 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
   // 1. Direct dictionary match
   if (COLOR_FINISH_DICTIONARY[key]) {
     const entry = COLOR_FINISH_DICTIONARY[key];
+    const img = (entry as any).image_url || generateWireCoilSvg(entry.hex, name);
     return {
       name,
       label: name,
@@ -561,7 +612,11 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
       hex: entry.hex,
       twBg: entry.twBg,
       twRing: entry.twRing,
-      description: entry.description || `${name} finish`
+      description: entry.description || `${name} finish`,
+      image_url: img,
+      imageUrl: img,
+      images: [img],
+      image_urls: [img]
     };
   }
 
@@ -571,6 +626,7 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
   );
   if (foundKey) {
     const entry = COLOR_FINISH_DICTIONARY[foundKey];
+    const img = (entry as any).image_url || generateWireCoilSvg(entry.hex, name);
     return {
       name,
       label: name,
@@ -578,7 +634,11 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
       hex: entry.hex,
       twBg: entry.twBg,
       twRing: entry.twRing,
-      description: entry.description || `${name} finish`
+      description: entry.description || `${name} finish`,
+      image_url: img,
+      imageUrl: img,
+      images: [img],
+      image_urls: [img]
     };
   }
 
@@ -640,6 +700,8 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
     twRing = 'ring-yellow-500';
   }
 
+  const generatedWireImg = generateWireCoilSvg(name, hex);
+
   return {
     name,
     label: name,
@@ -647,7 +709,11 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
     hex,
     twBg,
     twRing,
-    description: `${name} finish`
+    description: `${name} finish`,
+    image_url: generatedWireImg,
+    imageUrl: generatedWireImg,
+    images: [generatedWireImg],
+    image_urls: [generatedWireImg]
   };
 }
 

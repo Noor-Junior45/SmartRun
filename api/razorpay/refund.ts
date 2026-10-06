@@ -63,6 +63,14 @@ export default async function handler(req: any, res: any) {
       String(paymentId).startsWith("test_") ||
       String(orderId || "").startsWith("order_test_");
 
+    const isLiveMode = getKeyId().startsWith("rzp_live_") || process.env.NODE_ENV === "production";
+    if (isTestPayment && isLiveMode) {
+      return res.status(403).json({
+        success: false,
+        message: "Test simulated refunds are disabled in live production mode."
+      });
+    }
+
     if (isTestPayment) {
       const mockRefundId = `rfnd_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       return res.status(200).json({

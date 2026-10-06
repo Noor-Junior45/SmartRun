@@ -1133,25 +1133,6 @@ export const LocationModal = ({
                 >
                   <LocateFixed className={`w-4 h-4 text-slate-900 ${gpsLoading ? 'animate-spin' : ''}`} />
                 </button>
-
-                <div className="bg-white border border-slate-200 shadow-lg flex flex-col">
-                  <button
-                    type="button"
-                    onClick={() => mapInstanceRef.current?.zoomIn()}
-                    className="w-9 h-8 flex items-center justify-center hover:bg-slate-50 border-b border-slate-100 text-slate-700 cursor-pointer"
-                    title="Zoom in"
-                  >
-                    <ZoomIn className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => mapInstanceRef.current?.zoomOut()}
-                    className="w-9 h-8 flex items-center justify-center hover:bg-slate-50 text-slate-700 cursor-pointer"
-                    title="Zoom out"
-                  >
-                    <ZoomOut className="w-3.5 h-3.5" />
-                  </button>
-                </div>
               </div>
             </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Star, Check, Plus, Minus, Heart, RotateCcw, HelpCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, CheckCircle2, Palette, Share2, MapPin, AlertCircle } from 'lucide-react';
+import { X, Star, Check, Plus, Minus, Heart, RotateCcw, HelpCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, CheckCircle2, Palette, Share2, MapPin, AlertCircle, Maximize2 } from 'lucide-react';
 import { Product } from '../types';
 import { isProductFavorite, toggleProductFavorite } from '../services/favorites';
 import {
@@ -13,6 +13,7 @@ import { trackProductView } from '../utils/analytics';
 import { hapticLight, hapticMedium } from '../utils/haptics';
 import { shareProductDetails } from '../utils/shareProduct';
 import { ZoomableImage } from './ZoomableImage';
+import { FullscreenImageViewer } from './FullscreenImageViewer';
 import { useBottomSheetDismiss } from '../hooks/useBottomSheetDismiss';
 import { getFlattenedSpecifications } from '../utils/productSpecifications';
 
@@ -40,6 +41,7 @@ export const ProductDetailModal = ({
   const [shareToast, setShareToast] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [isFullscreenViewerOpen, setIsFullscreenViewerOpen] = useState(false);
   const isWire = product ? isWireProduct(product) : false;
   const isPipe = product ? isPipeProduct(product) : false;
   const colorOptions = product ? getProductColorOptions(product) : [];
@@ -266,8 +268,9 @@ export const ProductDetailModal = ({
               <ZoomableImage
                 src={currentImage}
                 alt={product.name}
-                className="w-full h-full object-contain p-2"
+                className="w-full h-full object-contain p-2 cursor-pointer"
                 containerClassName="w-full h-full"
+                onClick={() => setIsFullscreenViewerOpen(true)}
                 onSwipeLeft={() => {
                   if (allImages.length > 1) {
                     setSelectedImageIndex((prev) => (prev + 1) % allImages.length);
@@ -279,6 +282,17 @@ export const ProductDetailModal = ({
                   }
                 }}
               />
+
+              {/* Fullscreen Expand Button at top-left of image */}
+              <button
+                type="button"
+                onClick={() => setIsFullscreenViewerOpen(true)}
+                className="absolute top-2.5 left-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-sm border border-slate-200/80 flex items-center justify-center active:scale-90 transition-all cursor-pointer z-20 backdrop-blur-xs"
+                title="View full screen"
+                aria-label="View full screen"
+              >
+                <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+              </button>
 
               {allImages.length > 1 && (
                 <>
@@ -744,6 +758,15 @@ export const ProductDetailModal = ({
         </div>
 
       </div>
+
+      {/* Fullscreen Image Viewer Modal (Flipkart / Amazon mobile style) */}
+      <FullscreenImageViewer
+        isOpen={isFullscreenViewerOpen}
+        onClose={() => setIsFullscreenViewerOpen(false)}
+        images={allImages}
+        initialIndex={selectedImageIndex}
+        productName={product.name}
+      />
     </div>
   );
 };

@@ -1198,6 +1198,101 @@ function requireApiSecret(req: express.Request, res: express.Response, next: exp
   next();
 }
 
+// smsOtpLimiter: 10 OTP requests per 10 minutes per IP to prevent SMS bombing & wallet depletion
+const smsOtpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, forwardedHeader: false, default: false },
+  keyGenerator: getClientIp,
+  message: {
+    success: false,
+    error: "Too many SMS requests from this network. Please wait a few minutes before trying again."
+  }
+});
+
+// phoneResolveLimiter: 30 requests per 10 minutes per IP to block dictionary enumeration
+const phoneResolveLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, forwardedHeader: false, default: false },
+  keyGenerator: getClientIp,
+  message: {
+    success: false,
+    message: "Lookup rate limit exceeded. Please wait a few minutes before trying again."
+  }
+});
+
+// In-memory per-phone cooldown tracker to prevent SMS bombing on a single phone number
+const phoneLastSmsSentTime = new Map<string, number>();
+
+// Helper to retrieve the authenticated user from Supabase Bearer token
+async function getAuthenticatedUser(req: express.Request): Promise<any | null> {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7).trim();
+    const sb = getServerSupabase();
+    if (sb && token) {
+      try {
+        const { data: { user }, error } = await sb.auth.getUser(token);
+        if (!error && user) {
+          return user;
+        }
+      } catch {}
+    }
+  }
+  return null;
+}
+
+// Helper to check if a request is authenticated as an admin or with an API secret
+async function isAuthorizedAdminOrSecret(req: express.Request): Promise<boolean> {
+  const secret = process.env.API_SECRET_KEY;
+  const clientKey = (req.headers["x-api-key"] || req.headers["x-admin-key"] || "") as string;
+  if (secret && clientKey && clientKey === secret) {
+    return true;
+  }
+
+  // Check Supabase Authorization: Bearer <token>
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7).trim();
+    const sb = getServerSupabase();
+    if (sb && token) {
+      try {
+        const { data: { user }, error } = await sb.auth.getUser(token);
+        if (!error && user && user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+          return true;
+        }
+      } catch {}
+    }
+  }
+
+  // Check admin email header
+  const clientEmail = (req.headers["x-admin-email"] || req.headers["x-user-email"] || "") as string;
+  if (clientEmail && ADMIN_EMAILS.includes(clientEmail.trim().toLowerCase())) {
+    if (!secret || (clientKey && clientKey === secret)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Middleware that enforces admin authorization or API secret
+async function requireAdminOrSecret(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const isAuthorized = await isAuthorizedAdminOrSecret(req);
+  if (!isAuthorized) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized: Access restricted to administrators."
+    });
+  }
+  next();
+}
+
 const orderCheckoutLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 30, // 30 checkout submissions per 15 mins per IP
@@ -1341,14 +1436,37 @@ async function startServer() {
   // Set trust proxy to trust Cloud Run and reverse proxy headers (X-Forwarded-For)
   app.set("trust proxy", 1);
 
-  // Universal CORS Middleware for Capacitor Native Android/iOS (https://localhost, capacitor://localhost) & Web Deployments
+  // Universal Secure CORS Middleware: Validates trusted origins before granting credentials
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    res.setHeader("Access-Control-Allow-Origin", origin || "*");
+    const isAllowedOrigin =
+      !origin ||
+      origin === "https://www.smartrun.in" ||
+      origin === "https://smartrun.in" ||
+      origin === "https://localhost" ||
+      origin === "http://localhost" ||
+      origin.startsWith("http://localhost:") ||
+      origin.startsWith("http://127.0.0.1:") ||
+      origin.startsWith("capacitor://") ||
+      origin.startsWith("ionic://") ||
+      origin.startsWith("smartrun://") ||
+      origin.endsWith(".run.app") ||
+      origin.endsWith(".googleusercontent.com") ||
+      origin.endsWith(".aistudio.google.com");
+
+    if (origin && isAllowedOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+    } else if (!origin) {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    } else {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      // Untrusted origins are not permitted credentials
+    }
+
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, x-idempotency-key, if-none-match, Cache-Control, Pragma");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, x-admin-key, x-admin-email, x-user-email, x-idempotency-key, if-none-match, Cache-Control, Pragma");
     res.setHeader("Access-Control-Expose-Headers", "ETag, X-Cache, Content-Disposition");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
 
     if (req.method === "OPTIONS") {
       return res.status(204).end();
@@ -1829,7 +1947,7 @@ async function startServer() {
   });
 
   // Clear in-memory catalog cache on demand (e.g. after admin sync)
-  app.post("/api/products/cache/clear", (req, res) => {
+  app.post("/api/products/cache/clear", requireAdminOrSecret, (req, res) => {
     catalogCache = null;
     res.setHeader("Cache-Control", "no-store");
     res.json({ success: true, message: "Server in-memory catalog cache purged." });
@@ -1860,7 +1978,7 @@ async function startServer() {
   });
 
   // Create / Add a new product via backend (Bypasses client read-only RLS via Service Role)
-  app.post("/api/products", async (req, res) => {
+  app.post("/api/products", requireAdminOrSecret, async (req, res) => {
     try {
       const body = req.body || {};
       if (!body.name || typeof body.name !== "string" || !body.name.trim()) {
@@ -1957,7 +2075,7 @@ async function startServer() {
   });
 
   // Update existing product by ID
-  app.put("/api/products/:id", async (req, res) => {
+  app.put("/api/products/:id", requireAdminOrSecret, async (req, res) => {
     try {
       const productId = req.params.id;
       const updates = req.body || {};
@@ -1981,7 +2099,7 @@ async function startServer() {
   });
 
   // Delete product by ID
-  app.delete("/api/products/:id", async (req, res) => {
+  app.delete("/api/products/:id", requireAdminOrSecret, async (req, res) => {
     try {
       const productId = req.params.id;
       const sb = getServerSupabase();
@@ -2210,7 +2328,7 @@ async function startServer() {
   });
 
   // POST /api/fee-settings -> Update fee policy from backend app / admin listing
-  app.post("/api/fee-settings", (req, res) => {
+  app.post("/api/fee-settings", requireAdminOrSecret, (req, res) => {
     try {
       const body = req.body || {};
       const updatedBy = req.headers["x-client-id"] || req.headers["x-user-email"] || "backend_app";
@@ -2260,7 +2378,7 @@ async function startServer() {
   });
 
   // PUT /api/fee-settings (alias)
-  app.put("/api/fee-settings", (req, res) => {
+  app.put("/api/fee-settings", requireAdminOrSecret, (req, res) => {
     try {
       const body = req.body || {};
       const updatedBy = req.headers["x-client-id"] || req.headers["x-user-email"] || "backend_app";
@@ -2821,7 +2939,7 @@ async function startServer() {
   });
 
   // POST /api/orders/:id/assign-rider -> Assign delivery partner in backend
-  app.post("/api/orders/:id/assign-rider", async (req, res) => {
+  app.post("/api/orders/:id/assign-rider", requireAdminOrSecret, async (req, res) => {
     try {
       const orderId = req.params.id;
       if (!orderId) {
@@ -3095,9 +3213,9 @@ async function startServer() {
       if (!rawKeyId) {
         diagnostic = "RAZORPAY_KEY_ID is missing. In Settings > Environment Variables, please add your Razorpay Key ID (starts with 'rzp_live_' or 'rzp_test_').";
       } else {
-        diagnostic = `RAZORPAY_KEY_ID in Settings > Environment Variables is currently '${rawKeyId}'. It must start with 'rzp_live_' or 'rzp_test_' from your Razorpay Dashboard (API Keys section).`;
+        diagnostic = "RAZORPAY_KEY_ID in Settings > Environment Variables is invalid. It must start with 'rzp_live_' or 'rzp_test_' from your Razorpay Dashboard (API Keys section).";
         if (activeSecret) {
-          diagnostic += " Your Key Secret is set, but please replace '" + rawKeyId + "' in RAZORPAY_KEY_ID with the public Key ID.";
+          diagnostic += " Your Key Secret is set, but please verify RAZORPAY_KEY_ID contains your public Key ID.";
         }
       }
     } else if (!activeSecret) {
@@ -3214,13 +3332,24 @@ async function startServer() {
         });
       }
 
+      const activeKeyId = resolveRazorpayKeyId();
+      const isLiveMode = activeKeyId.startsWith("rzp_live_") || process.env.NODE_ENV === "production";
+
       const isTestOrder =
         String(razorpay_order_id).startsWith("order_test_") ||
         String(razorpay_payment_id).startsWith("pay_test_") ||
         String(razorpay_signature || "").startsWith("sig_test_");
 
-      // Test sandbox shortcut
-      if (isTestOrder) {
+      if (isTestOrder && isLiveMode) {
+        return res.status(403).json({
+          success: false,
+          verified: false,
+          message: "Simulated test payment signatures are rejected in production."
+        });
+      }
+
+      // Test sandbox shortcut (only in non-production development without live keys)
+      if (isTestOrder && !isLiveMode) {
         return res.status(200).json({
           success: true,
           verified: true,
@@ -3292,8 +3421,21 @@ async function startServer() {
     try {
       const { paymentId, amount, orderId, reason } = req.body || {};
 
+      const authUser = await getAuthenticatedUser(req);
+      const isAuthAdmin = await isAuthorizedAdminOrSecret(req);
+
+      if (!isAuthAdmin && !authUser) {
+        return res.status(401).json({
+          success: false,
+          message: "Authentication required to initiate cancellation refund."
+        });
+      }
+
       const parsedAmount = amount ? Number(amount) : undefined;
       const amountInPaise = parsedAmount && parsedAmount > 0 ? Math.round(parsedAmount * 100) : undefined;
+
+      const activeKeyId = resolveRazorpayKeyId();
+      const isLiveMode = activeKeyId.startsWith("rzp_live_") || process.env.NODE_ENV === "production";
 
       const isTestPayment =
         !paymentId ||
@@ -3301,7 +3443,14 @@ async function startServer() {
         String(paymentId).startsWith("test_") ||
         String(orderId || "").startsWith("order_test_");
 
-      // When test payment or simulation
+      if (isTestPayment && isLiveMode) {
+        return res.status(403).json({
+          success: false,
+          message: "Simulated test refunds are disabled in live production mode."
+        });
+      }
+
+      // When test payment or simulation in development
       if (isTestPayment) {
         const mockRefundId = `rfnd_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         return res.status(200).json({
@@ -3532,7 +3681,22 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Order ID is required." });
       }
 
+      const authUser = await getAuthenticatedUser(req);
+      const isAuthAdmin = await isAuthorizedAdminOrSecret(req);
+
       const sb = getServerSupabase();
+      if (!isAuthAdmin) {
+        if (!authUser) {
+          return res.status(401).json({ success: false, message: "Authentication required to delete order." });
+        }
+        if (sb) {
+          const { data: existingOrder } = await sb.from("orders").select("user_id, status").eq("id", orderId).maybeSingle();
+          if (existingOrder && existingOrder.user_id && existingOrder.user_id !== authUser.id) {
+            return res.status(403).json({ success: false, message: "Forbidden: You can only delete your own orders." });
+          }
+        }
+      }
+
       if (sb) {
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(orderId);
         try {
@@ -3578,6 +3742,16 @@ async function startServer() {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
       const { userId, email, phone } = req.query as { userId?: string; email?: string; phone?: string };
+
+      const authUser = await getAuthenticatedUser(req);
+      const isAuthAdmin = await isAuthorizedAdminOrSecret(req);
+
+      if (!isAuthAdmin) {
+        if (!authUser || (userId && authUser.id !== userId)) {
+          return res.status(401).json({ success: false, message: "Unauthorized: You can only clear your own order history." });
+        }
+      }
+
       const sb = getServerSupabase();
 
       if (sb && (userId || email || phone)) {
@@ -3642,6 +3816,16 @@ async function startServer() {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
       const { userId, email, phone, orderIds } = req.body || {};
+
+      const authUser = await getAuthenticatedUser(req);
+      const isAuthAdmin = await isAuthorizedAdminOrSecret(req);
+
+      if (!isAuthAdmin) {
+        if (!authUser || (userId && authUser.id !== userId)) {
+          return res.status(401).json({ success: false, message: "Unauthorized: You can only clear your own order history." });
+        }
+      }
+
       const sb = getServerSupabase();
 
       if (sb) {
@@ -3778,6 +3962,18 @@ async function startServer() {
           success: false,
           message: "User identifier (userId, phone, or email) required to execute account deletion."
         });
+      }
+
+      const authUser = await getAuthenticatedUser(req);
+      const isAuthAdmin = await isAuthorizedAdminOrSecret(req);
+
+      if (!isAuthAdmin) {
+        if (!authUser) {
+          return res.status(401).json({ success: false, message: "Authentication required to delete account." });
+        }
+        if (userId && authUser.id !== userId) {
+          return res.status(403).json({ success: false, message: "Forbidden: You can only delete your own account." });
+        }
       }
 
       const sb = getServerSupabase();
@@ -5170,7 +5366,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
   });
 
   // 2. Dispatch Order Status Push Notification
-  app.post("/api/push/send-order-update", (req, res) => {
+  app.post("/api/push/send-order-update", requireAdminOrSecret, (req, res) => {
     try {
       const { orderId, status, title, body, userEmail, userId } = req.body || {};
       if (!orderId) {
@@ -5232,8 +5428,8 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
   // RESEND RECEIVING EMAIL & INBOUND WEBHOOK ENDPOINTS
   // =========================================================================
 
-  // 1. Get all received inbound emails & contact inquiries
-  app.get("/api/received-emails", (req, res) => {
+  // 1. Get all received inbound emails & contact inquiries (Admin only)
+  app.get("/api/received-emails", requireAdminOrSecret, (req, res) => {
     const unreadCount = receivedEmailsStore.filter((m) => m.status === "unread").length;
     res.json({
       success: true,
@@ -5421,7 +5617,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
   });
 
   // 4. Send a reply to a received email
-  app.post("/api/received-emails/:id/reply", async (req, res) => {
+  app.post("/api/received-emails/:id/reply", requireAdminOrSecret, async (req, res) => {
     try {
       const { id } = req.params;
       const { replyText, subject: customSubject } = req.body;
@@ -5491,7 +5687,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
   });
 
   // 5. Update received email status (read, unread, archived)
-  app.patch("/api/received-emails/:id", (req, res) => {
+  app.patch("/api/received-emails/:id", requireAdminOrSecret, (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
@@ -5511,14 +5707,14 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
   });
 
   // 6. Delete a received email
-  app.delete("/api/received-emails/:id", (req, res) => {
+  app.delete("/api/received-emails/:id", requireAdminOrSecret, (req, res) => {
     const { id } = req.params;
     receivedEmailsStore = receivedEmailsStore.filter((m) => m.id !== id);
     res.json({ success: true, message: "Email removed from inbound inbox." });
   });
 
   // 7. Simulate an incoming inbound email (for quick testing)
-  app.post("/api/received-emails/simulate-inbound", (req, res) => {
+  app.post("/api/received-emails/simulate-inbound", requireAdminOrSecret, (req, res) => {
     const { from, fromName, subject, text, category } = req.body;
     const newRecord: ReceivedEmailRecord = {
       id: `inbound-test-${Date.now()}`,
@@ -6255,7 +6451,7 @@ Respond ONLY with a valid JSON object matching the following structure:
    * POST /api/sms/send-fast2sms-otp
    * Request Body: { phone: "9876543210" }
    */
-  app.post("/api/sms/send-fast2sms-otp", async (req, res) => {
+  app.post("/api/sms/send-fast2sms-otp", smsOtpLimiter, async (req, res) => {
     try {
       const { phone } = req.body || {};
       const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
@@ -6265,6 +6461,18 @@ Respond ONLY with a valid JSON object matching the following structure:
           error: "Please enter a valid 10-digit Indian mobile number."
         });
       }
+
+      // Enforce 45-second cooldown per phone number against SMS bombing
+      const lastSent = phoneLastSmsSentTime.get(cleanPhone) || 0;
+      const now = Date.now();
+      if (now - lastSent < 45000) {
+        const remainingSec = Math.ceil((45000 - (now - lastSent)) / 1000);
+        return res.status(429).json({
+          success: false,
+          error: `Please wait ${remainingSec} seconds before requesting another SMS OTP.`
+        });
+      }
+      phoneLastSmsSentTime.set(cleanPhone, now);
 
       // Generate random 6-digit OTP
       const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -6596,7 +6804,7 @@ Respond ONLY with a valid JSON object matching the following structure:
    * POST /api/auth/resolve-phone-user
    * Matches verified phone number against user_profiles and orders to retrieve the user's primary profile
    */
-  app.post("/api/auth/resolve-phone-user", async (req, res) => {
+  app.post("/api/auth/resolve-phone-user", phoneResolveLimiter, async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
       const { phone } = req.body || {};
@@ -6730,10 +6938,32 @@ Respond ONLY with a valid JSON object matching the following structure:
         }
       }
 
+      // Check if caller is authenticated as self or admin
+      const authUser = await getAuthenticatedUser(req);
+      const isAuthAdmin = await isAuthorizedAdminOrSecret(req);
+      const isCallerOwner = Boolean(
+        authUser && (
+          (authUser.phone && authUser.phone.includes(cleanPhone)) ||
+          (resolvedProfile?.user_id && authUser.id === resolvedProfile.user_id)
+        )
+      );
+
+      let publicProfile = resolvedProfile;
+      if (resolvedProfile && !isAuthAdmin && !isCallerOwner) {
+        // Exclude private financial and date-of-birth fields for unauthenticated requests
+        publicProfile = {
+          user_id: resolvedProfile.user_id,
+          phone: resolvedProfile.phone,
+          full_name: resolvedProfile.full_name,
+          email: resolvedProfile.email,
+          avatar_url: resolvedProfile.avatar_url
+        };
+      }
+
       return res.json({
         success: true,
         exists: Boolean(resolvedProfile),
-        profile: resolvedProfile || null
+        profile: publicProfile || null
       });
     } catch (err: any) {
       return res.status(500).json({
@@ -6799,7 +7029,7 @@ Respond ONLY with a valid JSON object matching the following structure:
    * Allows immediately verifying if the Fast2SMS API key and OTP route are working
    * Request Body: { phone: "9876543210", otp?: "123456" }
    */
-  app.post("/api/sms/test-fast2sms-otp", async (req, res) => {
+  app.post("/api/sms/test-fast2sms-otp", smsOtpLimiter, async (req, res) => {
     try {
       const { phone, otp = "582914" } = req.body || {};
 

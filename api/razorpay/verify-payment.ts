@@ -37,12 +37,25 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // Allow test simulated payments without requiring HMAC match
-    if (
+    const isLiveMode =
+      (process.env.RAZORPAY_KEY_ID || "").startsWith("rzp_live_") ||
+      process.env.NODE_ENV === "production";
+
+    const isTestOrder =
       String(razorpay_order_id || "").startsWith("order_test_") ||
       String(razorpay_payment_id || "").startsWith("pay_test_") ||
-      String(razorpay_signature || "").startsWith("sig_test_")
-    ) {
+      String(razorpay_signature || "").startsWith("sig_test_");
+
+    if (isTestOrder && isLiveMode) {
+      return res.status(403).json({
+        success: false,
+        verified: false,
+        message: "Test simulated payments are rejected in production mode."
+      });
+    }
+
+    // Allow test simulated payments only in non-production environments
+    if (isTestOrder && !isLiveMode) {
       return res.status(200).json({
         success: true,
         verified: true,

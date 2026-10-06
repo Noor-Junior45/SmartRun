@@ -5,13 +5,19 @@ import crypto from "crypto";
 declare global {
   // eslint-disable-next-line no-var
   var __fast2smsOtpStore: Map<string, { otp: string; expiresAt: number; attempts: number }> | undefined;
+  // eslint-disable-next-line no-var
+  var __fast2smsCooldownStore: Map<string, number> | undefined;
 }
 
 if (!global.__fast2smsOtpStore) {
   global.__fast2smsOtpStore = new Map();
 }
+if (!global.__fast2smsCooldownStore) {
+  global.__fast2smsCooldownStore = new Map();
+}
 
 const otpStore = global.__fast2smsOtpStore;
+const cooldownStore = global.__fast2smsCooldownStore;
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -41,6 +47,18 @@ export default async function handler(req: any, res: any) {
         error: "Please enter a valid 10-digit Indian mobile number."
       });
     }
+
+    // Enforce 45-second per-phone cooldown against SMS bombing
+    const lastSent = cooldownStore?.get(cleanPhone) || 0;
+    const now = Date.now();
+    if (now - lastSent < 45000) {
+      const remainingSec = Math.ceil((45000 - (now - lastSent)) / 1000);
+      return res.status(429).json({
+        success: false,
+        error: `Please wait ${remainingSec} seconds before requesting another SMS OTP.`
+      });
+    }
+    cooldownStore?.set(cleanPhone, now);
 
     const apiKey = (process.env.FAST2SMS_API_KEY || "").trim();
     if (!apiKey) {

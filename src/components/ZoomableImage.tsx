@@ -9,6 +9,7 @@ interface ZoomableImageProps {
   containerClassName?: string;
   onSwipeLeft?: () => void;
   onSwipeRight?: () => void;
+  onClick?: () => void;
 }
 
 export const ZoomableImage = ({
@@ -17,7 +18,8 @@ export const ZoomableImage = ({
   className = '',
   containerClassName = '',
   onSwipeLeft,
-  onSwipeRight
+  onSwipeRight,
+  onClick
 }: ZoomableImageProps) => {
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -157,6 +159,11 @@ export const ZoomableImage = ({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onClick={() => {
+        if (!isZoomed && onClick) {
+          onClick();
+        }
+      }}
       className={`relative select-none overflow-hidden touch-manipulation flex items-center justify-center ${containerClassName}`}
     >
       <img
