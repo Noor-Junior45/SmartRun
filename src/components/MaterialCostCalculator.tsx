@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { Product, CartItem } from '../types';
 import { API_BASE_URL } from '../lib/apiBase';
+import { INITIAL_PRODUCTS } from '../data/products';
 
 interface MaterialCostCalculatorProps {
   products?: Product[];
@@ -85,8 +86,8 @@ export const MaterialCostCalculator = ({
 
   // Construction
   const [cementBags, setCementBags] = useState<number>(60);
-  const [tmtSteelKg, setTmtSteelKg] = useState<number>(500);
-  const [waterproofingLiters, setWaterproofingLiters] = useState<number>(10);
+  const [tmtSteelKg, setTmtSteelKg] = useState<number>(24);
+  const [waterproofingLiters, setWaterproofingLiters] = useState<number>(2);
   const [wallPuttyBags, setWallPuttyBags] = useState<number>(4);
 
   // ---------------------------------------------------------------------------
@@ -97,9 +98,9 @@ export const MaterialCostCalculator = ({
   const [catalogSearch, setCatalogSearch] = useState<string>('');
   const [catalogCategory, setCatalogCategory] = useState<'all' | 'electrical' | 'construction'>('all');
 
-  // Available backend store products (strictly real Supabase products)
+  // Available backend store products (strictly real catalog products)
   const availableProducts = useMemo(() => {
-    return products || [];
+    return products && products.length > 0 ? products : INITIAL_PRODUCTS;
   }, [products]);
 
   // Filter available catalog products by category & search - showing backend items
@@ -167,7 +168,6 @@ export const MaterialCostCalculator = ({
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
   const [aiAdvice, setAiAdvice] = useState<string[] | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [addedToCartSuccess, setAddedToCartSuccess] = useState<boolean>(false);
 
   // Preset Handler
   const handlePresetSelect = (preset: '1bhk' | '2bhk' | '3bhk' | '4bhk' | 'commercial') => {
@@ -181,8 +181,8 @@ export const MaterialCostCalculator = ({
       setMcbBoxes(1);
       setPvcConduits(8);
       setCementBags(30);
-      setTmtSteelKg(250);
-      setWaterproofingLiters(5);
+      setTmtSteelKg(12);
+      setWaterproofingLiters(1);
       setWallPuttyBags(2);
     } else if (preset === '2bhk') {
       setHouseAreaSqFt(950);
@@ -192,8 +192,8 @@ export const MaterialCostCalculator = ({
       setMcbBoxes(1);
       setPvcConduits(14);
       setCementBags(60);
-      setTmtSteelKg(500);
-      setWaterproofingLiters(10);
+      setTmtSteelKg(24);
+      setWaterproofingLiters(2);
       setWallPuttyBags(4);
     } else if (preset === '3bhk') {
       setHouseAreaSqFt(1400);
@@ -203,8 +203,8 @@ export const MaterialCostCalculator = ({
       setMcbBoxes(2);
       setPvcConduits(22);
       setCementBags(100);
-      setTmtSteelKg(850);
-      setWaterproofingLiters(20);
+      setTmtSteelKg(40);
+      setWaterproofingLiters(4);
       setWallPuttyBags(7);
     } else if (preset === '4bhk') {
       setHouseAreaSqFt(2100);
@@ -214,8 +214,8 @@ export const MaterialCostCalculator = ({
       setMcbBoxes(3);
       setPvcConduits(32);
       setCementBags(160);
-      setTmtSteelKg(1350);
-      setWaterproofingLiters(30);
+      setTmtSteelKg(65);
+      setWaterproofingLiters(6);
       setWallPuttyBags(11);
     } else if (preset === 'commercial') {
       setHouseAreaSqFt(1200);
@@ -225,33 +225,120 @@ export const MaterialCostCalculator = ({
       setMcbBoxes(3);
       setPvcConduits(28);
       setCementBags(50);
-      setTmtSteelKg(400);
-      setWaterproofingLiters(15);
+      setTmtSteelKg(20);
+      setWaterproofingLiters(3);
       setWallPuttyBags(6);
     }
   };
 
-  // Adjust material price multipliers based on quality tier
-  const priceTierMultiplier = useMemo(() => {
-    if (qualityTier === 'standard') return 0.92;
-    if (qualityTier === 'heavy_duty') return 1.15;
-    return 1.0; // premium
-  }, [qualityTier]);
+  // Selected listed products from our actual store catalog (strictly real products & prices)
+  const selectedProducts = useMemo(() => {
+    // 1. Light Wire (1.5 Sqmm / 1.0 Sqmm)
+    let wireLight =
+      availableProducts.find((p) => p.name.includes('1.5 Sqmm') && p.category === 'electrical') ||
+      availableProducts.find((p) => p.id === 'p3') ||
+      INITIAL_PRODUCTS[2];
+    if (qualityTier === 'standard') {
+      wireLight =
+        availableProducts.find((p) => p.name.includes('1.0 Sqmm') && p.category === 'electrical') ||
+        wireLight;
+    }
 
-  // Wholesale unit rates (Kolkata Kasba Depot Rates)
+    // 2. Power Wire (2.5 Sqmm / 4.0 Sqmm)
+    let wirePower =
+      availableProducts.find((p) => p.name.includes('2.5 Sqmm') && p.category === 'electrical') ||
+      availableProducts.find((p) => p.id === 'p4') ||
+      INITIAL_PRODUCTS[3];
+    if (qualityTier === 'heavy_duty') {
+      wirePower =
+        availableProducts.find((p) => p.name.includes('4.0 Sqmm') && p.category === 'electrical') ||
+        wirePower;
+    }
+
+    // 3. Modular Switches
+    let switchItem =
+      availableProducts.find((p) => p.name.includes('Modular Switch') && p.category === 'electrical') ||
+      availableProducts.find((p) => p.id === 'p9') ||
+      INITIAL_PRODUCTS[8];
+    if (qualityTier === 'heavy_duty') {
+      switchItem =
+        availableProducts.find((p) => p.name.includes('Combined Socket') && p.category === 'electrical') ||
+        switchItem;
+    }
+
+    // 4. MCB Distribution Board
+    let mcbItem =
+      availableProducts.find((p) => (p.name.includes('Distribution Board') || p.name.includes('SPN')) && p.category === 'electrical') ||
+      availableProducts.find((p) => p.id === 'p13') ||
+      INITIAL_PRODUCTS[12];
+    if (qualityTier === 'standard') {
+      mcbItem =
+        availableProducts.find((p) => p.name.includes('16A Single Pole') && p.category === 'electrical') ||
+        mcbItem;
+    }
+
+    // 5. Heavy Duty PVC Conduit Pipe
+    const conduitItem =
+      availableProducts.find((p) => p.name.includes('Conduit Pipe') && p.category === 'electrical') ||
+      availableProducts.find((p) => p.id === 'p17') ||
+      INITIAL_PRODUCTS[16];
+
+    // 6. Cement (UltraTech 53 Grade / ACC)
+    let cementItem =
+      availableProducts.find((p) => (p.name.includes('UltraTech') || p.name.includes('Cement')) && p.category === 'construction') ||
+      availableProducts.find((p) => p.id === 'p24') ||
+      INITIAL_PRODUCTS[23];
+    if (qualityTier === 'standard') {
+      cementItem =
+        availableProducts.find((p) => p.name.includes('ACC') && p.category === 'construction') ||
+        cementItem;
+    }
+
+    // 7. TMT Steel (Tata Tiscon Rebars)
+    const tmtItem =
+      availableProducts.find((p) => (p.name.includes('Tata Tiscon') || p.name.includes('TMT')) && p.category === 'construction') ||
+      availableProducts.find((p) => p.id === 'p26') ||
+      INITIAL_PRODUCTS[25];
+
+    // 8. Waterproofing (Dr. Fixit)
+    const wpItem =
+      availableProducts.find((p) => (p.name.includes('Dr. Fixit') || p.name.includes('Waterproofing')) && p.category === 'construction') ||
+      availableProducts.find((p) => p.id === 'p31') ||
+      INITIAL_PRODUCTS[30];
+
+    // 9. Wall Putty (Asian Paints TruCare)
+    const puttyItem =
+      availableProducts.find((p) => (p.name.includes('Wall Putty') || p.name.includes('TruCare')) && p.category === 'construction') ||
+      availableProducts.find((p) => p.id === 'p29') ||
+      INITIAL_PRODUCTS[28];
+
+    return {
+      wireLight,
+      wirePower,
+      switchItem,
+      mcbItem,
+      conduitItem,
+      cementItem,
+      tmtItem,
+      wpItem,
+      puttyItem
+    };
+  }, [availableProducts, qualityTier]);
+
+  // Real store catalog product rates
   const rates = useMemo(() => {
     return {
-      wireLight: Math.round(3600 * priceTierMultiplier),
-      wirePower: Math.round(4200 * priceTierMultiplier),
-      switchPoint: Math.round(140 * priceTierMultiplier),
-      mcbBox: Math.round(1150 * priceTierMultiplier),
-      conduitPipe: 120,
-      cementBag: Math.round(385 * (qualityTier === 'heavy_duty' ? 1.05 : 1.0)),
-      tmtKg: 62,
-      wpLiter: 135,
-      puttyBag: 690
+      wireLight: selectedProducts.wireLight.price,
+      wirePower: selectedProducts.wirePower.price,
+      switchPoint: selectedProducts.switchItem.price,
+      mcbBox: selectedProducts.mcbItem.price,
+      conduitPipe: selectedProducts.conduitItem.price,
+      cementBag: selectedProducts.cementItem.price,
+      tmtKg: selectedProducts.tmtItem.price,
+      wpLiter: selectedProducts.wpItem.price,
+      puttyBag: selectedProducts.puttyItem.price
     };
-  }, [priceTierMultiplier, qualityTier]);
+  }, [selectedProducts]);
 
   // Custom Selected Products Subtotal
   const customItemsSubtotal = useMemo(() => {
@@ -363,332 +450,7 @@ export const MaterialCostCalculator = ({
     }
   };
 
-  // 1-Click "Add All Materials to Cart"
-  const handleAddAllToCart = () => {
-    if (!onAddToCart) return;
-
-    // Helper to verify if an item exists in the actual inventory catalog and check stock
-    const checkInventoryStatus = (
-      id: string,
-      searchTerms: {
-        brand?: string;
-        category?: string;
-        subCategory?: string;
-        keywords?: string[];
-      }
-    ): { matchedProduct: Product | null; inStock: boolean; stockCount: number } => {
-      const storeCatalog = availableProducts;
-
-      // 1. Direct ID match if it's already an existing store catalog ID
-      let matched = storeCatalog.find((p) => p.id === id);
-
-      // 2. Search by category / brand / keywords
-      if (!matched && searchTerms.keywords && searchTerms.keywords.length > 0) {
-        matched = storeCatalog.find((p) => {
-          if (searchTerms.category && p.category !== searchTerms.category) return false;
-          const pName = (p.name || '').toLowerCase();
-          const pBrand = (p.brand || '').toLowerCase();
-          const pTags = (p.tags || []).map((t) => t.toLowerCase());
-
-          const matchesBrand =
-            !searchTerms.brand ||
-            pBrand.includes(searchTerms.brand.toLowerCase()) ||
-            pName.includes(searchTerms.brand.toLowerCase());
-          const matchesKeyword = searchTerms.keywords!.some(
-            (kw) => pName.includes(kw.toLowerCase()) || pTags.some((t) => t.includes(kw.toLowerCase()))
-          );
-
-          return matchesBrand && matchesKeyword;
-        });
-      }
-
-      // If matched in store inventory, verify its stock status
-      if (matched) {
-        const isStockAvailable = Boolean(
-          matched.inStock && (matched.stockCount === undefined || matched.stockCount > 0)
-        );
-        return {
-          matchedProduct: matched,
-          inStock: isStockAvailable,
-          stockCount: isStockAvailable ? (matched.stockCount ?? 100) : 0
-        };
-      }
-
-      // If not present in store inventory
-      return {
-        matchedProduct: null,
-        inStock: false,
-        stockCount: 0
-      };
-    };
-
-    const createEstProduct = (
-      id: string,
-      name: string,
-      brand: string,
-      category: 'electrical' | 'construction',
-      subCategory: string,
-      price: number,
-      originalPrice: number,
-      unit: string,
-      deliveryMinutes: number,
-      image: string,
-      description: string,
-      searchKeywords?: string[]
-    ): Product => {
-      const inv = checkInventoryStatus(id, {
-        brand,
-        category,
-        subCategory,
-        keywords: searchKeywords || [name.split(' ')[0], subCategory]
-      });
-
-      return {
-        id: inv.matchedProduct ? inv.matchedProduct.id : id,
-        name: inv.matchedProduct ? inv.matchedProduct.name : name,
-        brand: inv.matchedProduct ? inv.matchedProduct.brand : brand,
-        category,
-        subCategory,
-        price: inv.matchedProduct ? inv.matchedProduct.price : price,
-        originalPrice: inv.matchedProduct ? (inv.matchedProduct.originalPrice || originalPrice) : originalPrice,
-        discountPercentage: Math.max(0, Math.round(((originalPrice - price) / originalPrice) * 100)),
-        unit: inv.matchedProduct ? (inv.matchedProduct.unit || unit) : unit,
-        rating: inv.matchedProduct ? (inv.matchedProduct.rating || 4.9) : 4.9,
-        reviewsCount: inv.matchedProduct ? (inv.matchedProduct.reviewsCount || 142) : 142,
-        deliveryMinutes: inv.matchedProduct ? (inv.matchedProduct.deliveryMinutes || deliveryMinutes) : deliveryMinutes,
-        image: inv.matchedProduct?.image || image,
-        inStock: inv.inStock,
-        stockCount: inv.stockCount,
-        isEmergency: false,
-        specs: inv.matchedProduct?.specs || {
-          Origin: inv.inStock ? 'Depot Stock' : 'Out of Stock (On-Demand Direct Dispatch)',
-          Certification: 'ISI Certified'
-        },
-        description: inv.matchedProduct?.description || description,
-        tags: inv.matchedProduct?.tags || [category, subCategory, 'Wholesale']
-      };
-    };
-
-    const itemsToAdd: Array<{ product: Product; quantity: number }> = [];
-
-    if (projectScope === 'electrical' || projectScope === 'both') {
-      if (wireCoilsLight > 0) {
-        itemsToAdd.push({
-          product: createEstProduct(
-            'est-wire-light',
-            'Polycab FR-LSH 1.5 sq.mm Copper Wire Coil (90m)',
-            'Polycab',
-            'electrical',
-            'Wires & Cables',
-            rates.wireLight,
-            rates.wireLight + 400,
-            'Coil (90m)',
-            60,
-            'https://i.imgur.com/8QZpP5E.png',
-            '100% Pure Electrolytic Copper wire ISI 694 certified for lighting & fans.',
-            ['1.5', 'wire', 'polycab']
-          ),
-          quantity: wireCoilsLight
-        });
-      }
-
-      if (wireCoilsPower > 0) {
-        itemsToAdd.push({
-          product: createEstProduct(
-            'est-wire-power',
-            'RR Kabel FlameX 2.5/4.0 sq.mm Heavy Power Cable (90m)',
-            'RR Kabel',
-            'electrical',
-            'Wires & Cables',
-            rates.wirePower,
-            rates.wirePower + 500,
-            'Coil (90m)',
-            60,
-            'https://i.imgur.com/G9LIx1R.jpeg',
-            'Heavy duty fire retardant cable for Air Conditioners, Geysers and Induction.',
-            ['2.5', '4.0', 'power', 'wire', 'cable']
-          ),
-          quantity: wireCoilsPower
-        });
-      }
-
-      if (modularSwitches > 0) {
-        itemsToAdd.push({
-          product: createEstProduct(
-            'est-modular-switches',
-            'Schneider Opale 6A/16A Modular Switch & Socket Set',
-            'Schneider',
-            'electrical',
-            'Modular Switches',
-            rates.switchPoint,
-            rates.switchPoint + 30,
-            'Point Set',
-            60,
-            'https://i.imgur.com/Kz3Hn96.jpeg',
-            'Gloss white fire-resistant polycarbonate modular switch points with safety shutter.',
-            ['switch', 'schneider', 'socket']
-          ),
-          quantity: modularSwitches
-        });
-      }
-
-      if (mcbBoxes > 0) {
-        itemsToAdd.push({
-          product: createEstProduct(
-            'est-mcb-box',
-            'Havells Double Door SPN/TPN MCB Distribution Box + Isolator',
-            'Havells',
-            'electrical',
-            'Distribution Boards',
-            rates.mcbBox,
-            rates.mcbBox + 250,
-            'Set',
-            60,
-            'https://i.imgur.com/SQXJ1g6.jpeg',
-            'IP43 rated sheet metal distribution box with DIN rail and neutral bus bar.',
-            ['mcb', 'distribution', 'havells']
-          ),
-          quantity: mcbBoxes
-        });
-      }
-
-      if (pvcConduits > 0) {
-        itemsToAdd.push({
-          product: createEstProduct(
-            'est-pvc-conduit',
-            'Heavy Rigid PVC Electrical Conduit Pipe (20mm/25mm - 3m)',
-            'Finolex',
-            'electrical',
-            'PVC Items',
-            rates.conduitPipe,
-            rates.conduitPipe + 25,
-            'Pipe (3m)',
-            60,
-            'https://i.imgur.com/G9LIx1R.jpeg',
-            'Unplasticised heavy PVC pipe for wall and slab concealed wiring.',
-            ['conduit', 'pvc', 'pipe']
-          ),
-          quantity: pvcConduits
-        });
-      }
-    }
-
-    if (projectScope === 'construction' || projectScope === 'both') {
-      if (cementBags > 0) {
-        itemsToAdd.push({
-          product: createEstProduct(
-            'est-cement-bag',
-            'UltraTech 53 Grade Fresh OPC Cement (50kg Bag)',
-            'UltraTech',
-            'construction',
-            'Cement & Concrete',
-            rates.cementBag,
-            rates.cementBag + 40,
-            '50kg Bag',
-            120,
-            'https://i.imgur.com/u0PYh6L.png',
-            'Fresh OPC 53 Grade high-early strength structural cement from factory depot.',
-            ['cement', 'ultratech']
-          ),
-          quantity: cementBags
-        });
-      }
-
-      if (tmtSteelKg > 0) {
-        itemsToAdd.push({
-          product: createEstProduct(
-            'est-tmt-steel',
-            'Tata Tiscon 550D Super Ductile Fe TMT Rebar (kg)',
-            'Tata Tiscon',
-            'construction',
-            'TMT Steel',
-            rates.tmtKg,
-            rates.tmtKg + 6,
-            'kg',
-            120,
-            'https://i.imgur.com/WwkWGNa.jpeg',
-            'Primary mill high-ductility seismic earthquake resistant TMT steel bars.',
-            ['tmt', 'steel', 'tiscon']
-          ),
-          quantity: tmtSteelKg
-        });
-      }
-
-      if (waterproofingLiters > 0) {
-        itemsToAdd.push({
-          product: createEstProduct(
-            'est-waterproofing',
-            'Dr. Fixit 101 LW+ Integral Waterproofing Liquid (1L)',
-            'Dr. Fixit',
-            'construction',
-            'Waterproofing',
-            rates.wpLiter,
-            rates.wpLiter + 20,
-            'Liter',
-            60,
-            'https://i.imgur.com/PmoHsyt.png',
-            'Corrosion inhibitor liquid waterproofing admixture for concrete and plaster.',
-            ['waterproof', 'fixit']
-          ),
-          quantity: waterproofingLiters
-        });
-      }
-
-      if (wallPuttyBags > 0) {
-        itemsToAdd.push({
-          product: createEstProduct(
-            'est-wall-putty',
-            'Asian Paints TruCare Polymer White Wall Putty (20kg Bag)',
-            'Asian Paints',
-            'construction',
-            'Paints & Putty',
-            rates.puttyBag,
-            rates.puttyBag + 60,
-            '20kg Bag',
-            60,
-            'https://i.imgur.com/PZgJwqo.png',
-            'White cement based water-resistant polymer putty for smooth interior finish.',
-            ['putty', 'asian paints']
-          ),
-          quantity: wallPuttyBags
-        });
-      }
-    }
-
-    // Add custom selected items from catalog (verifying their live stock)
-    customSelectedItems.forEach((item) => {
-      if (item.quantity > 0) {
-        const storeCatalog = availableProducts;
-        const catalogMatch = storeCatalog.find((p) => p.id === item.product.id);
-        const inStock = Boolean(
-          catalogMatch
-            ? catalogMatch.inStock && (catalogMatch.stockCount === undefined || catalogMatch.stockCount > 0)
-            : item.product.inStock && (item.product.stockCount === undefined || item.product.stockCount > 0)
-        );
-        const stockCount = inStock ? (catalogMatch?.stockCount ?? item.product.stockCount ?? 50) : 0;
-
-        itemsToAdd.push({
-          product: {
-            ...item.product,
-            inStock,
-            stockCount
-          },
-          quantity: item.quantity
-        });
-      }
-    });
-
-    itemsToAdd.forEach((item) => {
-      onAddToCart(item.product, item.quantity);
-    });
-
-    setAddedToCartSuccess(true);
-    setTimeout(() => {
-      setAddedToCartSuccess(false);
-    }, 4000);
-  };
-
-  // WhatsApp quotation link with ALL items formatted clearly
+  // WhatsApp quotation link with real catalog products formatted clearly
   const whatsappQuoteUrl = useMemo(() => {
     const itemsList: string[] = [];
 
@@ -697,27 +459,27 @@ export const MaterialCostCalculator = ({
       const elecItems: string[] = [];
       if (wireCoilsLight > 0) {
         elecItems.push(
-          `  • Polycab 1.5 sq.mm FR Copper Wire (90m): ${wireCoilsLight} coils × ₹${rates.wireLight} = ₹${(wireCoilsLight * rates.wireLight).toLocaleString('en-IN')}`
+          `  • ${selectedProducts.wireLight.name}: ${wireCoilsLight} ${selectedProducts.wireLight.unit || 'coils'} × ₹${rates.wireLight} = ₹${(wireCoilsLight * rates.wireLight).toLocaleString('en-IN')}`
         );
       }
       if (wireCoilsPower > 0) {
         elecItems.push(
-          `  • RR Kabel 2.5/4.0 sq.mm Power Cable (90m): ${wireCoilsPower} coils × ₹${rates.wirePower} = ₹${(wireCoilsPower * rates.wirePower).toLocaleString('en-IN')}`
+          `  • ${selectedProducts.wirePower.name}: ${wireCoilsPower} ${selectedProducts.wirePower.unit || 'coils'} × ₹${rates.wirePower} = ₹${(wireCoilsPower * rates.wirePower).toLocaleString('en-IN')}`
         );
       }
       if (modularSwitches > 0) {
         elecItems.push(
-          `  • Modular Switches & Sockets: ${modularSwitches} points × ₹${rates.switchPoint} = ₹${(modularSwitches * rates.switchPoint).toLocaleString('en-IN')}`
+          `  • ${selectedProducts.switchItem.name}: ${modularSwitches} ${selectedProducts.switchItem.unit || 'units'} × ₹${rates.switchPoint} = ₹${(modularSwitches * rates.switchPoint).toLocaleString('en-IN')}`
         );
       }
       if (mcbBoxes > 0) {
         elecItems.push(
-          `  • Havells Double Door MCB Box: ${mcbBoxes} units × ₹${rates.mcbBox} = ₹${(mcbBoxes * rates.mcbBox).toLocaleString('en-IN')}`
+          `  • ${selectedProducts.mcbItem.name}: ${mcbBoxes} ${selectedProducts.mcbItem.unit || 'units'} × ₹${rates.mcbBox} = ₹${(mcbBoxes * rates.mcbBox).toLocaleString('en-IN')}`
         );
       }
       if (pvcConduits > 0) {
         elecItems.push(
-          `  • Heavy PVC Conduit Pipes (3m): ${pvcConduits} pipes × ₹${rates.conduitPipe} = ₹${(pvcConduits * rates.conduitPipe).toLocaleString('en-IN')}`
+          `  • ${selectedProducts.conduitItem.name}: ${pvcConduits} ${selectedProducts.conduitItem.unit || 'pipes'} × ₹${rates.conduitPipe} = ₹${(pvcConduits * rates.conduitPipe).toLocaleString('en-IN')}`
         );
       }
       if (elecItems.length > 0) {
@@ -732,22 +494,22 @@ export const MaterialCostCalculator = ({
       const constItems: string[] = [];
       if (cementBags > 0) {
         constItems.push(
-          `  • UltraTech 53 Grade Fresh OPC Cement: ${cementBags} Bags × ₹${rates.cementBag} = ₹${(cementBags * rates.cementBag).toLocaleString('en-IN')}`
+          `  • ${selectedProducts.cementItem.name}: ${cementBags} ${selectedProducts.cementItem.unit || 'bags'} × ₹${rates.cementBag} = ₹${(cementBags * rates.cementBag).toLocaleString('en-IN')}`
         );
       }
       if (tmtSteelKg > 0) {
         constItems.push(
-          `  • Tata Tiscon 550D TMT Steel Rebars: ${tmtSteelKg} kg × ₹${rates.tmtKg} = ₹${(tmtSteelKg * rates.tmtKg).toLocaleString('en-IN')}`
+          `  • ${selectedProducts.tmtItem.name}: ${tmtSteelKg} ${selectedProducts.tmtItem.unit || 'rebars'} × ₹${rates.tmtKg} = ₹${(tmtSteelKg * rates.tmtKg).toLocaleString('en-IN')}`
         );
       }
       if (waterproofingLiters > 0) {
         constItems.push(
-          `  • Dr. Fixit 101 LW+ Waterproofing Liquid: ${waterproofingLiters} L × ₹${rates.wpLiter} = ₹${(waterproofingLiters * rates.wpLiter).toLocaleString('en-IN')}`
+          `  • ${selectedProducts.wpItem.name}: ${waterproofingLiters} ${selectedProducts.wpItem.unit || 'packs'} × ₹${rates.wpLiter} = ₹${(waterproofingLiters * rates.wpLiter).toLocaleString('en-IN')}`
         );
       }
       if (wallPuttyBags > 0) {
         constItems.push(
-          `  • Asian Paints TruCare Polymer Wall Putty (20kg): ${wallPuttyBags} Bags × ₹${rates.puttyBag} = ₹${(wallPuttyBags * rates.puttyBag).toLocaleString('en-IN')}`
+          `  • ${selectedProducts.puttyItem.name}: ${wallPuttyBags} ${selectedProducts.puttyItem.unit || 'bags'} × ₹${rates.puttyBag} = ₹${(wallPuttyBags * rates.puttyBag).toLocaleString('en-IN')}`
         );
       }
       if (constItems.length > 0) {
@@ -807,7 +569,8 @@ export const MaterialCostCalculator = ({
     wallPuttyBags,
     customSelectedItems,
     calculatedCosts,
-    rates
+    rates,
+    selectedProducts
   ]);
 
   return (
@@ -1006,16 +769,22 @@ export const MaterialCostCalculator = ({
             {/* Electrical Materials */}
             {(projectScope === 'electrical' || projectScope === 'both') && (
               <>
-                {/* 1.5mm Wire */}
+                {/* Light Wire */}
                 <div className={`py-2.5 px-1 flex items-center justify-between gap-3 transition-colors ${
                   wireCoilsLight === 0 ? 'opacity-40' : ''
                 }`}>
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="text-xs font-bold text-slate-900 leading-snug break-words">
-                      1.5mm Light Wire
+                      {selectedProducts.wireLight.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      ₹{rates.wireLight}/coil (90m)
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+                      <span>₹{rates.wireLight} / {selectedProducts.wireLight.unit || 'coil'}</span>
+                      {selectedProducts.wireLight.brand && (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-800 font-semibold">{selectedProducts.wireLight.brand}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="w-[88px] flex items-center justify-end gap-1 shrink-0 ml-auto">
@@ -1041,16 +810,22 @@ export const MaterialCostCalculator = ({
                   </div>
                 </div>
 
-                {/* 2.5/4mm Wire */}
+                {/* Power Wire */}
                 <div className={`py-2.5 px-1 flex items-center justify-between gap-3 transition-colors ${
                   wireCoilsPower === 0 ? 'opacity-40' : ''
                 }`}>
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="text-xs font-bold text-slate-900 leading-snug break-words">
-                      2.5/4mm Power Wire
+                      {selectedProducts.wirePower.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      ₹{rates.wirePower}/coil (90m)
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+                      <span>₹{rates.wirePower} / {selectedProducts.wirePower.unit || 'coil'}</span>
+                      {selectedProducts.wirePower.brand && (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-800 font-semibold">{selectedProducts.wirePower.brand}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="w-[88px] flex items-center justify-end gap-1 shrink-0 ml-auto">
@@ -1082,10 +857,16 @@ export const MaterialCostCalculator = ({
                 }`}>
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="text-xs font-bold text-slate-900 leading-snug break-words">
-                      Modular Switches
+                      {selectedProducts.switchItem.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      ₹{rates.switchPoint}/point
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+                      <span>₹{rates.switchPoint} / {selectedProducts.switchItem.unit || 'point'}</span>
+                      {selectedProducts.switchItem.brand && (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-800 font-semibold">{selectedProducts.switchItem.brand}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="w-[88px] flex items-center justify-end gap-1 shrink-0 ml-auto">
@@ -1117,10 +898,16 @@ export const MaterialCostCalculator = ({
                 }`}>
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="text-xs font-bold text-slate-900 leading-snug break-words">
-                      MCB Box + Isolator
+                      {selectedProducts.mcbItem.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      ₹{rates.mcbBox}/box
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+                      <span>₹{rates.mcbBox} / {selectedProducts.mcbItem.unit || 'unit'}</span>
+                      {selectedProducts.mcbItem.brand && (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-800 font-semibold">{selectedProducts.mcbItem.brand}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="w-[88px] flex items-center justify-end gap-1 shrink-0 ml-auto">
@@ -1157,10 +944,16 @@ export const MaterialCostCalculator = ({
                 }`}>
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="text-xs font-bold text-slate-900 leading-snug break-words">
-                      UltraTech Cement
+                      {selectedProducts.cementItem.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      ₹{rates.cementBag}/50kg bag
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+                      <span>₹{rates.cementBag} / {selectedProducts.cementItem.unit || 'bag'}</span>
+                      {selectedProducts.cementItem.brand && (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-800 font-semibold">{selectedProducts.cementItem.brand}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="w-[88px] flex items-center justify-end gap-1 shrink-0 ml-auto">
@@ -1192,16 +985,22 @@ export const MaterialCostCalculator = ({
                 }`}>
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="text-xs font-bold text-slate-900 leading-snug break-words">
-                      Tata Tiscon TMT
+                      {selectedProducts.tmtItem.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      ₹{rates.tmtKg}/kg
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+                      <span>₹{rates.tmtKg} / {selectedProducts.tmtItem.unit || 'rebar'}</span>
+                      {selectedProducts.tmtItem.brand && (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-800 font-semibold">{selectedProducts.tmtItem.brand}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="w-[88px] flex items-center justify-end gap-1 shrink-0 ml-auto">
                     <button
                       type="button"
-                      onClick={() => setTmtSteelKg(Math.max(0, tmtSteelKg <= 50 ? 0 : tmtSteelKg - 50))}
+                      onClick={() => setTmtSteelKg(Math.max(0, tmtSteelKg <= 2 ? 0 : tmtSteelKg - 2))}
                       className="relative overflow-hidden w-7 h-7 rounded-lg bg-gradient-to-b from-rose-500 via-red-600 to-rose-700 hover:from-rose-400 hover:via-red-500 hover:to-rose-600 active:scale-90 text-white flex items-center justify-center font-black text-xs shrink-0 select-none cursor-pointer border border-rose-300/40 shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.5),inset_0_-1.5px_2px_rgba(0,0,0,0.3),0_2px_6px_rgba(225,29,72,0.3)] transition-all duration-150"
                     >
                       <span className="pointer-events-none absolute inset-x-0 top-0 h-[45%] bg-gradient-to-b from-white/40 to-transparent rounded-t-[6px]" />
@@ -1212,7 +1011,7 @@ export const MaterialCostCalculator = ({
                     </span>
                     <button
                       type="button"
-                      onClick={() => setTmtSteelKg(tmtSteelKg + 50)}
+                      onClick={() => setTmtSteelKg(tmtSteelKg + 2)}
                       className="relative overflow-hidden w-7 h-7 rounded-lg bg-gradient-to-b from-[#34D399] via-[#10B981] to-[#059669] hover:from-[#6EE7B7] hover:via-[#34D399] hover:to-[#10B981] active:scale-90 text-white flex items-center justify-center font-black text-xs shrink-0 select-none cursor-pointer border border-emerald-300/40 shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.6),inset_0_-1.5px_2px_rgba(0,0,0,0.25),0_2px_6px_rgba(5,150,105,0.3)] transition-all duration-150"
                     >
                       <span className="pointer-events-none absolute inset-x-0 top-0 h-[45%] bg-gradient-to-b from-white/40 to-transparent rounded-t-[6px]" />
@@ -1227,10 +1026,16 @@ export const MaterialCostCalculator = ({
                 }`}>
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="text-xs font-bold text-slate-900 leading-snug break-words">
-                      Dr. Fixit Liquid
+                      {selectedProducts.wpItem.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      ₹{rates.wpLiter}/Liter
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+                      <span>₹{rates.wpLiter} / {selectedProducts.wpItem.unit || 'pack'}</span>
+                      {selectedProducts.wpItem.brand && (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-800 font-semibold">{selectedProducts.wpItem.brand}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="w-[88px] flex items-center justify-end gap-1 shrink-0 ml-auto">
@@ -1262,10 +1067,16 @@ export const MaterialCostCalculator = ({
                 }`}>
                   <div className="flex-1 min-w-0 pr-2">
                     <div className="text-xs font-bold text-slate-900 leading-snug break-words">
-                      Asian Paints Putty
+                      {selectedProducts.puttyItem.name}
                     </div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      ₹{rates.puttyBag}/20kg
+                    <div className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+                      <span>₹{rates.puttyBag} / {selectedProducts.puttyItem.unit || 'bag'}</span>
+                      {selectedProducts.puttyItem.brand && (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-800 font-semibold">{selectedProducts.puttyItem.brand}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="w-[88px] flex items-center justify-end gap-1 shrink-0 ml-auto">
@@ -1489,45 +1300,21 @@ export const MaterialCostCalculator = ({
             </div>
           </div>
 
-          {/* Action buttons (Phone & Desktop: Left = WhatsApp, Right = Add to Cart, Equal Size) */}
-          <div className="flex items-center gap-2.5 w-full pt-1">
+          {/* Action button: WhatsApp Estimate (Centered in Middle) */}
+          <div className="flex justify-center items-center w-full pt-1">
             <a
               href={whatsappQuoteUrl}
               target="_blank"
               rel="noreferrer"
-              className="relative overflow-hidden flex-1 py-3 px-3 rounded-xl bg-gradient-to-b from-[#10B981] via-[#059669] to-[#047857] hover:from-[#34D399] hover:via-[#10B981] hover:to-[#059669] text-white font-black font-sf-pro text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer active:scale-[0.98] text-center border border-emerald-300/40 shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.45),inset_0_-2px_4px_rgba(0,0,0,0.25),0_4px_12px_rgba(5,150,105,0.35)]"
+              className="relative overflow-hidden w-full sm:w-auto sm:min-w-[280px] max-w-md py-3 px-6 rounded-xl bg-gradient-to-b from-[#10B981] via-[#059669] to-[#047857] hover:from-[#34D399] hover:via-[#10B981] hover:to-[#059669] text-white font-black font-sf-pro text-xs sm:text-sm flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer active:scale-[0.98] text-center border border-emerald-300/40 shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.45),inset_0_-2px_4px_rgba(0,0,0,0.25),0_4px_12px_rgba(5,150,105,0.35)]"
             >
               {/* Apple-style Top Specular Liquid Glass Sheen */}
               <span className="pointer-events-none absolute inset-x-0 top-0 h-[48%] bg-gradient-to-b from-white/35 to-transparent rounded-t-[10px]" />
               <svg className="w-4 h-4 fill-white shrink-0 relative z-10 drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" viewBox="0 0 24 24">
                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
               </svg>
-              <span className="relative z-10 drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]">WhatsApp</span>
+              <span className="relative z-10 drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]">WhatsApp Estimate</span>
             </a>
-
-            <button
-              type="button"
-              onClick={handleAddAllToCart}
-              className={`relative overflow-hidden flex-1 py-3 px-3 rounded-xl font-black font-sf-pro text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                addedToCartSuccess
-                  ? 'bg-gradient-to-b from-[#10B981] via-[#059669] to-[#047857] text-white border border-emerald-300/40 shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.45),inset_0_-2px_4px_rgba(0,0,0,0.25),0_4px_12px_rgba(5,150,105,0.35)]'
-                  : 'bg-gradient-to-b from-[#FDE047] via-[#FBBF24] to-[#F59E0B] hover:from-[#FEF08A] hover:via-[#FCD34D] hover:to-[#FBBF24] text-slate-950 border border-yellow-100/70 shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.8),inset_0_-2px_4px_rgba(180,83,9,0.25),0_4px_12px_rgba(245,158,11,0.32)]'
-              }`}
-            >
-              {/* Apple-style Top Specular Liquid Glass Sheen */}
-              <span className="pointer-events-none absolute inset-x-0 top-0 h-[48%] bg-gradient-to-b from-white/45 to-transparent rounded-t-[10px]" />
-              {addedToCartSuccess ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-white relative z-10 drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]" />
-                  <span className="relative z-10 drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]">Added!</span>
-                </>
-              ) : (
-                <>
-                  <ShoppingCart className="w-4 h-4 text-slate-950 relative z-10" />
-                  <span className="relative z-10">Add to Cart</span>
-                </>
-              )}
-            </button>
           </div>
 
         </div>

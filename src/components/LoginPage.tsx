@@ -1349,8 +1349,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 </div>
               )}
 
-              {/* Create Account Helper Toggle */}
-              <div className="text-center pt-1">
+              {/* Switch to Create Account */}
+              <div className="pt-2 text-center">
                 <button
                   type="button"
                   onClick={() => {
@@ -1359,7 +1359,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   }}
                   className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
                 >
-                  Don't have an account? <span className="font-bold text-amber-700 hover:text-amber-800">Create one</span>
+                  Don't have an account?{' '}
+                  <span className="font-bold text-amber-700 hover:text-amber-800">Create one</span>
                 </button>
               </div>
             </form>
@@ -1654,7 +1655,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 </div>
               )}
 
-              <div className="text-center pt-1">
+              {/* Switch to Sign In */}
+              <div className="pt-2 text-center">
                 <button
                   type="button"
                   onClick={() => {
@@ -1663,7 +1665,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   }}
                   className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
                 >
-                  Already have an account? <span className="font-bold text-amber-700 hover:text-amber-800">Login</span>
+                  Already have an account?{' '}
+                  <span className="font-bold text-amber-700 hover:text-amber-800">Login</span>
                 </button>
               </div>
             </form>
@@ -1707,19 +1710,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   </>
                 )}
               </button>
-
-              <div className="text-center pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('signin');
-                    resetMessages();
-                  }}
-                  className="text-xs font-bold text-amber-700 hover:text-amber-800 cursor-pointer"
-                >
-                  Remember password? Back to Login
-                </button>
-              </div>
             </form>
           )}
 
@@ -1775,44 +1765,61 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
 
         </div>
 
-        {/* Simple Hyperlink Legal Text with Minimal Circle Checkbox */}
-        <div className="pt-3 text-center border-t border-slate-100">
-          <p className="text-xs text-slate-500 inline-flex items-center justify-center gap-2">
+        {/* Terms of Service & Privacy Policy Agreement (Bottom Position) */}
+        {(mode === 'signin' || mode === 'signup') && (
+          <div className="pt-3 text-center border-t border-slate-100">
+            <p className="text-xs text-slate-500 inline-flex items-center justify-center gap-2">
+              <button
+                type="button"
+                id="terms-agreed-tick"
+                role="checkbox"
+                aria-checked={termsAgreed}
+                aria-label="Agree to terms of service and privacy policy"
+                onClick={handleToggleTerms}
+                className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                  termsAgreed
+                    ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
+                    : 'border-slate-300 bg-white hover:border-slate-400'
+                }`}
+              >
+                {termsAgreed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+              </button>
+              <span className="leading-tight">
+                <span onClick={handleToggleTerms} className="cursor-pointer select-none">
+                  You agree to our{' '}
+                </span>
+                <Link
+                  to="/terms"
+                  className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
+                >
+                  Terms of service
+                </Link>
+                {' '}and{' '}
+                <Link
+                  to="/privacy"
+                  className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
+                >
+                  Privacy policy
+                </Link>
+              </span>
+            </p>
+          </div>
+        )}
+
+        {mode === 'forgot' && (
+          <div className="pt-3 text-center border-t border-slate-100">
             <button
               type="button"
-              id="terms-agreed-tick"
-              role="checkbox"
-              aria-checked={termsAgreed}
-              aria-label="Agree to terms of service and privacy policy"
-              onClick={handleToggleTerms}
-              className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
-                termsAgreed
-                  ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
-                  : 'border-slate-300 bg-white hover:border-slate-400'
-              }`}
+              onClick={() => {
+                setMode('signin');
+                resetMessages();
+              }}
+              className="text-xs font-bold text-amber-700 hover:text-amber-800 cursor-pointer"
             >
-              {termsAgreed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+              Remember password? Back to Login
             </button>
-            <span className="leading-tight">
-              <span onClick={handleToggleTerms} className="cursor-pointer select-none">
-                You agree to our{' '}
-              </span>
-              <Link
-                to="/terms"
-                className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
-              >
-                Terms of service
-              </Link>
-              {' '}and{' '}
-              <Link
-                to="/privacy"
-                className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
-              >
-                Privacy policy
-              </Link>
-            </span>
-          </p>
-        </div>
+          </div>
+        )}
 
       </div>
     </div>
