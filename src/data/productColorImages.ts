@@ -33,7 +33,7 @@ const PIPE_PALETTES: Record<string, WireColorPalette> = {
 /**
  * Generates an SVG data URI for a realistic rolled electrical wire coil of the specified color.
  */
-export function generateWireCoilSvg(colorName: string, hex?: string, brandName = 'RR Kabel'): string {
+export function generateWireCoilSvg(colorName: string, hex?: string, brandName = ''): string {
   const normKey = Object.keys(WIRE_PALETTES).find(
     (k) => k.toLowerCase() === colorName.toLowerCase() || colorName.toLowerCase().includes(k.toLowerCase())
   ) || 'Red';
@@ -45,7 +45,7 @@ export function generateWireCoilSvg(colorName: string, hex?: string, brandName =
     ring: hex || '#DC2626'
   };
 
-  const brand = (brandName || 'RR Kabel').toUpperCase();
+  const brand = (brandName || 'ORIGINAL').toUpperCase();
   const textColor = normKey === 'White' || normKey === 'Yellow' ? '#0f172a' : '#ffffff';
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
@@ -173,3 +173,34 @@ export function generatePipeSvg(colorName: string, hex?: string, brandName = 'Pr
 
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
+
+/**
+ * Clean neutral SVG placeholder used when a product has no image in the backend.
+ * Contains no brand names, no fake coil drawings, and clear consumer-facing indicator.
+ */
+export const NEUTRAL_PRODUCT_PLACEHOLDER =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <radialGradient id="neutralBg" cx="50%" cy="45%" r="65%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="70%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#f1f5f9"/>
+    </radialGradient>
+    <filter id="neutralShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="600" height="600" fill="url(#neutralBg)"/>
+  <g filter="url(#neutralShadow)">
+    <rect x="180" y="160" width="240" height="240" rx="28" fill="#ffffff" stroke="#e2e8f0" stroke-width="3"/>
+    <rect x="210" y="190" width="180" height="180" rx="16" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6 6"/>
+    <!-- Package / Component Icon -->
+    <path d="M 270 260 L 300 240 L 330 260 L 300 280 Z" fill="#94a3b8" opacity="0.6"/>
+    <path d="M 270 260 L 270 300 L 300 320 L 300 280 Z" fill="#64748b" opacity="0.8"/>
+    <path d="M 330 260 L 330 300 L 300 320 L 300 280 Z" fill="#475569"/>
+    <circle cx="300" cy="275" r="4" fill="#fbbf24"/>
+  </g>
+  <text x="300" y="445" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="800" fill="#334155" text-anchor="middle" letter-spacing="0.5">SmartRun Express Genuine</text>
+  <text x="300" y="470" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#94a3b8" text-anchor="middle">Product preview coming soon</text>
+</svg>`);

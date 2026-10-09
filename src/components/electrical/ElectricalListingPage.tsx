@@ -23,6 +23,7 @@ import {
   getDefaultProductColor
 } from '../../data/wireColors';
 import { ProductCardImage } from '../ProductCardImage';
+import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../../data/productColorImages';
 import { hapticLight, hapticSelection } from '../../utils/haptics';
 import { getFlattenedSpecifications } from '../../utils/productSpecifications';
 import { getPaginationPages } from '../../utils/paginationHelper';
@@ -334,7 +335,7 @@ export const ElectricalListingPage = ({
     rating: ep.rating_avg,
     reviewsCount: ep.rating_count,
     deliveryMinutes: 60,
-    image: ep.image_urls[0] || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop',
+    image: ep.image_urls[0] || NEUTRAL_PRODUCT_PLACEHOLDER,
     inStock: ep.stock_quantity > 0,
     stockCount: ep.stock_quantity,
     isEmergency: false,
@@ -478,7 +479,7 @@ export const ElectricalListingPage = ({
               const adapted = adaptToCartProduct(product);
               const primaryImage =
                 product.image_urls[0] ||
-                'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop';
+                NEUTRAL_PRODUCT_PLACEHOLDER;
 
               return (
                 <div

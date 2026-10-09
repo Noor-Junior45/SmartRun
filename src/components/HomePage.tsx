@@ -950,10 +950,14 @@ export const HomePage = ({
         )}
 
         {/* =====================================================================
-            ROW 6: WHY CHOOSE SMARTRUN (Giriraj Power & SmartRun Same Ownership)
+            ROW 6 & 7: WHY CHOOSE SMARTRUN & COST ESTIMATOR
+            (Hidden on Home Page per user request; kept in code for dedicated new page routes)
             ===================================================================== */}
-        <section
-          id="row-6-trust"
+        {false && (
+          <>
+            {/* ROW 6: WHY CHOOSE SMARTRUN (Giriraj Power & SmartRun Same Ownership) */}
+            <section
+              id="row-6-trust"
           className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-b from-[#FDFBF7] via-[#F8F6F0] to-[#F4F1E8] border border-amber-200/80 p-3.5 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 shadow-xs"
         >
           {/* Decorative Technical & Circuit Background Art */}
@@ -1140,6 +1144,8 @@ export const HomePage = ({
             ROW 7: CALCULATOR (Unified AI & Wholesale Material Cost Estimator)
             ===================================================================== */}
         <MaterialCostCalculator products={products} onAddToCart={onAddToCart} cartItems={cartItems} />
+          </>
+        )}
 
         {/* =====================================================================
             ROW 8: BRAND NAMES WE ARE SELLING (Official Logos & Liquid Glass Showcase)

@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabaseClient';
 import { ElectricalProduct, ProductReview, FilterState, SortOption } from '../types/electrical';
 import { apiUrl } from '../lib/apiBase';
 import { isElectricalProduct, isConstructionProduct } from '../utils/categoryHelper';
+import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
 
 /**
  * Transforms Supabase products to standard ElectricalProduct format
@@ -27,7 +28,7 @@ export function transformToElectricalProduct(item: any): ElectricalProduct {
   }
 
   if (image_urls.length === 0) {
-    image_urls = ['https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop'];
+    image_urls = [NEUTRAL_PRODUCT_PLACEHOLDER];
   }
 
   let specifications: Record<string, any> = {};

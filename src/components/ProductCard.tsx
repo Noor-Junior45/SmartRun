@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Minus, Star, Eye, Heart, Check, ShoppingCart } from 'lucide-react';
 import { Product } from '../types';
 import { isProductFavorite, toggleProductFavorite } from '../services/favorites';
@@ -9,6 +9,7 @@ import {
   isPipeProduct
 } from '../data/wireColors';
 import { hapticLight, hapticMedium } from '../utils/haptics';
+import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
 
 interface ProductCardProps {
   product: Product;
@@ -29,7 +30,7 @@ export const ProductCard = ({
   const [isFav, setIsFav] = useState(() => isProductFavorite(product.id));
   const isWire = isWireProduct(product);
   const isPipe = isPipeProduct(product);
-  const colorOptions = getProductColorOptions(product);
+  const colorOptions = useMemo(() => getProductColorOptions(product), [product]);
   const hasColorOptions = colorOptions.length > 0;
   const [selectedColor, setSelectedColor] = useState<string>(
     () => product.selectedColor || getDefaultProductColor(product)
@@ -39,6 +40,51 @@ export const ProductCard = ({
     const def = product.selectedColor || getDefaultProductColor(product);
     if (def) setSelectedColor(def);
   }, [product]);
+
+  const activeColorOption = useMemo(() => {
+    if (!hasColorOptions) return null;
+    return (
+      colorOptions.find(
+        (c) => c.name.toLowerCase().trim() === (selectedColor || '').toLowerCase().trim()
+      ) ||
+      colorOptions[0] ||
+      null
+    );
+  }, [colorOptions, selectedColor, hasColorOptions]);
+
+  const displayImage = useMemo(() => {
+    if (activeColorOption) {
+      const varImg =
+        activeColorOption.image_url ||
+        activeColorOption.imageUrl ||
+        (activeColorOption as any).image ||
+        (Array.isArray(activeColorOption.image_urls) && activeColorOption.image_urls[0]) ||
+        (Array.isArray(activeColorOption.images) && activeColorOption.images[0]);
+      if (varImg) return varImg;
+
+      const baseList = (
+        Array.isArray(product.images) && product.images.length > 0
+          ? product.images
+          : Array.isArray(product.image_urls) && product.image_urls.length > 0
+          ? product.image_urls
+          : []
+      ).filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
+
+      if (colorOptions.length > 1 && baseList.length >= colorOptions.length) {
+        const idx = colorOptions.findIndex(
+          (c) => c.name.toLowerCase().trim() === (selectedColor || '').toLowerCase().trim()
+        );
+        if (idx >= 0 && baseList[idx]) return baseList[idx];
+      }
+    }
+
+    return (
+      product.image ||
+      (Array.isArray(product.images) && product.images[0]) ||
+      (Array.isArray(product.image_urls) && product.image_urls[0]) ||
+      NEUTRAL_PRODUCT_PLACEHOLDER
+    );
+  }, [activeColorOption, colorOptions, selectedColor, product]);
 
   useEffect(() => {
     const handleFavChange = () => {
@@ -63,6 +109,7 @@ export const ProductCard = ({
     hapticMedium();
     onAddToCart({
       ...product,
+      image: displayImage,
       selectedColor: hasColorOptions ? selectedColor : undefined
     });
   };
@@ -105,17 +152,17 @@ export const ProductCard = ({
 
       {/* Image Container with Quick View overlay */}
       <div
-        onClick={() => onOpenQuickView({ ...product, selectedColor: hasColorOptions ? selectedColor : undefined })}
+        onClick={() => onOpenQuickView({ ...product, selectedColor: hasColorOptions ? selectedColor : undefined, image: displayImage })}
         className="relative w-full aspect-square bg-slate-50 rounded-xl overflow-hidden mb-3 cursor-pointer flex items-center justify-center"
       >
         <img
-          src={product.image || 'https://images.unsplash.com/photo-1558346490-a72e53ae2d4f?w=600&q=80'}
+          src={displayImage}
           alt={product.name}
           className="w-full h-full object-cover"
           loading="lazy"
           referrerPolicy="no-referrer"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1558346490-a72e53ae2d4f?w=600&q=80';
+            (e.target as HTMLImageElement).src = NEUTRAL_PRODUCT_PLACEHOLDER;
           }}
         />
 

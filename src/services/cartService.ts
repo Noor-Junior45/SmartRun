@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabaseClient';
 import { CartItem, Product } from '../types';
 import { getActiveUserScope, getUserScopeKeyFromUser } from './supabaseService';
+import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
 
 export interface SavedItemRecord {
   id: string;
@@ -119,7 +120,7 @@ export async function fetchCartItemsFromSupabase(): Promise<CartItem[] | null> {
           rating: Number(p.rating || p.rating_avg || 4.8),
           reviewsCount: Number(p.reviews_count || p.rating_count || 32),
           deliveryMinutes: Number(p.delivery_minutes || 30),
-          image: p.image || (Array.isArray(p.image_urls) && p.image_urls[0]) || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=400&auto=format&fit=crop',
+          image: p.image || (Array.isArray(p.image_urls) && p.image_urls[0]) || NEUTRAL_PRODUCT_PLACEHOLDER,
           inStock: p.in_stock ?? true,
           stockCount: Number(p.stock_quantity ?? p.stock_count ?? 50),
           isEmergency: !!p.is_emergency,
@@ -141,7 +142,7 @@ export async function fetchCartItemsFromSupabase(): Promise<CartItem[] | null> {
           rating: 4.8,
           reviewsCount: 15,
           deliveryMinutes: 60,
-          image: 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=400&auto=format&fit=crop',
+          image: NEUTRAL_PRODUCT_PLACEHOLDER,
           inStock: true,
           stockCount: 20,
           isEmergency: false,
@@ -267,7 +268,7 @@ export async function fetchSavedItemsFromSupabase(): Promise<SavedItemRecord[]> 
                 rating: Number(p.rating || 4.8),
                 reviewsCount: Number(p.reviews_count || 24),
                 deliveryMinutes: Number(p.delivery_minutes || 30),
-                image: p.image || (Array.isArray(p.image_urls) && p.image_urls[0]) || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=400&auto=format&fit=crop',
+                image: p.image || (Array.isArray(p.image_urls) && p.image_urls[0]) || NEUTRAL_PRODUCT_PLACEHOLDER,
                 inStock: p.in_stock ?? true,
                 stockCount: Number(p.stock_quantity ?? p.stock_count ?? 50),
                 isEmergency: !!p.is_emergency,
@@ -288,7 +289,7 @@ export async function fetchSavedItemsFromSupabase(): Promise<SavedItemRecord[]> 
                 rating: 4.8,
                 reviewsCount: 10,
                 deliveryMinutes: 60,
-                image: 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=400&auto=format&fit=crop',
+                image: NEUTRAL_PRODUCT_PLACEHOLDER,
                 inStock: true,
                 stockCount: 15,
                 isEmergency: false,

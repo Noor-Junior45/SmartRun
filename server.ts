@@ -2004,8 +2004,9 @@ async function startServer() {
         imageUrls = [body.image];
       }
 
+      // Do not inject hardcoded photos into user database if empty
       if (imageUrls.length === 0) {
-        imageUrls = ["https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop"];
+        imageUrls = [];
       }
 
       // Handle specifications (object or JSON)

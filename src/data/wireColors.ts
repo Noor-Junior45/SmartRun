@@ -1,5 +1,3 @@
-import { generateWireCoilSvg, generatePipeSvg } from './productColorImages';
-
 export interface ProductColorOption {
   name: string;
   label: string;
@@ -20,7 +18,7 @@ export interface ProductColorOption {
 
 export type WireColorOption = ProductColorOption;
 
-// Indian Standard Wire Colors (IS 694 / IS 732) with dynamic realistic rolled coil vector images
+// Indian Standard Wire Colors (IS 694 / IS 732)
 export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
   {
     name: 'Red',
@@ -30,11 +28,7 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-red-600',
     twRing: 'ring-red-600',
     description: 'IS 694 Standard: Live / Phase conductor in single-phase & 3-phase circuits.',
-    standard: 'IS 694',
-    image_url: generateWireCoilSvg('Red', '#DC2626'),
-    imageUrl: generateWireCoilSvg('Red', '#DC2626'),
-    images: [generateWireCoilSvg('Red', '#DC2626')],
-    image_urls: [generateWireCoilSvg('Red', '#DC2626')]
+    standard: 'IS 694'
   },
   {
     name: 'Black',
@@ -44,11 +38,7 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-slate-950',
     twRing: 'ring-slate-950',
     description: 'IS 694 Standard: Neutral return conductor for AC electrical circuits.',
-    standard: 'IS 694',
-    image_url: generateWireCoilSvg('Black', '#0F172A'),
-    imageUrl: generateWireCoilSvg('Black', '#0F172A'),
-    images: [generateWireCoilSvg('Black', '#0F172A')],
-    image_urls: [generateWireCoilSvg('Black', '#0F172A')]
+    standard: 'IS 694'
   },
   {
     name: 'Green',
@@ -58,11 +48,7 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-green-600',
     twRing: 'ring-green-600',
     description: 'IS 694 Standard: Safety protective earth grounding conductor.',
-    standard: 'IS 694',
-    image_url: generateWireCoilSvg('Green', '#16A34A'),
-    imageUrl: generateWireCoilSvg('Green', '#16A34A'),
-    images: [generateWireCoilSvg('Green', '#16A34A')],
-    image_urls: [generateWireCoilSvg('Green', '#16A34A')]
+    standard: 'IS 694'
   },
   {
     name: 'Yellow',
@@ -72,11 +58,7 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-yellow-500',
     twRing: 'ring-yellow-500',
     description: 'IS 694 Standard: Y-Phase in 3-phase wiring & secondary switch live loops.',
-    standard: 'IS 694',
-    image_url: generateWireCoilSvg('Yellow', '#EAB308'),
-    imageUrl: generateWireCoilSvg('Yellow', '#EAB308'),
-    images: [generateWireCoilSvg('Yellow', '#EAB308')],
-    image_urls: [generateWireCoilSvg('Yellow', '#EAB308')]
+    standard: 'IS 694'
   },
   {
     name: 'Blue',
@@ -86,11 +68,7 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-blue-600',
     twRing: 'ring-blue-600',
     description: 'IS 694 Standard: B-Phase in 3-phase wiring & dedicated lighting loops.',
-    standard: 'IS 694',
-    image_url: generateWireCoilSvg('Blue', '#2563EB'),
-    imageUrl: generateWireCoilSvg('Blue', '#2563EB'),
-    images: [generateWireCoilSvg('Blue', '#2563EB')],
-    image_urls: [generateWireCoilSvg('Blue', '#2563EB')]
+    standard: 'IS 694'
   },
   {
     name: 'White',
@@ -100,11 +78,7 @@ export const INDIAN_STANDARD_WIRE_COLORS: ProductColorOption[] = [
     twBg: 'bg-slate-200',
     twRing: 'ring-slate-400',
     description: 'Indian Residential Standard: Dedicated Inverter / UPS emergency backup phase.',
-    standard: 'IS 732',
-    image_url: generateWireCoilSvg('White', '#F1F5F9'),
-    imageUrl: generateWireCoilSvg('White', '#F1F5F9'),
-    images: [generateWireCoilSvg('White', '#F1F5F9')],
-    image_urls: [generateWireCoilSvg('White', '#F1F5F9')]
+    standard: 'IS 732'
   }
 ];
 
@@ -118,11 +92,7 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-slate-100',
     twRing: 'ring-slate-400',
     description: 'Standard residential & commercial concealed or exposed conduit wiring (IS 9537 Part 3).',
-    standard: 'IS 9537',
-    image_url: generatePipeSvg('Ivory / White', '#F8FAFC'),
-    imageUrl: generatePipeSvg('Ivory / White', '#F8FAFC'),
-    images: [generatePipeSvg('Ivory / White', '#F8FAFC')],
-    image_urls: [generatePipeSvg('Ivory / White', '#F8FAFC')]
+    standard: 'IS 9537'
   },
   {
     name: 'Black',
@@ -132,11 +102,7 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-slate-950',
     twRing: 'ring-slate-950',
     description: 'Outdoor weather-proof, industrial slab casting & high UV sunlight-resistant conduit.',
-    standard: 'IS 9537',
-    image_url: generatePipeSvg('Black', '#0F172A'),
-    imageUrl: generatePipeSvg('Black', '#0F172A'),
-    images: [generatePipeSvg('Black', '#0F172A')],
-    image_urls: [generatePipeSvg('Black', '#0F172A')]
+    standard: 'IS 9537'
   },
   {
     name: 'Grey',
@@ -146,11 +112,7 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-slate-500',
     twRing: 'ring-slate-600',
     description: 'High impact resistance for RCC concrete ceiling slab embedding and wall chasing.',
-    standard: 'IS 9537',
-    image_url: generatePipeSvg('Grey', '#64748B'),
-    imageUrl: generatePipeSvg('Grey', '#64748B'),
-    images: [generatePipeSvg('Grey', '#64748B')],
-    image_urls: [generatePipeSvg('Grey', '#64748B')]
+    standard: 'IS 9537'
   },
   {
     name: 'Blue',
@@ -160,11 +122,7 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-blue-600',
     twRing: 'ring-blue-600',
     description: 'Dedicated identification conduit for CAT6 internet, telephone, and CCTV cabling.',
-    standard: 'Commercial',
-    image_url: generatePipeSvg('Blue', '#2563EB'),
-    imageUrl: generatePipeSvg('Blue', '#2563EB'),
-    images: [generatePipeSvg('Blue', '#2563EB')],
-    image_urls: [generatePipeSvg('Blue', '#2563EB')]
+    standard: 'Commercial'
   },
   {
     name: 'Red / Orange',
@@ -174,11 +132,7 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-orange-600',
     twRing: 'ring-orange-600',
     description: 'Mandatory color-coded conduit pathway for fire alarm systems and emergency backup power.',
-    standard: 'Fire Code',
-    image_url: generatePipeSvg('Red / Orange', '#EA580C'),
-    imageUrl: generatePipeSvg('Red / Orange', '#EA580C'),
-    images: [generatePipeSvg('Red / Orange', '#EA580C')],
-    image_urls: [generatePipeSvg('Red / Orange', '#EA580C')]
+    standard: 'Fire Code'
   },
   {
     name: 'Yellow',
@@ -188,11 +142,7 @@ export const PIPE_COLOR_OPTIONS: ProductColorOption[] = [
     twBg: 'bg-yellow-500',
     twRing: 'ring-yellow-500',
     description: 'Solar rooftop DC cable protection and caution safety conduit routes.',
-    standard: 'MNRE Std',
-    image_url: generatePipeSvg('Yellow', '#EAB308'),
-    imageUrl: generatePipeSvg('Yellow', '#EAB308'),
-    images: [generatePipeSvg('Yellow', '#EAB308')],
-    image_urls: [generatePipeSvg('Yellow', '#EAB308')]
+    standard: 'MNRE Std'
   }
 ];
 
@@ -555,7 +505,7 @@ const COLOR_FINISH_DICTIONARY: Record<
  */
 export function resolveColorOption(rawName: string | any): ProductColorOption {
   if (typeof rawName === 'object' && rawName !== null) {
-    const name = rawName.name || rawName.label || rawName.color || 'Custom';
+    const name = rawName.name || rawName.label || rawName.color || rawName.colour || 'Custom';
     const price = typeof rawName.price === 'number' && !isNaN(rawName.price) ? rawName.price : undefined;
     const mrp = typeof rawName.mrp === 'number' && !isNaN(rawName.mrp) ? rawName.mrp : undefined;
     const discount_percent = typeof rawName.discount_percent === 'number'
@@ -564,8 +514,44 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
       ? Math.round(((mrp - price) / mrp) * 100)
       : undefined;
 
-    const imageUrl = rawName.image_url || rawName.imageUrl || rawName.image || (Array.isArray(rawName.images) ? rawName.images[0] : undefined);
-    const imageUrls = Array.isArray(rawName.image_urls) ? rawName.image_urls : (Array.isArray(rawName.images) ? rawName.images : (imageUrl ? [imageUrl] : undefined));
+    // Parse image URLs thoroughly (string, array of strings, JSON string)
+    let parsedImageUrls: string[] = [];
+    if (Array.isArray(rawName.image_urls)) {
+      parsedImageUrls = rawName.image_urls.filter((u: any) => typeof u === 'string' && u.trim().length > 0);
+    } else if (Array.isArray(rawName.images)) {
+      parsedImageUrls = rawName.images.filter((u: any) => typeof u === 'string' && u.trim().length > 0);
+    } else if (typeof rawName.image_urls === 'string' && rawName.image_urls.trim()) {
+      try {
+        const parsed = JSON.parse(rawName.image_urls);
+        if (Array.isArray(parsed)) parsedImageUrls = parsed.filter((u: any) => typeof u === 'string' && u.trim().length > 0);
+        else if (parsed) parsedImageUrls = [String(parsed).trim()];
+      } catch {
+        parsedImageUrls = [rawName.image_urls.trim()];
+      }
+    } else if (typeof rawName.images === 'string' && rawName.images.trim()) {
+      try {
+        const parsed = JSON.parse(rawName.images);
+        if (Array.isArray(parsed)) parsedImageUrls = parsed.filter((u: any) => typeof u === 'string' && u.trim().length > 0);
+        else if (parsed) parsedImageUrls = [String(parsed).trim()];
+      } catch {
+        parsedImageUrls = [rawName.images.trim()];
+      }
+    }
+
+    const singleImage =
+      rawName.image_url ||
+      rawName.imageUrl ||
+      rawName.image ||
+      rawName.img ||
+      rawName.photo ||
+      rawName.picture ||
+      rawName.url;
+
+    if (typeof singleImage === 'string' && singleImage.trim() && !parsedImageUrls.includes(singleImage.trim())) {
+      parsedImageUrls.unshift(singleImage.trim());
+    }
+
+    const primaryImageUrl = parsedImageUrls[0] || (typeof singleImage === 'string' ? singleImage.trim() : undefined);
 
     return {
       name,
@@ -579,10 +565,10 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
       price,
       mrp,
       discount_percent,
-      image_url: imageUrl,
-      imageUrl,
-      images: imageUrls,
-      image_urls: imageUrls
+      image_url: primaryImageUrl,
+      imageUrl: primaryImageUrl,
+      images: parsedImageUrls,
+      image_urls: parsedImageUrls
     };
   }
 
@@ -604,7 +590,7 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
   // 1. Direct dictionary match
   if (COLOR_FINISH_DICTIONARY[key]) {
     const entry = COLOR_FINISH_DICTIONARY[key];
-    const img = (entry as any).image_url || generateWireCoilSvg(entry.hex, name);
+    const img = (entry as any).image_url || undefined;
     return {
       name,
       label: name,
@@ -615,8 +601,8 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
       description: entry.description || `${name} finish`,
       image_url: img,
       imageUrl: img,
-      images: [img],
-      image_urls: [img]
+      images: img ? [img] : [],
+      image_urls: img ? [img] : []
     };
   }
 
@@ -626,7 +612,7 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
   );
   if (foundKey) {
     const entry = COLOR_FINISH_DICTIONARY[foundKey];
-    const img = (entry as any).image_url || generateWireCoilSvg(entry.hex, name);
+    const img = (entry as any).image_url || undefined;
     return {
       name,
       label: name,
@@ -637,8 +623,8 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
       description: entry.description || `${name} finish`,
       image_url: img,
       imageUrl: img,
-      images: [img],
-      image_urls: [img]
+      images: img ? [img] : [],
+      image_urls: img ? [img] : []
     };
   }
 
@@ -700,8 +686,6 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
     twRing = 'ring-yellow-500';
   }
 
-  const generatedWireImg = generateWireCoilSvg(name, hex);
-
   return {
     name,
     label: name,
@@ -710,17 +694,17 @@ export function resolveColorOption(rawName: string | any): ProductColorOption {
     twBg,
     twRing,
     description: `${name} finish`,
-    image_url: generatedWireImg,
-    imageUrl: generatedWireImg,
-    images: [generatedWireImg],
-    image_urls: [generatedWireImg]
+    image_url: undefined,
+    imageUrl: undefined,
+    images: [],
+    image_urls: []
   };
 }
 
 /**
  * Returns the relevant color options for any given product
  * Supports:
- * - Direct database `colors` / `colours` / `color_options` array set in backend app
+ * - Direct database `color_variants` / `colors` / `colours` / `color_options` array set in backend app
  * - Explicit `specs['Available Colors']`
  * - Standard IS 694 Wire colors (for wire products)
  * - Standard IS 9537 Conduit colors (for pipe products)
@@ -791,43 +775,87 @@ export function getProductColorOptions(product?: {
     rawColors = [prodAny.color.trim()];
   }
 
-  // If explicit colors are set on the product (from the database / backend app), map and return them!
+  let options: ProductColorOption[] = [];
+
+  // If explicit colors are set on the product (from the database / backend app), map them!
   if (rawColors.length > 0) {
-    return rawColors.map(resolveColorOption);
-  }
+    options = rawColors.map(resolveColorOption);
+  } else {
+    // 2. Check if explicit colors are declared in specs
+    const specs = product.specs || product.specifications || {};
+    const explicitColorStr =
+      specs['Available Colors'] ||
+      specs['Available Colours'] ||
+      specs['Colors'] ||
+      specs['Colours'] ||
+      specs['Color'] ||
+      specs['Colour'] ||
+      specs['Finish'] ||
+      specs['Colour Option'] ||
+      specs['Color Option'];
 
-  // 2. Check if explicit colors are declared in specs
-  const specs = product.specs || product.specifications || {};
-  const explicitColorStr =
-    specs['Available Colors'] ||
-    specs['Available Colours'] ||
-    specs['Colors'] ||
-    specs['Colours'] ||
-    specs['Color'] ||
-    specs['Colour'] ||
-    specs['Finish'] ||
-    specs['Colour Option'] ||
-    specs['Color Option'];
-
-  if (typeof explicitColorStr === 'string' && explicitColorStr.trim()) {
-    const rawNames = explicitColorStr.split(/[,/|]+/).map((s) => s.trim()).filter(Boolean);
-    if (rawNames.length > 0) {
-      return rawNames.map(resolveColorOption);
+    if (typeof explicitColorStr === 'string' && explicitColorStr.trim()) {
+      const rawNames = explicitColorStr.split(/[,/|]+/).map((s) => s.trim()).filter(Boolean);
+      if (rawNames.length > 0) {
+        options = rawNames.map(resolveColorOption);
+      }
+    } else if (Array.isArray(explicitColorStr) && explicitColorStr.length > 0) {
+      options = explicitColorStr.map(resolveColorOption);
+    } else if (isWireProduct(product)) {
+      options = INDIAN_STANDARD_WIRE_COLORS.map((c) => ({ ...c }));
+    } else if (isPipeProduct(product)) {
+      options = PIPE_COLOR_OPTIONS.map((c) => ({ ...c }));
     }
-  } else if (Array.isArray(explicitColorStr) && explicitColorStr.length > 0) {
-    return explicitColorStr.map(resolveColorOption);
   }
 
-  // 3. Fallbacks based on category/type
-  if (isWireProduct(product)) {
-    return INDIAN_STANDARD_WIRE_COLORS;
+  if (options.length === 0) {
+    return [];
   }
 
-  if (isPipeProduct(product)) {
-    return PIPE_COLOR_OPTIONS;
+  // Intelligently link product images to options if options lack explicit images
+  const prodImages = (
+    Array.isArray(prodAny.image_urls) && prodAny.image_urls.length > 0
+      ? prodAny.image_urls
+      : Array.isArray(prodAny.images) && prodAny.images.length > 0
+      ? prodAny.images
+      : prodAny.image
+      ? [prodAny.image]
+      : []
+  ).filter((u: any) => typeof u === 'string' && u.trim().length > 0);
+
+  if (prodImages.length > 0) {
+    // A) Link by color name in URL (e.g. image contains "red", "black", "blue", etc.)
+    options.forEach((opt) => {
+      if (!opt.image_url && (!opt.image_urls || opt.image_urls.length === 0)) {
+        const optLower = opt.name.toLowerCase().trim();
+        const matched = prodImages.find((url: string) => {
+          const uLower = url.toLowerCase();
+          return uLower.includes(optLower) || uLower.includes(`_${optLower}`) || uLower.includes(`-${optLower}`);
+        });
+        if (matched) {
+          opt.image_url = matched;
+          opt.imageUrl = matched;
+          opt.image_urls = [matched];
+          opt.images = [matched];
+        }
+      }
+    });
+
+    // B) If no options have images and number of product images matches number of color options
+    const anyHasImg = options.some((opt) => opt.image_url || (opt.image_urls && opt.image_urls.length > 0));
+    if (!anyHasImg && prodImages.length >= options.length) {
+      options.forEach((opt, idx) => {
+        if (prodImages[idx]) {
+          opt.image_url = prodImages[idx];
+          opt.imageUrl = prodImages[idx];
+          opt.image_urls = [prodImages[idx]];
+          opt.images = [prodImages[idx]];
+        }
+      });
+    }
   }
 
-  return [];
+  return options;
 }
 
 export function getDefaultProductColor(product?: {

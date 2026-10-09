@@ -38,10 +38,10 @@ import {
 import { CartItem, KolkataArea, Order, SavedAddress, Product, UserProfile, FeePolicySettings } from '../types';
 import { SwipeableItem } from './SwipeableItem';
 import { createFirestoreOrder, getStoredAddresses, cleanPhoneAutofill, generateUUID, ACTIVE_SAVED_ADDRESS_KEY, getActiveAddressStorageKey, safeGetItem } from '../services/supabaseService';
-import { generateSecureOrderNumber } from '../utils/cryptoHelper';
 import { notifyOrderPlaced } from '../services/emailService';
 import { getFeeSettings, calculateOrderFees, DEFAULT_FEE_SETTINGS } from '../services/feeService';
 import { INDIAN_STANDARD_WIRE_COLORS, PIPE_COLOR_OPTIONS, getProductColorOptions } from '../data/wireColors';
+import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
 import { trackBeginCheckout, trackPurchase } from '../utils/analytics';
 import {
   hapticLight,
@@ -803,7 +803,7 @@ export const CartView = ({
                     <div key={saved.id} className="py-3.5 flex items-center gap-4 justify-between">
                       <div className="flex items-center gap-3">
                         <img
-                          src={saved.product.image || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=200&auto=format&fit=crop'}
+                          src={saved.product.image || NEUTRAL_PRODUCT_PLACEHOLDER}
                           alt={saved.product.name}
                           className="w-14 h-14 object-contain rounded-xl bg-slate-50 border border-slate-100 p-1"
                         />
@@ -983,7 +983,7 @@ export const CartView = ({
               ? currentColorObj.discount_percent
               : product.discountPercentage || (itemMrp > itemPrice ? Math.round(((itemMrp - itemPrice) / itemMrp) * 100) : 0);
 
-            const itemImage = currentColorObj?.image_url || currentColorObj?.imageUrl || product.image || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=400&auto=format&fit=crop';
+            const itemImage = currentColorObj?.image_url || currentColorObj?.imageUrl || product.image || NEUTRAL_PRODUCT_PLACEHOLDER;
 
             return (
               <SwipeableItem
@@ -1200,7 +1200,7 @@ export const CartView = ({
                 <div key={saved.id} className="py-3 flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3 min-w-0">
                     <img
-                      src={saved.product.image || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=200&auto=format&fit=crop'}
+                      src={saved.product.image || NEUTRAL_PRODUCT_PLACEHOLDER}
                       alt={saved.product.name}
                       className="w-12 h-12 object-contain rounded-xl bg-slate-50 border border-slate-100 p-1 shrink-0"
                     />

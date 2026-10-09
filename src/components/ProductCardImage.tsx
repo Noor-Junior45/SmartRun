@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Images } from 'lucide-react';
+import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
 
 interface ProductCardImageProps {
   images?: string[];
@@ -35,7 +36,7 @@ export const ProductCardImage = ({
     }
     return list.length > 0
       ? list
-      : ['https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop'];
+      : [NEUTRAL_PRODUCT_PLACEHOLDER];
   }, [images, imageUrl]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -95,7 +96,7 @@ export const ProductCardImage = ({
         onError={(e) => {
           // Fallback if image fails to load
           const target = e.target as HTMLImageElement;
-          target.src = 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop';
+          target.src = NEUTRAL_PRODUCT_PLACEHOLDER;
         }}
       />
 

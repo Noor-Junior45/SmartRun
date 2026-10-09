@@ -9,6 +9,7 @@ import { soundService } from './sound';
 import { showToast } from '../utils/toast';
 import { API_BASE_URL, apiUrl } from '../lib/apiBase';
 import { generateUUID as secureGenerateUUID, generateSecureOrderNumber, generateSecureToken } from '../utils/cryptoHelper';
+import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
 
 // Offline Sync Queue Types & Constants
 export interface PendingSyncItem {
@@ -3862,8 +3863,8 @@ export async function syncAllProductsToSupabase(
         rating_count: p.reviewsCount || 50,
         reviews_count: p.reviewsCount || 50,
         delivery_minutes: p.deliveryMinutes || 30,
-        image: p.image,
-        image_urls: [p.image || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop'],
+        image: p.image || NEUTRAL_PRODUCT_PLACEHOLDER,
+        image_urls: [p.image || NEUTRAL_PRODUCT_PLACEHOLDER],
         in_stock: p.inStock ?? true,
         stock_quantity: p.stockCount || 50,
         stock_count: p.stockCount || 50,
@@ -4020,7 +4021,7 @@ export async function fetchProductsFromSupabase(): Promise<Product[]> {
         const primaryImage =
           rawImageUrls[0] ||
           row.image ||
-          'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop';
+          NEUTRAL_PRODUCT_PLACEHOLDER;
         const finalImages = rawImageUrls.length > 0 ? rawImageUrls : [primaryImage];
 
         return {

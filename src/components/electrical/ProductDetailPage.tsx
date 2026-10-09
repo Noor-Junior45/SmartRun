@@ -51,7 +51,7 @@ import { ZoomableImage } from '../ZoomableImage';
 import { FullscreenImageViewer } from '../FullscreenImageViewer';
 import { useEdgeSwipeBack } from '../../hooks/useEdgeSwipeBack';
 import { formatProductSpecifications, getFlattenedSpecifications } from '../../utils/productSpecifications';
-import { generateWireCoilSvg } from '../../data/productColorImages';
+import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../../data/productColorImages';
 
 interface ProductDetailPageProps {
   onAddToCart: (product: Product) => void;
@@ -244,11 +244,17 @@ export const ProductDetailPage = ({
     return product?.discount_percent || 0;
   }, [activeColorOption, effectivePrice, effectiveMrp, product?.discount_percent]);
 
-  // Dynamic gallery images: if selected color has linked photo(s), prioritize them in gallery
+  // Dynamic gallery images: if selected color has linked photo(s), ONLY show that chosen colour's photo(s)
   const effectiveImageUrls = useMemo(() => {
     if (!product) return [];
-    const baseImages = Array.isArray(product.image_urls) && product.image_urls.length > 0 ? product.image_urls : [];
-    
+    const baseImages = (
+      Array.isArray(product.image_urls) && product.image_urls.length > 0
+        ? product.image_urls
+        : (product as any)?.image
+        ? [(product as any).image]
+        : []
+    ).filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
+
     // If the active color has its own image or image_urls
     if (activeColorOption) {
       const variantImages: string[] = [];
@@ -260,19 +266,28 @@ export const ProductDetailPage = ({
         variantImages.push(activeColorOption.image_url);
       } else if (activeColorOption.imageUrl) {
         variantImages.push(activeColorOption.imageUrl);
+      } else if ((activeColorOption as any).image) {
+        variantImages.push((activeColorOption as any).image);
       }
 
+      // If the chosen color has its own photo(s): ONLY show the chosen color's photo(s)!
       if (variantImages.length > 0) {
-        // Return variant image(s) first, then other base images (excluding duplicates)
-        const combined = [...variantImages, ...baseImages.filter((img) => !variantImages.includes(img))];
-        return combined.filter(Boolean);
+        return variantImages;
+      }
+
+      // If color options map to baseImages (e.g. 1 image per color)
+      if (colorOptions.length > 1 && baseImages.length >= colorOptions.length) {
+        const colorIdx = colorOptions.findIndex(
+          (c) => c.name.toLowerCase().trim() === (selectedWireColor || '').toLowerCase().trim()
+        );
+        if (colorIdx >= 0 && baseImages[colorIdx]) {
+          return [baseImages[colorIdx]];
+        }
       }
     }
 
-    return baseImages.length > 0
-      ? baseImages
-      : [product?.image_urls?.[0] || (product as any)?.image || generateWireCoilSvg('#DC2626', 'Red')];
-  }, [product, activeColorOption]);
+    return baseImages.length > 0 ? baseImages : [NEUTRAL_PRODUCT_PLACEHOLDER];
+  }, [product, activeColorOption, colorOptions, selectedWireColor]);
 
   // Set default color when product changes
   useEffect(() => {
@@ -303,7 +318,7 @@ export const ProductDetailPage = ({
     rating: ep.rating_avg,
     reviewsCount: ep.rating_count,
     deliveryMinutes: 60,
-    image: effectiveImageUrls[0] || ep.image_urls[0] || 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop',
+    image: effectiveImageUrls[0] || ep.image_urls[0] || NEUTRAL_PRODUCT_PLACEHOLDER,
     images: effectiveImageUrls,
     image_urls: effectiveImageUrls,
     inStock: ep.stock_quantity > 0,
@@ -479,9 +494,7 @@ export const ProductDetailPage = ({
   const currentImage =
     effectiveImageUrls[selectedImageIndex] ||
     effectiveImageUrls[0] ||
-    product?.image_urls?.[0] ||
-    (product as any)?.image ||
-    generateWireCoilSvg('#DC2626', 'Red');
+    NEUTRAL_PRODUCT_PLACEHOLDER;
 
   return (
     <div className="min-h-screen bg-[#f1f3f6] text-slate-900 pb-32 sm:pb-36 font-sans relative">

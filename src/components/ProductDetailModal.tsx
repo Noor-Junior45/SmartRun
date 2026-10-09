@@ -18,6 +18,7 @@ import { useBottomSheetDismiss } from '../hooks/useBottomSheetDismiss';
 import { getFlattenedSpecifications } from '../utils/productSpecifications';
 
 import { ProductReviewsSection } from './ProductReviewsSection';
+import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -91,11 +92,15 @@ export const ProductDetailModal = ({
 
   const allImages = useMemo(() => {
     if (!product) return [];
-    const baseImages = Array.isArray(product.images) && product.images.length > 0
-      ? product.images
-      : Array.isArray(product.image_urls) && product.image_urls.length > 0
-      ? product.image_urls
-      : [product.image];
+    const baseImages = (
+      Array.isArray(product.images) && product.images.length > 0
+        ? product.images
+        : Array.isArray(product.image_urls) && product.image_urls.length > 0
+        ? product.image_urls
+        : product.image
+        ? [product.image]
+        : []
+    ).filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
 
     if (activeColorObj) {
       const variantImages: string[] = [];
@@ -107,15 +112,28 @@ export const ProductDetailModal = ({
         variantImages.push(activeColorObj.image_url);
       } else if (activeColorObj.imageUrl) {
         variantImages.push(activeColorObj.imageUrl);
+      } else if ((activeColorObj as any).image) {
+        variantImages.push((activeColorObj as any).image);
       }
 
+      // If the chosen color has its own image(s): ONLY show the chosen color's photo(s)!
       if (variantImages.length > 0) {
-        return [...variantImages, ...baseImages.filter((img) => !variantImages.includes(img))].filter(Boolean);
+        return variantImages;
+      }
+
+      // If color options map to baseImages (e.g. 1 image per color)
+      if (colorOptions.length > 1 && baseImages.length >= colorOptions.length) {
+        const colorIdx = colorOptions.findIndex(
+          (c) => c.name.toLowerCase().trim() === (selectedWireColor || '').toLowerCase().trim()
+        );
+        if (colorIdx >= 0 && baseImages[colorIdx]) {
+          return [baseImages[colorIdx]];
+        }
       }
     }
 
-    return baseImages;
-  }, [product, activeColorObj]);
+    return baseImages.length > 0 ? baseImages : [NEUTRAL_PRODUCT_PLACEHOLDER];
+  }, [product, activeColorObj, colorOptions, selectedWireColor]);
 
   useEffect(() => {
     if (product) {
@@ -179,13 +197,13 @@ export const ProductDetailModal = ({
       price: effectivePrice,
       originalPrice: effectiveOriginalPrice,
       discountPercentage: effectiveDiscountPercentage,
-      image: allImages[0] || product.image,
+      image: allImages[0] || product.image || NEUTRAL_PRODUCT_PLACEHOLDER,
       images: allImages,
       selectedColor: hasColorOptions ? selectedWireColor : undefined
     });
   };
 
-  const currentImage = allImages[selectedImageIndex] || allImages[0] || product.image;
+  const currentImage = allImages[selectedImageIndex] || allImages[0] || product.image || NEUTRAL_PRODUCT_PLACEHOLDER;
 
   // Mobile Bottom Sheet Drag-to-Dismiss Gesture
   const {

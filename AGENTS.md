@@ -220,4 +220,10 @@
   - Enhanced glassmorphism transparency (`bg-white/40 backdrop-blur-2xl backdrop-saturate-[180%] border-white/50 shadow-lg`) letting background content softly diffuse through.
   - Added iOS safe-area bottom inset positioning (`bottom: max(1rem, env(safe-area-inset-bottom, 1rem))`) to avoid interference with the iPhone home swipe bar.
 - [x] **Persistent Project Memory**: Created `AGENTS.md` to permanently store all system rules, package details, and fix history.
+- [x] **Product Image Isolation, Neutral Placeholder & Isolated Color Variant Galleries**:
+  - **Eliminated Hardcoded RR Kabel Photo Fallbacks**: Diagnosed and removed hardcoded fallback references (`https://images.unsplash.com/photo-1558223616-e5d79faebdd6` and fake vector coil drawings) from `server.ts`, `AddProductModal.tsx`, `electricalService.ts`, `supabaseService.ts`, `CartView.tsx`, `cartService.ts`, `ProductCardImage.tsx`, and `ProductDetailPage.tsx`.
+  - **Clean Neutral Placeholder**: Introduced `NEUTRAL_PRODUCT_PLACEHOLDER` data URI with zero brand bias for newly added products that do not yet have photos in the backend.
+  - **Dynamic Colour Switching on Product Cards & Details**: Connected `displayImage` in `ProductCard.tsx` and `effectiveImageUrls` in `ProductDetailPage.tsx` and `ProductDetailModal.tsx` so selecting or switching any color swatch immediately updates the product preview to that color's image.
+  - **Isolated Colour Variant Gallery**: When a product has colour options with distinct images, the gallery displays exclusively the chosen colour's photos (`return variantImages`), preventing images of other variants from mixing into the thumbnails.
+
 

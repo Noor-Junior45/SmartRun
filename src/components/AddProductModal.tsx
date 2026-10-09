@@ -73,19 +73,12 @@ export const AddProductModal = ({
       }
     }
 
-    const defaultImagesByCategory: Record<string, string> = {
-      Electrical: 'https://images.unsplash.com/photo-1558223616-e5d79faebdd6?q=80&w=800&auto=format&fit=crop',
-      Construction: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?q=80&w=800&auto=format&fit=crop',
-      Plumbing: 'https://images.unsplash.com/photo-1585704032915-c3400ca199e7?q=80&w=800&auto=format&fit=crop',
-      Hardware: 'https://images.unsplash.com/photo-1581783898377-1c85bf937427?q=80&w=800&auto=format&fit=crop',
-    };
-
-    const finalImage = imageUrl.trim() || defaultImagesByCategory[category] || defaultImagesByCategory.Electrical;
+    const finalImage = imageUrl.trim();
 
     setLoading(true);
 
     try {
-      const payload = {
+      const payload: any = {
         name: name.trim(),
         brand: brand.trim() || 'Giriraj Genuine',
         category,
@@ -93,11 +86,14 @@ export const AddProductModal = ({
         price: numPrice,
         mrp: Math.max(numPrice, numMrp),
         stock_quantity: numStock,
-        image_urls: [finalImage],
-        image: finalImage,
+        image_urls: finalImage ? [finalImage] : [],
         description: description.trim() || `${brand} genuine ${subcategory} certified for residential and commercial electrification projects.`,
         specifications: specificationsObj,
       };
+
+      if (finalImage) {
+        payload.image = finalImage;
+      }
 
       const result = await addProductToBackend(payload);
 
