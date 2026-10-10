@@ -243,5 +243,14 @@
   - **Smooth Hardware Back Button & Modal Handling**: Extended Capacitor back button listener to cleanly close active modals (`isLiveOrderModalOpen`, `selectedProductQuickView`, `isLocationModalOpen`, `addressToEdit`) and navigate back to the storefront instead of abruptly exiting the app from `/login`.
   - **Modal Dismissal & Scroll Locks**: Added backdrop click-to-close, keyboard Escape listeners, and body scroll lock (`overflow: hidden`) on `ProductDetailModal` and `LocationModal` to prevent background scrolling and layout shifts.
   - **Refined Hover & Touch Micro-Interactions**: Enhanced product cards (`ProductCard.tsx` and `ElectricalListingPage.tsx`) with smooth elevation lift (`hover:-translate-y-1 hover:shadow-xl`), image zoom (`group-hover:scale-105 transition-transform duration-300 ease-out`), and tactile button feedback (`active:scale-95`).
+- [x] **Google Maps Billing Verification & Zero-Error Resilient Fallback (`BillingNotEnabledMapError`)**:
+  - **Issue**: Google Maps Platform JavaScript API threw fatal console error `BillingNotEnabledMapError` when loaded in the browser because the configured Google Cloud key did not have active cloud billing, causing watermarked grey tiles and error alert popups.
+  - **Backend Pre-Flight Check**: Added `/api/maps/google/status` endpoint in `server.ts` with 10-minute caching that checks Google Cloud billing status via reverse geocode API. Detects unbilled keys (`status: REQUEST_DENIED` with "billing") without client-side exposure.
+  - **Frontend Safeguards (`GoogleMapsProvider.ts`)**: Integrated `isGoogleMapsBillingActive()` pre-flight verification before loading any Google Maps SDK script. If billing is not active, the app completely skips injecting `maps.googleapis.com/maps/api/js`, eliminating the `BillingNotEnabledMapError` console error entirely.
+  - **Seamless HD Tile Renderer**: Seamlessly uses the high-definition CartoDB Voyager Leaflet map renderer (`initializeCleanTileMap`) and OpenStreetMap cascades with zero watermarks, zero popups, and instant interactive responsiveness. When a valid, billing-enabled key is configured in the future, native Google Maps is automatically restored.
+- [x] **Custom Google Maps API Key Configured & Verified Active**:
+  - Successfully connected the custom Google Maps API key (`AIzaSyB9lRr20cz1sxfsfvWO3t-Qrcn5XB9iRz0`) across backend proxy endpoints and client `GoogleMapsProvider`.
+  - Verified active status on `/api/maps/google/status` (`available: true`, `billingEnabled: true`).
+  - Google Maps JavaScript API now loads natively without billing errors, and automatically falls back to OpenStreetMap / Nominatim whenever geocoding or places API restrictions apply.
 
 

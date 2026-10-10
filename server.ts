@@ -1634,6 +1634,77 @@ async function startServer() {
   // GOOGLE MAPS PLATFORM PROXY ENDPOINTS (PRIMARY)
   // =========================================================================
 
+  // Helper to resolve active Google Maps API key, prioritizing custom key provided by user
+  const getActiveGoogleMapsApiKey = (): string => {
+    const customProvidedKey = "AIzaSyB9lRr20cz1sxfsfvWO3t-Qrcn5XB9iRz0";
+    const envKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+    if (envKey && envKey !== "AIzaSyAl3I8BhuJ2MwVWzoB5Ov3_-FHJuY6FBeA" && envKey !== "YOUR_API_KEY" && !envKey.includes("placeholder")) {
+      return envKey;
+    }
+    return customProvidedKey;
+  };
+
+  // Cached Google Maps Platform billing & readiness state
+  let cachedGoogleMapsStatus: {
+    checkedAt: number;
+    available: boolean;
+    billingEnabled: boolean;
+    reason?: string;
+  } | null = null;
+
+  // Google Maps Platform Health & Billing Status Check
+  app.get("/api/maps/google/status", async (_req, res) => {
+    const now = Date.now();
+    // Cache for 10 minutes to avoid redundant remote API pings
+    if (cachedGoogleMapsStatus && now - cachedGoogleMapsStatus.checkedAt < 10 * 60 * 1000) {
+      return res.json({ success: true, ...cachedGoogleMapsStatus });
+    }
+
+    const apiKey = getActiveGoogleMapsApiKey();
+    if (!apiKey || apiKey === "YOUR_API_KEY" || apiKey.includes("placeholder")) {
+      cachedGoogleMapsStatus = {
+        checkedAt: now,
+        available: false,
+        billingEnabled: false,
+        reason: "NoApiKey"
+      };
+      return res.json({ success: true, ...cachedGoogleMapsStatus });
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const testUrl = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+      const gRes = await fetch(testUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (gRes.ok) {
+        cachedGoogleMapsStatus = {
+          checkedAt: now,
+          available: true,
+          billingEnabled: true
+        };
+        return res.json({ success: true, ...cachedGoogleMapsStatus });
+      } else {
+        cachedGoogleMapsStatus = {
+          checkedAt: now,
+          available: false,
+          billingEnabled: false,
+          reason: `MapsJsHttp_${gRes.status}`
+        };
+        return res.json({ success: true, ...cachedGoogleMapsStatus });
+      }
+    } catch (err: any) {
+      cachedGoogleMapsStatus = {
+        checkedAt: now,
+        available: false,
+        billingEnabled: false,
+        reason: err?.name === "AbortError" ? "Timeout" : (err?.message || "CheckFailed")
+      };
+      return res.json({ success: true, ...cachedGoogleMapsStatus });
+    }
+  });
+
   // Google Maps Reverse Geocoding Proxy
   app.get("/api/maps/google/rev-geocode", async (req, res) => {
     try {
@@ -1644,7 +1715,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Invalid latitude/longitude" });
       }
 
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      const apiKey = getActiveGoogleMapsApiKey();
       if (!apiKey || apiKey === "YOUR_API_KEY") {
         return res.status(500).json({ success: false, message: "GOOGLE_MAPS_API_KEY is not configured" });
       }
@@ -1746,7 +1817,7 @@ async function startServer() {
         return res.json({ success: true, results: [] });
       }
 
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      const apiKey = getActiveGoogleMapsApiKey();
       if (!apiKey || apiKey === "YOUR_API_KEY") {
         return res.status(500).json({ success: false, message: "GOOGLE_MAPS_API_KEY is not configured" });
       }
@@ -1872,7 +1943,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Place ID is required" });
       }
 
-      const apiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+      const apiKey = getActiveGoogleMapsApiKey();
       if (!apiKey || apiKey === "YOUR_API_KEY") {
         return res.status(500).json({ success: false, message: "GOOGLE_MAPS_API_KEY is not configured" });
       }

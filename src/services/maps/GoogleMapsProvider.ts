@@ -5,11 +5,80 @@ import { generateSecureToken } from '../../utils/cryptoHelper';
 
 let googleMapsScriptLoadingPromise: Promise<boolean> | null = null;
 let googleMapsAuthFailed = false;
+let googleBillingVerified: boolean | null = null;
+let billingStatusCheckPromise: Promise<boolean> | null = null;
 
-function loadGoogleMapsScript(apiKey: string): Promise<boolean> {
+// Suppress Google Maps alert popup if auth/billing failure occurs
+if (typeof window !== 'undefined') {
+  (window as any).gm_authFailure = () => {
+    console.warn('[GoogleMaps] Authentication or Billing notice triggered. Switching to clean resilient renderer.');
+    googleMapsAuthFailed = true;
+    googleBillingVerified = false;
+  };
+}
+
+/**
+ * Pre-verifies whether Google Maps Platform billing is enabled on the current key.
+ * This prevents the browser from loading maps.googleapis.com with an unbilled key,
+ * which eliminates the fatal 'BillingNotEnabledMapError' console error.
+ */
+async function isGoogleMapsBillingActive(): Promise<boolean> {
+  if (googleBillingVerified !== null) {
+    return googleBillingVerified;
+  }
+
+  if (billingStatusCheckPromise) {
+    return billingStatusCheckPromise;
+  }
+
+  billingStatusCheckPromise = (async () => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(`${API_BASE_URL}/api/maps/google/status`, { signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.billingEnabled === true) {
+          googleBillingVerified = true;
+          return true;
+        } else {
+          googleBillingVerified = false;
+          googleMapsAuthFailed = true;
+          console.info('[GoogleMapsProvider] Google Maps billing is not active on this project. Using resilient high-definition map renderer.');
+          return false;
+        }
+      }
+    } catch {
+      // In case of timeout or offline, default to safe fallback renderer to avoid billing error
+      googleBillingVerified = false;
+      googleMapsAuthFailed = true;
+      return false;
+    }
+
+    googleBillingVerified = false;
+    googleMapsAuthFailed = true;
+    return false;
+  })();
+
+  return billingStatusCheckPromise;
+}
+
+async function loadGoogleMapsScript(apiKey: string): Promise<boolean> {
   if (typeof window === 'undefined') return Promise.resolve(false);
   if ((window as any).google && (window as any).google.maps && (window as any).google.maps.Map) {
     return Promise.resolve(true);
+  }
+
+  if (googleMapsAuthFailed || googleBillingVerified === false) {
+    return Promise.resolve(false);
+  }
+
+  // Mandatory pre-flight: Only load script if billing is verified active
+  const isBilled = await isGoogleMapsBillingActive();
+  if (!isBilled) {
+    return Promise.resolve(false);
   }
 
   if (googleMapsScriptLoadingPromise) {
@@ -17,12 +86,6 @@ function loadGoogleMapsScript(apiKey: string): Promise<boolean> {
   }
 
   googleMapsScriptLoadingPromise = new Promise((resolve) => {
-    // Intercept Google Maps authentication/billing failure callback
-    (window as any).gm_authFailure = () => {
-      console.warn('[GoogleMaps] Authentication or Billing notice triggered. Switching to clean resilient renderer.');
-      googleMapsAuthFailed = true;
-    };
-
     const existingScript = document.getElementById('google-maps-js-sdk') as HTMLScriptElement | null;
     if (existingScript) {
       if ((window as any).google?.maps?.Map) {
@@ -66,14 +129,18 @@ export class GoogleMapsProvider implements IMapProvider {
   readonly name = 'google' as const;
 
   private getApiKey(): string | null {
+    const customProvidedKey = 'AIzaSyB9lRr20cz1sxfsfvWO3t-Qrcn5XB9iRz0';
     const key = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
-    if (!key || key === 'YOUR_API_KEY' || key.includes('placeholder')) {
-      return null;
+    if (key && key !== 'AIzaSyAl3I8BhuJ2MwVWzoB5Ov3_-FHJuY6FBeA' && key !== 'YOUR_API_KEY' && !key.includes('placeholder')) {
+      return key;
     }
-    return key;
+    return customProvidedKey;
   }
 
   isAvailable(): boolean {
+    if (googleMapsAuthFailed || googleBillingVerified === false) {
+      return false;
+    }
     return Boolean(this.getApiKey());
   }
 
@@ -81,26 +148,19 @@ export class GoogleMapsProvider implements IMapProvider {
     container.innerHTML = '';
     const apiKey = this.getApiKey();
 
-    if (!apiKey) {
-      container.innerHTML = `
-        <div class="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-600 p-4 text-center rounded-lg">
-          <p class="font-semibold text-sm">Google Maps not configured</p>
-          <p class="text-xs text-slate-500 mt-1">VITE_GOOGLE_MAPS_API_KEY is missing.</p>
-        </div>
-      `;
-      throw new Error('Google Maps is not configured. Missing VITE_GOOGLE_MAPS_API_KEY.');
+    // If no key or if billing is not enabled, seamlessly use resilient clean renderer
+    if (!apiKey || googleMapsAuthFailed || googleBillingVerified === false) {
+      return this.initializeCleanTileMap(container, options);
     }
 
-    // 1. Try Native Google Maps JavaScript API
-    if (!googleMapsAuthFailed) {
-      try {
-        const loaded = await loadGoogleMapsScript(apiKey);
-        if (loaded && !googleMapsAuthFailed && (window as any).google?.maps?.Map) {
-          return this.initializeNativeGoogleMap(container, options);
-        }
-      } catch (err) {
-        console.warn('[GoogleMapsProvider] Native Google Maps initialization error, falling back to clean tiles:', err);
+    // 1. Try Native Google Maps JavaScript API only if billing is verified
+    try {
+      const loaded = await loadGoogleMapsScript(apiKey);
+      if (loaded && !googleMapsAuthFailed && (window as any).google?.maps?.Map) {
+        return this.initializeNativeGoogleMap(container, options);
       }
+    } catch (err) {
+      console.warn('[GoogleMapsProvider] Native Google Maps initialization error, falling back to clean tiles:', err);
     }
 
     // 2. Resilient High-Definition Clean Renderer (Zero watermark, zero error popups)
