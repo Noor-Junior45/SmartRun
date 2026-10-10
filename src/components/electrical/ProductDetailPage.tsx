@@ -40,7 +40,8 @@ import {
   isWireProduct,
   isPipeProduct,
   getProductColorOptions,
-  getDefaultProductColor
+  getDefaultProductColor,
+  resolveColorPreviewImage
 } from '../../data/wireColors';
 import { checkKolkataDeliveryService } from '../../data/kolkataAreas';
 import { trackProductView } from '../../utils/analytics';
@@ -77,6 +78,8 @@ export const ProductDetailPage = ({
   const [loading, setLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedWireColor, setSelectedWireColor] = useState<string>('Red');
+  const [hoveredImage, setHoveredImage] = useState<string | null>(null);
+  const [hoveredColor, setHoveredColor] = useState<string | null>(null);
   const [isFullscreenImageViewerOpen, setIsFullscreenImageViewerOpen] = useState(false);
 
   const thumbnailContainerRef = useRef<HTMLDivElement>(null);
@@ -244,7 +247,7 @@ export const ProductDetailPage = ({
     return product?.discount_percent || 0;
   }, [activeColorOption, effectivePrice, effectiveMrp, product?.discount_percent]);
 
-  // Dynamic gallery images: if selected color has linked photo(s), ONLY show that chosen colour's photo(s)
+  // Dynamic gallery images for the selected color variant
   const effectiveImageUrls = useMemo(() => {
     if (!product) return [];
     const baseImages = (
@@ -284,10 +287,123 @@ export const ProductDetailPage = ({
           return [baseImages[colorIdx]];
         }
       }
+
+      // Fallback: resolve preview image for this color
+      const colorImg = resolveColorPreviewImage(activeColorOption, product);
+      if (colorImg && colorImg !== NEUTRAL_PRODUCT_PLACEHOLDER) {
+        return [colorImg];
+      }
     }
 
     return baseImages.length > 0 ? baseImages : [NEUTRAL_PRODUCT_PLACEHOLDER];
   }, [product, activeColorOption, colorOptions, selectedWireColor]);
+
+  // Amazon-style side preview gallery items:
+  // Combines active color photos + other available color variant preview thumbnails + product views
+  const galleryThumbnails = useMemo(() => {
+    if (!product) return [];
+
+    const items: Array<{
+      id: string;
+      url: string;
+      label: string;
+      colorName?: string;
+      colorHex?: string;
+      isColorVariant?: boolean;
+    }> = [];
+
+    // 1. Photos of the currently active color (or primary views)
+    effectiveImageUrls.forEach((url, idx) => {
+      items.push({
+        id: `active-${idx}`,
+        url,
+        label: `${activeColorOption?.name || 'Photo'} - View ${idx + 1}`,
+        colorName: activeColorOption?.name,
+        colorHex: activeColorOption?.hex,
+        isColorVariant: false
+      });
+    });
+
+    // 2. If product has multiple color options, show preview thumbnails for colors that have their own distinct photo
+    const baseProductImg =
+      (Array.isArray(product.image_urls) && product.image_urls[0]) ||
+      (Array.isArray((product as any)?.images) && (product as any)?.images[0]) ||
+      (product as any)?.image ||
+      '';
+
+    if (colorOptions.length > 1) {
+      colorOptions.forEach((opt) => {
+        // Skip if this is the active color and already present as active-0
+        if (opt.name.toLowerCase() === (selectedWireColor || '').toLowerCase()) {
+          return;
+        }
+        const optImg = resolveColorPreviewImage(opt, product);
+        // Only include if it has its own distinct photo different from the base product image
+        if (optImg && optImg !== baseProductImg && !items.some((it) => it.url === optImg)) {
+          items.push({
+            id: `color-${opt.name}`,
+            url: optImg,
+            label: `${opt.name} (${opt.shortRole})`,
+            colorName: opt.name,
+            colorHex: opt.hex,
+            isColorVariant: true
+          });
+        }
+      });
+    }
+
+    // 3. Other general product views (angles, specifications, packaging)
+    const baseImages = (
+      Array.isArray(product.image_urls) && product.image_urls.length > 0
+        ? product.image_urls
+        : (product as any)?.images && Array.isArray((product as any).images)
+        ? (product as any).images
+        : (product as any)?.image
+        ? [(product as any).image]
+        : []
+    ).filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
+
+    baseImages.forEach((img, idx) => {
+      if (!items.some((it) => it.url === img)) {
+        items.push({
+          id: `product-view-${idx}`,
+          url: img,
+          label: `View ${idx + 1}`,
+          isColorVariant: false
+        });
+      }
+    });
+
+    return items;
+  }, [product, effectiveImageUrls, colorOptions, selectedWireColor, activeColorOption]);
+
+  // Currently active thumbnail in the side preview bar
+  const activeThumbnailId = useMemo(() => {
+    if (hoveredColor) {
+      const match = galleryThumbnails.find((t) => t.colorName === hoveredColor);
+      if (match) return match.id;
+    }
+    if (hoveredImage) {
+      const match = galleryThumbnails.find((t) => t.url === hoveredImage);
+      if (match) return match.id;
+    }
+    return `active-${selectedImageIndex}`;
+  }, [hoveredColor, hoveredImage, selectedImageIndex, galleryThumbnails]);
+
+  // Index of currently active image in galleryThumbnails for Flipkart full screen viewer
+  const currentFullscreenIndex = useMemo(() => {
+    const activeThumb = galleryThumbnails.find((t) => t.id === activeThumbnailId);
+    if (activeThumb) {
+      const idx = galleryThumbnails.indexOf(activeThumb);
+      if (idx >= 0) return idx;
+    }
+    const currentImgUrl =
+      hoveredImage ||
+      effectiveImageUrls[selectedImageIndex] ||
+      effectiveImageUrls[0];
+    const urlIdx = galleryThumbnails.findIndex((t) => t.url === currentImgUrl);
+    return urlIdx >= 0 ? urlIdx : 0;
+  }, [galleryThumbnails, activeThumbnailId, hoveredImage, effectiveImageUrls, selectedImageIndex]);
 
   // Set default color when product changes
   useEffect(() => {
@@ -295,13 +411,43 @@ export const ProductDetailPage = ({
       const def = getDefaultProductColor(product);
       if (def) setSelectedWireColor(def);
       setSelectedImageIndex(0);
+      setHoveredImage(null);
+      setHoveredColor(null);
     }
   }, [product]);
 
-  // Reset selected image index when user switches colour variant
+  // User selects a colour variant: updates color, resets image index, clears temporary hover
   const handleSelectColor = (colorName: string) => {
+    hapticLight();
     setSelectedWireColor(colorName);
     setSelectedImageIndex(0);
+    setHoveredImage(null);
+    setHoveredColor(null);
+  };
+
+  // Thumbnail click handler
+  const handleThumbnailClick = (thumb: any, idx: number) => {
+    hapticLight();
+    if (thumb.colorName && thumb.isColorVariant) {
+      handleSelectColor(thumb.colorName);
+    } else {
+      setSelectedImageIndex(idx);
+    }
+    setHoveredImage(null);
+    setHoveredColor(null);
+  };
+
+  // Thumbnail hover handlers (Amazon-style live side preview)
+  const handleThumbnailHover = (thumb: (typeof galleryThumbnails)[0]) => {
+    setHoveredImage(thumb.url);
+    if (thumb.colorName) {
+      setHoveredColor(thumb.colorName);
+    }
+  };
+
+  const handleThumbnailLeave = () => {
+    setHoveredImage(null);
+    setHoveredColor(null);
   };
 
   // Adapt for App's Cart system
@@ -492,12 +638,13 @@ export const ProductDetailPage = ({
   }
 
   const currentImage =
+    hoveredImage ||
     effectiveImageUrls[selectedImageIndex] ||
     effectiveImageUrls[0] ||
     NEUTRAL_PRODUCT_PLACEHOLDER;
 
   return (
-    <div className="min-h-screen bg-[#f1f3f6] text-slate-900 pb-32 sm:pb-36 font-sans relative">
+    <div className="min-h-screen bg-white text-slate-900 pb-32 sm:pb-36 font-sans relative">
       <SEOHead
         title={`${product.name} - Buy Online at Best Price in Kolkata | Giriraj Power`}
         description={`Buy authentic ${product.brand} ${product.subcategory}, ₹${effectivePrice} in Kolkata. Fast 60-min delivery, genuine manufacturer warranty, and certified quality from Giriraj Power.`}
@@ -516,8 +663,8 @@ export const ProductDetailPage = ({
       />
       
       {/* Main Two-Column Layout */}
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-3 sm:py-5">
-        <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 relative">
           
           {/* ========================================================================= */}
           {/* LEFT COLUMN: IMAGE GALLERY WITH ZOOM + FLOATING BOTTOM ACTION BAR */}
@@ -528,10 +675,10 @@ export const ProductDetailPage = ({
             <div className="flex flex-col-reverse sm:flex-row gap-3">
               
               {/* Thumbnail Strip with Up/Down and Left/Right Scroll Arrows */}
-              {effectiveImageUrls.length > 1 && (
+              {galleryThumbnails.length > 1 && (
                 <div className="flex sm:flex-col items-center justify-center relative select-none">
                   {/* Desktop Up Scroll Button (shown when 5+ images) */}
-                  {effectiveImageUrls.length >= 5 && (
+                  {galleryThumbnails.length >= 5 && (
                     <button
                       type="button"
                       onClick={() => scrollThumbnails('prev')}
@@ -544,7 +691,7 @@ export const ProductDetailPage = ({
                   )}
 
                   {/* Mobile Left Scroll Button (shown when 5+ images) */}
-                  {effectiveImageUrls.length >= 5 && (
+                  {galleryThumbnails.length >= 5 && (
                     <button
                       type="button"
                       onClick={() => scrollThumbnails('prev')}
@@ -561,29 +708,42 @@ export const ProductDetailPage = ({
                     ref={thumbnailContainerRef}
                     className="flex sm:flex-col gap-2 overflow-x-auto sm:overflow-y-auto sm:max-h-96 px-6 sm:px-0 py-0.5 sm:py-1 scrollbar-none scroll-smooth"
                   >
-                    {effectiveImageUrls.map((imgUrl, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setSelectedImageIndex(idx)}
-                        onMouseEnter={() => setSelectedImageIndex(idx)}
-                        className={`w-14 h-14 sm:w-16 sm:h-16 rounded-lg border p-1 bg-slate-50 shrink-0 transition-all cursor-pointer relative ${
-                          selectedImageIndex === idx
-                            ? 'border-yellow-500 ring-2 ring-yellow-300 shadow-xs'
-                            : 'border-slate-200 hover:border-slate-400 opacity-85 hover:opacity-100'
-                        }`}
-                        title={`View photo ${idx + 1}`}
-                      >
-                        <img
-                          src={imgUrl}
-                          alt={`thumbnail-${idx}`}
-                          className="w-full h-full object-contain"
-                        />
-                      </button>
-                    ))}
+                    {galleryThumbnails.map((thumb, idx) => {
+                      const isCurrentActive = activeThumbnailId === thumb.id;
+                      return (
+                        <button
+                          key={thumb.id}
+                          type="button"
+                          onClick={() => handleThumbnailClick(thumb, idx)}
+                          onMouseEnter={() => handleThumbnailHover(thumb)}
+                          onMouseLeave={handleThumbnailLeave}
+                          className={`w-14 h-14 sm:w-16 sm:h-16 rounded-xl border p-1 bg-white shrink-0 transition-all cursor-pointer relative group ${
+                            isCurrentActive
+                              ? 'border-yellow-500 ring-2 ring-yellow-400 shadow-sm'
+                              : 'border-slate-200 hover:border-slate-400 opacity-85 hover:opacity-100 shadow-2xs'
+                          }`}
+                          title={thumb.label}
+                        >
+                          <img
+                            src={thumb.url}
+                            alt={thumb.label}
+                            className="w-full h-full object-contain transition-transform group-hover:scale-105"
+                          />
+                          {/* Color Badge Indicator if this thumbnail represents a color variant */}
+                          {thumb.colorHex && (
+                            <span
+                              className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-white shadow-xs"
+                              style={{ backgroundColor: thumb.colorHex }}
+                              title={thumb.colorName}
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* Desktop Down Scroll Button (shown when 5+ images) */}
-                  {effectiveImageUrls.length >= 5 && (
+                  {galleryThumbnails.length >= 5 && (
                     <button
                       type="button"
                       onClick={() => scrollThumbnails('next')}
@@ -596,7 +756,7 @@ export const ProductDetailPage = ({
                   )}
 
                   {/* Mobile Right Scroll Button (shown when 5+ images) */}
-                  {effectiveImageUrls.length >= 5 && (
+                  {galleryThumbnails.length >= 5 && (
                     <button
                       type="button"
                       onClick={() => scrollThumbnails('next')}
@@ -631,17 +791,6 @@ export const ProductDetailPage = ({
                     }
                   }}
                 />
-
-                {/* Fullscreen Expand Button at top-left of image */}
-                <button
-                  type="button"
-                  onClick={() => setIsFullscreenImageViewerOpen(true)}
-                  className="absolute top-2.5 left-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-sm border border-slate-200/80 flex items-center justify-center active:scale-90 transition-all cursor-pointer z-20 backdrop-blur-xs"
-                  title="View full screen"
-                  aria-label="View full screen"
-                >
-                  <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
-                </button>
 
                 {/* Left & Right on-image navigation buttons if multiple images exist */}
                 {effectiveImageUrls.length > 1 && (
@@ -871,35 +1020,68 @@ export const ProductDetailPage = ({
                   </h3>
                 </div>
 
-                {/* Interactive Colour Swatches Grid */}
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {/* Interactive Colour Swatches Grid with Amazon-Style Thumbnail Previews */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                   {colorOptions.map((opt) => {
-                    const isSelected = selectedWireColor === opt.name;
+                    const isSelected = (hoveredColor || selectedWireColor) === opt.name;
+                    const optImg = resolveColorPreviewImage(opt, product);
+                    const baseProductImg =
+                      (Array.isArray(product.image_urls) && product.image_urls[0]) ||
+                      (Array.isArray((product as any)?.images) && (product as any)?.images[0]) ||
+                      (product as any)?.image ||
+                      '';
                     return (
                       <button
                         key={opt.name}
                         type="button"
                         onClick={() => handleSelectColor(opt.name)}
-                        className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center relative ${
+                        onMouseEnter={() => {
+                          setHoveredColor(opt.name);
+                          if (optImg) setHoveredImage(optImg);
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredColor(null);
+                          setHoveredImage(null);
+                        }}
+                        className={`p-1.5 sm:p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center relative group ${
                           isSelected
-                            ? 'border-slate-900 bg-white ring-2 ring-slate-900 shadow-sm'
-                            : 'border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50/80 shadow-2xs'
+                            ? 'border-yellow-500 bg-amber-50/50 ring-2 ring-yellow-400 shadow-sm'
+                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80 shadow-2xs'
                         }`}
+                        title={`Select ${opt.name}`}
                       >
-                        <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center border transition-transform ${
-                            isSelected ? 'border-white ring-2 ring-slate-900 scale-105 shadow-xs' : 'border-black/20'
-                          }`}
-                          style={{ backgroundColor: opt.hex }}
-                        >
-                          {isSelected && (
-                            <Check
-                              className={`w-3.5 h-3.5 stroke-[3] ${
-                                opt.name === 'White' || opt.name === 'Ivory / Off-White' ? 'text-slate-900' : 'text-white'
-                              }`}
+                        {/* Color Swatch or Miniature Variant Photo */}
+                        {optImg && optImg !== baseProductImg ? (
+                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-slate-50 border border-slate-200/80 p-0.5 relative overflow-hidden flex items-center justify-center shrink-0">
+                            <img
+                              src={optImg}
+                              alt={opt.name}
+                              className="w-full h-full object-contain transition-transform group-hover:scale-105"
                             />
-                          )}
-                        </div>
+                            {/* Corner Color Dot */}
+                            <span
+                              className="absolute bottom-1 right-1 w-3 h-3 rounded-full border border-white shadow-xs"
+                              style={{ backgroundColor: opt.hex }}
+                            />
+                            {isSelected && (
+                              <span className="absolute top-1 left-1 bg-slate-900 text-white rounded-full p-0.5 shadow-xs">
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 border-white shadow-xs flex items-center justify-center relative shrink-0 transition-transform group-hover:scale-105"
+                            style={{ backgroundColor: opt.hex }}
+                          >
+                            {isSelected && (
+                              <span className="bg-slate-900/90 text-white rounded-full p-1 shadow-xs">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Color Name & Price */}
                         <div className="min-w-0 w-full px-0.5">
                           <span className="block text-[11px] font-black text-slate-900 leading-tight truncate">
                             {opt.name}
@@ -921,7 +1103,8 @@ export const ProductDetailPage = ({
 
                 {/* Selected Color Purpose Banner */}
                 {(() => {
-                  const activeColor = colorOptions.find((c) => c.name === selectedWireColor);
+                  const displayColorName = hoveredColor || selectedWireColor;
+                  const activeColor = colorOptions.find((c) => c.name === displayColorName) || activeColorOption;
                   if (!activeColor) return null;
                   return (
                     <div className="p-2 sm:p-2.5 rounded-lg bg-white border border-slate-200 text-[11px] sm:text-xs text-slate-700 flex items-center gap-2 shadow-2xs">
@@ -929,7 +1112,12 @@ export const ProductDetailPage = ({
                         className="w-3 h-3 rounded-full shrink-0 border border-black/20"
                         style={{ backgroundColor: activeColor.hex }}
                       />
-                      <span className="font-extrabold text-slate-900 shrink-0">{activeColor.name}:</span>
+                      <span className="font-extrabold text-slate-900 shrink-0">
+                        Colour: {activeColor.name}
+                        {hoveredColor && hoveredColor !== selectedWireColor && (
+                          <span className="ml-1 text-[10px] font-bold text-amber-600">(Previewing)</span>
+                        )}
+                      </span>
                       <span className="text-slate-600 truncate">{activeColor.shortRole || activeColor.description}</span>
                     </div>
                   );
@@ -1340,7 +1528,7 @@ export const ProductDetailPage = ({
         {/* SIMILAR PRODUCTS CAROUSEL / ROW */}
         {/* ========================================================================= */}
         {similarProducts.length > 0 && (
-          <div className="mt-8 bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-xs space-y-4">
+          <div className="mt-12 pt-8 border-t border-slate-200 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-black text-slate-900">
                 Similar Products in {product.subcategory}
@@ -1503,9 +1691,12 @@ export const ProductDetailPage = ({
       <FullscreenImageViewer
         isOpen={isFullscreenImageViewerOpen}
         onClose={() => setIsFullscreenImageViewerOpen(false)}
-        images={effectiveImageUrls}
-        initialIndex={selectedImageIndex}
+        items={galleryThumbnails}
+        initialIndex={currentFullscreenIndex}
         productName={product.name}
+        onSelectThumbnail={(thumb, idx) => {
+          handleThumbnailClick(thumb, idx);
+        }}
       />
     </div>
   );

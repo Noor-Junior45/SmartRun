@@ -6,7 +6,8 @@ import {
   isWireProduct,
   isPipeProduct,
   getProductColorOptions,
-  getDefaultProductColor
+  getDefaultProductColor,
+  resolveColorPreviewImage
 } from '../data/wireColors';
 import { checkKolkataDeliveryService } from '../data/kolkataAreas';
 import { trackProductView } from '../utils/analytics';
@@ -50,6 +51,8 @@ export const ProductDetailModal = ({
   const [selectedWireColor, setSelectedWireColor] = useState<string>(
     product?.selectedColor || (product ? getDefaultProductColor(product) : '')
   );
+  const [hoveredImage, setHoveredImage] = useState<string | null>(null);
+  const [hoveredColor, setHoveredColor] = useState<string | null>(null);
   const [pincode, setPincode] = useState('700091');
   const [pincodeChecked, setPincodeChecked] = useState(true);
 
@@ -130,23 +133,167 @@ export const ProductDetailModal = ({
           return [baseImages[colorIdx]];
         }
       }
+
+      // Fallback: resolve preview image for this color
+      const colorImg = resolveColorPreviewImage(activeColorObj, product);
+      if (colorImg && colorImg !== NEUTRAL_PRODUCT_PLACEHOLDER) {
+        return [colorImg];
+      }
     }
 
     return baseImages.length > 0 ? baseImages : [NEUTRAL_PRODUCT_PLACEHOLDER];
   }, [product, activeColorObj, colorOptions, selectedWireColor]);
+
+  // Gallery thumbnails for the modal thumbnail strip
+  const modalThumbnails = useMemo(() => {
+    if (!product) return [];
+    const items: Array<{
+      id: string;
+      url: string;
+      label: string;
+      colorName?: string;
+      colorHex?: string;
+      isColorVariant?: boolean;
+    }> = [];
+
+    allImages.forEach((url, idx) => {
+      items.push({
+        id: `active-${idx}`,
+        url,
+        label: `${activeColorObj?.name || 'Photo'} ${idx + 1}`,
+        colorName: activeColorObj?.name,
+        colorHex: activeColorObj?.hex,
+        isColorVariant: false
+      });
+    });
+
+    const baseProductImg =
+      (Array.isArray(product.images) && product.images[0]) ||
+      (Array.isArray((product as any)?.image_urls) && (product as any)?.image_urls[0]) ||
+      (product as any)?.image ||
+      '';
+
+    if (colorOptions.length > 1) {
+      colorOptions.forEach((opt) => {
+        if (opt.name.toLowerCase() === (selectedWireColor || '').toLowerCase()) return;
+        const optImg = resolveColorPreviewImage(opt, product);
+        if (optImg && optImg !== baseProductImg && !items.some((it) => it.url === optImg)) {
+          items.push({
+            id: `color-${opt.name}`,
+            url: optImg,
+            label: `${opt.name}`,
+            colorName: opt.name,
+            colorHex: opt.hex,
+            isColorVariant: true
+          });
+        }
+      });
+    }
+
+    // 3. Other general product views
+    const baseImages = (
+      Array.isArray(product.images) && product.images.length > 0
+        ? product.images
+        : Array.isArray((product as any)?.image_urls) && (product as any).image_urls.length > 0
+        ? (product as any).image_urls
+        : product.image
+        ? [product.image]
+        : []
+    ).filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
+
+    baseImages.forEach((img, idx) => {
+      if (!items.some((it) => it.url === img)) {
+        items.push({
+          id: `product-view-${idx}`,
+          url: img,
+          label: `View ${idx + 1}`,
+          isColorVariant: false
+        });
+      }
+    });
+
+    return items;
+  }, [product, allImages, colorOptions, selectedWireColor, activeColorObj]);
+
+  const activeThumbnailId = useMemo(() => {
+    if (hoveredColor) {
+      const match = modalThumbnails.find((t) => t.colorName === hoveredColor);
+      if (match) return match.id;
+    }
+    if (hoveredImage) {
+      const match = modalThumbnails.find((t) => t.url === hoveredImage);
+      if (match) return match.id;
+    }
+    return `active-${selectedImageIndex}`;
+  }, [hoveredColor, hoveredImage, selectedImageIndex, modalThumbnails]);
+
+  const currentFullscreenIndex = useMemo(() => {
+    const activeThumb = modalThumbnails.find((t) => t.id === activeThumbnailId);
+    if (activeThumb) {
+      const idx = modalThumbnails.indexOf(activeThumb);
+      if (idx >= 0) return idx;
+    }
+    const currentImgUrl =
+      hoveredImage ||
+      allImages[selectedImageIndex] ||
+      allImages[0];
+    const urlIdx = modalThumbnails.findIndex((t) => t.url === currentImgUrl);
+    return urlIdx >= 0 ? urlIdx : 0;
+  }, [modalThumbnails, activeThumbnailId, hoveredImage, allImages, selectedImageIndex]);
 
   useEffect(() => {
     if (product) {
       setIsFav(isProductFavorite(product.id));
       setSelectedWireColor(product.selectedColor || getDefaultProductColor(product));
       setSelectedImageIndex(0);
+      setHoveredImage(null);
+      setHoveredColor(null);
       trackProductView(product);
+
+      // Lock body scroll and listen for Escape key
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') onClose();
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        document.body.style.overflow = originalOverflow;
+      };
     }
-  }, [product]);
+  }, [product, onClose]);
 
   const handleSelectColor = (colorName: string) => {
+    hapticLight();
     setSelectedWireColor(colorName);
     setSelectedImageIndex(0);
+    setHoveredImage(null);
+    setHoveredColor(null);
+  };
+
+  const handleThumbnailClick = (thumb: any, idx: number) => {
+    hapticLight();
+    if (thumb.colorName && thumb.isColorVariant) {
+      handleSelectColor(thumb.colorName);
+    } else {
+      setSelectedImageIndex(idx);
+    }
+    setHoveredImage(null);
+    setHoveredColor(null);
+  };
+
+  const handleThumbnailHover = (thumb: (typeof modalThumbnails)[0]) => {
+    setHoveredImage(thumb.url);
+    if (thumb.colorName) {
+      setHoveredColor(thumb.colorName);
+    }
+  };
+
+  const handleThumbnailLeave = () => {
+    setHoveredImage(null);
+    setHoveredColor(null);
   };
 
   if (!product) return null;
@@ -203,7 +350,7 @@ export const ProductDetailModal = ({
     });
   };
 
-  const currentImage = allImages[selectedImageIndex] || allImages[0] || product.image || NEUTRAL_PRODUCT_PLACEHOLDER;
+  const currentImage = hoveredImage || allImages[selectedImageIndex] || allImages[0] || product.image || NEUTRAL_PRODUCT_PLACEHOLDER;
 
   // Mobile Bottom Sheet Drag-to-Dismiss Gesture
   const {
@@ -216,7 +363,12 @@ export const ProductDetailModal = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+    >
       <div
         style={dragStyle}
         className="bg-white rounded-t-3xl sm:rounded-2xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl border border-slate-200 relative max-h-[92vh] sm:max-h-[90vh] overflow-y-auto"
@@ -301,17 +453,6 @@ export const ProductDetailModal = ({
                 }}
               />
 
-              {/* Fullscreen Expand Button at top-left of image */}
-              <button
-                type="button"
-                onClick={() => setIsFullscreenViewerOpen(true)}
-                className="absolute top-2.5 left-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-sm border border-slate-200/80 flex items-center justify-center active:scale-90 transition-all cursor-pointer z-20 backdrop-blur-xs"
-                title="View full screen"
-                aria-label="View full screen"
-              >
-                <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
-              </button>
-
               {allImages.length > 1 && (
                 <>
                   <button
@@ -344,9 +485,9 @@ export const ProductDetailModal = ({
             </div>
 
             {/* Thumbnail Strip with Scroll Arrows when 5+ images */}
-            {allImages.length > 1 && (
+            {modalThumbnails.length > 1 && (
               <div className="mt-3 relative flex items-center">
-                {allImages.length >= 5 && (
+                {modalThumbnails.length >= 5 && (
                   <button
                     type="button"
                     onClick={() => scrollThumbnails('prev')}
@@ -359,30 +500,42 @@ export const ProductDetailModal = ({
 
                 <div
                   ref={thumbnailContainerRef}
-                  className={`flex gap-2 overflow-x-auto py-1 scrollbar-none scroll-smooth w-full ${allImages.length >= 5 ? 'px-6' : ''}`}
+                  className={`flex gap-2 overflow-x-auto py-1 scrollbar-none scroll-smooth w-full ${modalThumbnails.length >= 5 ? 'px-6' : ''}`}
                 >
-                  {allImages.map((img, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setSelectedImageIndex(idx)}
-                      className={`w-12 h-12 rounded-lg border p-0.5 bg-slate-50 shrink-0 transition-all cursor-pointer relative ${
-                        selectedImageIndex === idx
-                          ? 'border-yellow-500 ring-2 ring-yellow-300 shadow-xs'
-                          : 'border-slate-200 hover:border-slate-400 opacity-80 hover:opacity-100'
-                      }`}
-                      title={`Photo ${idx + 1}`}
-                    >
-                      <img
-                        src={img}
-                        alt={`thumb-${idx}`}
-                        className="w-full h-full object-contain"
-                      />
-                    </button>
-                  ))}
+                  {modalThumbnails.map((thumb, idx) => {
+                    const isCurrentActive = activeThumbnailId === thumb.id;
+                    return (
+                      <button
+                        key={thumb.id}
+                        type="button"
+                        onClick={() => handleThumbnailClick(thumb, idx)}
+                        onMouseEnter={() => handleThumbnailHover(thumb)}
+                        onMouseLeave={handleThumbnailLeave}
+                        className={`w-12 h-12 rounded-lg border p-0.5 bg-white shrink-0 transition-all cursor-pointer relative group ${
+                          isCurrentActive
+                            ? 'border-yellow-500 ring-2 ring-yellow-400 shadow-xs'
+                            : 'border-slate-200 hover:border-slate-400 opacity-80 hover:opacity-100'
+                        }`}
+                        title={thumb.label}
+                      >
+                        <img
+                          src={thumb.url}
+                          alt={thumb.label}
+                          className="w-full h-full object-contain transition-transform group-hover:scale-105"
+                        />
+                        {thumb.colorHex && (
+                          <span
+                            className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-white shadow-xs"
+                            style={{ backgroundColor: thumb.colorHex }}
+                            title={thumb.colorName}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {allImages.length >= 5 && (
+                {modalThumbnails.length >= 5 && (
                   <button
                     type="button"
                     onClick={() => scrollThumbnails('next')}
@@ -470,36 +623,69 @@ export const ProductDetailModal = ({
                     </span>
                   </div>
 
-                  {/* Swatches Row */}
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-2.5">
+                  {/* Swatches Row with Miniature Thumbnail Previews */}
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-2.5">
                     {colorOptions.map((opt) => {
-                      const isSelected = selectedWireColor === opt.name;
+                      const isSelected = (hoveredColor || selectedWireColor) === opt.name;
+                      const optImg = resolveColorPreviewImage(opt, product);
+                      const baseProductImg =
+                        (Array.isArray(product.images) && product.images[0]) ||
+                        (Array.isArray((product as any)?.image_urls) && (product as any)?.image_urls[0]) ||
+                        (product as any)?.image ||
+                        '';
                       return (
                         <button
                           key={opt.name}
                           type="button"
                           onClick={() => handleSelectColor(opt.name)}
-                          className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center ${
+                          onMouseEnter={() => {
+                            setHoveredColor(opt.name);
+                            if (optImg) setHoveredImage(optImg);
+                          }}
+                          onMouseLeave={() => {
+                            setHoveredColor(null);
+                            setHoveredImage(null);
+                          }}
+                          className={`p-1.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer text-center relative group ${
                             isSelected
-                              ? 'border-slate-900 bg-white ring-2 ring-slate-900 shadow-xs'
+                              ? 'border-yellow-500 bg-amber-50/50 ring-2 ring-yellow-400 shadow-xs'
                               : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
                           }`}
+                          title={`Select ${opt.name}`}
                         >
-                          <div
-                            className={`w-6 h-6 rounded-full flex items-center justify-center border shadow-2xs ${
-                              isSelected ? 'border-white ring-1 ring-slate-900 scale-105' : 'border-black/20'
-                            }`}
-                            style={{ backgroundColor: opt.hex }}
-                          >
-                            {isSelected && (
-                              <Check
-                                className={`w-3.5 h-3.5 stroke-[3] ${
-                                  opt.name === 'White' || opt.name === 'Ivory / Off-White' ? 'text-slate-900' : 'text-white'
-                                }`}
+                          {/* Color Swatch or Miniature Variant Photo */}
+                          {optImg && optImg !== baseProductImg ? (
+                            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-lg bg-slate-50 border border-slate-200/80 p-0.5 relative overflow-hidden flex items-center justify-center shrink-0">
+                              <img
+                                src={optImg}
+                                alt={opt.name}
+                                className="w-full h-full object-contain transition-transform group-hover:scale-105"
                               />
-                            )}
-                          </div>
-                          <span className="text-[10px] font-bold text-slate-900 leading-tight">
+                              {/* Corner Color Dot */}
+                              <span
+                                className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-white shadow-xs"
+                                style={{ backgroundColor: opt.hex }}
+                              />
+                              {isSelected && (
+                                <span className="absolute top-1 left-1 bg-slate-900 text-white rounded-full p-0.5 shadow-xs">
+                                  <Check className="w-2 h-2 stroke-[3]" />
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div
+                              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-white shadow-xs flex items-center justify-center relative shrink-0 transition-transform group-hover:scale-105"
+                              style={{ backgroundColor: opt.hex }}
+                            >
+                              {isSelected && (
+                                <span className="bg-slate-900/90 text-white rounded-full p-0.5 shadow-xs">
+                                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          <span className="text-[10px] font-bold text-slate-900 leading-tight truncate w-full px-0.5">
                             {opt.name}
                           </span>
                           {typeof opt.price === 'number' && opt.price > 0 ? (
@@ -781,9 +967,12 @@ export const ProductDetailModal = ({
       <FullscreenImageViewer
         isOpen={isFullscreenViewerOpen}
         onClose={() => setIsFullscreenViewerOpen(false)}
-        images={allImages}
-        initialIndex={selectedImageIndex}
+        items={modalThumbnails}
+        initialIndex={currentFullscreenIndex}
         productName={product.name}
+        onSelectThumbnail={(thumb, idx) => {
+          handleThumbnailClick(thumb, idx);
+        }}
       />
     </div>
   );

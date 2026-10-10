@@ -1,3 +1,5 @@
+import { NEUTRAL_PRODUCT_PLACEHOLDER } from './productColorImages';
+
 export interface ProductColorOption {
   name: string;
   label: string;
@@ -856,6 +858,31 @@ export function getProductColorOptions(product?: {
   }
 
   return options;
+}
+
+/**
+ * Resolves the preview thumbnail / display image for a specific color option of a product.
+ * Returns the color variant's specific photo if available, or falls back to the user's authentic product image.
+ * Never injects AI or vector drawings over real product photos.
+ */
+export function resolveColorPreviewImage(
+  colorOption?: ProductColorOption | null,
+  product?: any
+): string {
+  if (colorOption) {
+    if (colorOption.image_url) return colorOption.image_url;
+    if (colorOption.imageUrl) return colorOption.imageUrl;
+    if (Array.isArray(colorOption.image_urls) && colorOption.image_urls.length > 0) return colorOption.image_urls[0];
+    if (Array.isArray(colorOption.images) && colorOption.images.length > 0) return colorOption.images[0];
+    if ((colorOption as any).image) return (colorOption as any).image;
+  }
+
+  // Always fallback to the product's authentic photo
+  if (product?.image) return product.image;
+  if (Array.isArray(product?.image_urls) && product.image_urls.length > 0) return product.image_urls[0];
+  if (Array.isArray(product?.images) && product.images.length > 0) return product.images[0];
+
+  return NEUTRAL_PRODUCT_PLACEHOLDER;
 }
 
 export function getDefaultProductColor(product?: {

@@ -901,8 +901,16 @@ export default function App() {
         setSelectedProductQuickView(null);
         return;
       }
+      if (isLiveOrderModalOpen) {
+        setIsLiveOrderModalOpen(false);
+        return;
+      }
       if (isLocationModalOpen) {
         setIsLocationModalOpen(false);
+        return;
+      }
+      if (addressToEdit) {
+        setAddressToEdit(null);
         return;
       }
       if (isDeviceLocationPromptOpen) {
@@ -918,29 +926,39 @@ export default function App() {
         return;
       }
 
-      // If user is not authenticated and on login screen or root, exit app
       const currentPath = location.pathname;
-      if (!isAuthenticated) {
-        if (currentPath === '/login' || currentPath === '/' || currentPath === '') {
-          CapApp.exitApp();
-          return;
-        }
+      // If at home root, exit app smoothly
+      if (currentPath === '/' || currentPath === '' || currentPath === '/home') {
+        CapApp.exitApp();
+        return;
       }
 
-      // If user is not at home root, navigate back
-      if (currentPath !== '/' && currentPath !== '' && currentPath !== '/login') {
-        if (currentPath.includes('/product/')) {
-          if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
-            navigate(-1);
-          } else {
-            const isConst = currentPath.includes('/construction');
-            navigate(isConst ? '/construction' : '/electrical');
-          }
-        } else {
+      // If on login page and user arrived from browsing, go back to previous page
+      if (currentPath === '/login' || currentPath === '/auth') {
+        if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
           navigate(-1);
+        } else {
+          navigate('/');
         }
+        return;
+      }
+
+      // If user is on product details
+      if (currentPath.includes('/product/')) {
+        if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+          navigate(-1);
+        } else {
+          const isConst = currentPath.includes('/construction');
+          navigate(isConst ? '/construction' : '/electrical');
+        }
+        return;
+      }
+
+      // All other pages: navigate back if history exists, otherwise return to home
+      if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+        navigate(-1);
       } else {
-        CapApp.exitApp();
+        navigate('/');
       }
     });
 
@@ -951,7 +969,9 @@ export default function App() {
     isAuthenticated,
     isAddProductOpen,
     selectedProductQuickView,
+    isLiveOrderModalOpen,
     isLocationModalOpen,
+    addressToEdit,
     isDeviceLocationPromptOpen,
     isAiAssistantOpen,
     isInstallModalOpen,
@@ -1017,9 +1037,13 @@ export default function App() {
     } catch {}
   };
 
-  // Global Scroll Reset, GA4 Page View, and Shared Link Referral detection on route change
+  // Reset scroll strictly when navigating to a new page (pathname change), avoiding jitter when typing search queries
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [location.pathname]);
+
+  // GA4 Page View & Shared Link Referral detection on route change
+  useEffect(() => {
     initShareReferralTracker(location.pathname, location.search);
     trackPageView(location.pathname + location.search);
   }, [location.pathname, location.search]);
@@ -1301,7 +1325,14 @@ export default function App() {
       cashbackBalance: 0
     };
 
-    // 5. Instantly flush state and navigate to home with zero delay
+    // 5. Instantly flush state and navigate to target destination with zero delay
+    let targetRedirect = '/';
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      targetRedirect = urlParams.get('redirect') || sessionStorage.getItem('auth_redirect_target') || '/';
+      sessionStorage.removeItem('auth_redirect_target');
+    } catch {}
+
     flushSync(() => {
       isLoggingOutRef.current = false;
       setIsLoggingOut(false);
@@ -1309,7 +1340,7 @@ export default function App() {
       setUserPhone(finalPhone || null);
       setUserName(optimisticProf.name);
     });
-    navigate('/', { replace: true });
+    navigate(targetRedirect, { replace: true });
 
     // 6. Non-blocking asynchronous sync for cloud profile in the background
     (async () => {
@@ -1405,50 +1436,17 @@ export default function App() {
     );
   }
 
-  // 2. If user is NOT logged in, require login first before accessing store & features
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 selection:bg-yellow-400 selection:text-black">
-        <SEOHead />
-        <AndroidAppBridgePrompt />
-        <main className="flex-1">
-          <Routes>
-            {/* Standalone Legal & Policy Pages */}
-            <Route path="/about" element={<LegalView onBack={() => navigate('/login')} type="about" />} />
-            <Route path="/about-us" element={<LegalView onBack={() => navigate('/login')} type="about" />} />
-            <Route path="/faqs" element={<LegalView onBack={() => navigate('/login')} type="faqs" />} />
-            <Route path="/faq" element={<LegalView onBack={() => navigate('/login')} type="faqs" />} />
-            <Route path="/refund-policy" element={<LegalView onBack={() => navigate('/login')} type="refund" />} />
-            <Route path="/refunds" element={<LegalView onBack={() => navigate('/login')} type="refund" />} />
-            <Route path="/shipping-policy" element={<LegalView onBack={() => navigate('/login')} type="shipping" />} />
-            <Route path="/shipping" element={<LegalView onBack={() => navigate('/login')} type="shipping" />} />
-            <Route path="/privacy" element={<LegalView onBack={() => navigate('/login')} type="privacy" />} />
-            <Route path="/privacy-policy" element={<LegalView onBack={() => navigate('/login')} type="privacy" />} />
-            <Route path="/terms" element={<LegalView onBack={() => navigate('/login')} type="terms" />} />
-            <Route path="/terms-of-service" element={<LegalView onBack={() => navigate('/login')} type="terms" />} />
-            <Route path="/reset-password" element={<ResetPassword onOpenAuth={() => navigate('/login')} />} />
-            
-            {/* Account & Data Deletion Portal (Google Play Policy Compliant) */}
-            <Route path="/delete" element={<AccountDeletionPage onOpenAuth={() => navigate('/login')} onBack={() => navigate('/login')} />} />
-            <Route path="/account-deletion" element={<AccountDeletionPage onOpenAuth={() => navigate('/login')} onBack={() => navigate('/login')} />} />
-
-            {/* Explicit Login Route & Wildcard fallback */}
-            <Route path="/login" element={<LoginPage onAuthSuccess={handleAuthSuccess} />} />
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </main>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 selection:bg-yellow-400 selection:text-black">
       {/* Dynamic SEO Meta & Structured Data Manager */}
       <SEOHead />
       <AndroidAppBridgePrompt />
       
-      {/* Top Header - Hidden when viewing profile, live-order, cart, or delete account */}
+      {/* Top Header - Hidden when viewing profile, live-order, cart, delete account, login, auth, or reset-password */}
       {location.pathname !== '/profile' &&
+        location.pathname !== '/login' &&
+        location.pathname !== '/auth' &&
+        location.pathname !== '/reset-password' &&
         !location.pathname.startsWith('/live-order') &&
         !location.pathname.startsWith('/cart') &&
         !location.pathname.startsWith('/delete') &&
@@ -1585,41 +1583,51 @@ export default function App() {
           <Route
             path="/profile"
             element={
-              <ProfileView
-                userProfile={userProfile}
-                orders={orders}
-                savedAddresses={savedAddresses}
-                allProducts={products}
-                onBack={() => navigate('/')}
-                onOpenLocationModal={() => {
-                  setAddressToEdit(null);
-                  setIsLocationModalOpen(true);
-                }}
-                onEditAddress={(addr) => {
-                  setAddressToEdit(addr);
-                  setIsLocationModalOpen(true);
-                }}
-                onSelectAddress={(addr) => {
-                  setActiveSavedAddress(addr);
-                  setCurrentArea(addr.area);
-                }}
-                onAddToCart={handleAddToCart}
-                onReorder={(reorderItems) => {
-                  reorderItems.forEach((item) => {
-                    handleAddToCart(item.product);
-                  });
-                  navigate('/cart');
-                }}
-                onOpenShop={() => navigate('/electrical')}
-                onOpenServices={() => navigate('/electrical')}
-                onProfileUpdated={(updated) => {
-                  if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current) return;
-                  setUserProfile(updated);
-                  setUserPhone(updated.phone || null);
-                  setUserName(updated.name || '');
-                }}
-                onLogout={handleLogout}
-              />
+              isAuthenticated ? (
+                <ProfileView
+                  userProfile={userProfile}
+                  orders={orders}
+                  savedAddresses={savedAddresses}
+                  allProducts={products}
+                  onBack={() => {
+                    if (window.history.length > 1) {
+                      navigate(-1);
+                    } else {
+                      navigate('/');
+                    }
+                  }}
+                  onOpenLocationModal={() => {
+                    setAddressToEdit(null);
+                    setIsLocationModalOpen(true);
+                  }}
+                  onEditAddress={(addr) => {
+                    setAddressToEdit(addr);
+                    setIsLocationModalOpen(true);
+                  }}
+                  onSelectAddress={(addr) => {
+                    setActiveSavedAddress(addr);
+                    setCurrentArea(addr.area);
+                  }}
+                  onAddToCart={handleAddToCart}
+                  onReorder={(reorderItems) => {
+                    reorderItems.forEach((item) => {
+                      handleAddToCart(item.product);
+                    });
+                    navigate('/cart');
+                  }}
+                  onOpenShop={() => navigate('/electrical')}
+                  onOpenServices={() => navigate('/electrical')}
+                  onProfileUpdated={(updated) => {
+                    if (isLoggingOutRef.current || isUserLoggingOut() || !activeUserIdRef.current) return;
+                    setUserProfile(updated);
+                    setUserPhone(updated.phone || null);
+                    setUserName(updated.name || '');
+                  }}
+                  onLogout={handleLogout}
+                />
+              ) : (
+                <Navigate to="/login?redirect=/profile" replace />
+              )
             }
           />
 
@@ -1643,12 +1651,16 @@ export default function App() {
           <Route
             path="/orders"
             element={
-              <OrderHistoryView
-                orders={orders}
-                userProfile={userProfile}
-                onOpenShop={() => navigate('/electrical')}
-                onRefresh={handleRefreshAll}
-              />
+              isAuthenticated ? (
+                <OrderHistoryView
+                  orders={orders}
+                  userProfile={userProfile}
+                  onOpenShop={() => navigate('/electrical')}
+                  onRefresh={handleRefreshAll}
+                />
+              ) : (
+                <Navigate to="/login?redirect=/orders" replace />
+              )
             }
           />
 
@@ -1656,34 +1668,42 @@ export default function App() {
           <Route
             path="/live-order"
             element={
-              <LiveOrderPage
-                order={activeLiveOrder}
-                orders={orders}
-                userProfile={userProfile}
-                onBack={() => {
-                  if (window.history.length > 1) {
-                    navigate(-1);
-                  } else {
-                    navigate('/orders');
-                  }
-                }}
-              />
+              isAuthenticated ? (
+                <LiveOrderPage
+                  order={activeLiveOrder}
+                  orders={orders}
+                  userProfile={userProfile}
+                  onBack={() => {
+                    if (window.history.length > 1) {
+                      navigate(-1);
+                    } else {
+                      navigate('/orders');
+                    }
+                  }}
+                />
+              ) : (
+                <Navigate to="/login?redirect=/orders" replace />
+              )
             }
           />
           <Route
             path="/live-order/:orderId"
             element={
-              <LiveOrderPage
-                orders={orders}
-                userProfile={userProfile}
-                onBack={() => {
-                  if (window.history.length > 1) {
-                    navigate(-1);
-                  } else {
-                    navigate('/orders');
-                  }
-                }}
-              />
+              isAuthenticated ? (
+                <LiveOrderPage
+                  orders={orders}
+                  userProfile={userProfile}
+                  onBack={() => {
+                    if (window.history.length > 1) {
+                      navigate(-1);
+                    } else {
+                      navigate('/orders');
+                    }
+                  }}
+                />
+              ) : (
+                <Navigate to="/login?redirect=/orders" replace />
+              )
             }
           />
           <Route path="/orders/live" element={<Navigate to="/live-order" replace />} />
@@ -1730,11 +1750,11 @@ export default function App() {
           {/* PASSWORD RESET */}
           <Route path="/reset-password" element={<ResetPassword onOpenAuth={() => navigate('/login')} />} />
 
-          {/* AUTH ROUTES IN STORE SHELL */}
+          {/* AUTH ROUTES */}
           <Route
             path="/login"
             element={
-              isLoggingOut || isLoggingOutRef.current ? (
+              !isAuthenticated || isLoggingOut || isLoggingOutRef.current ? (
                 <LoginPage onAuthSuccess={handleAuthSuccess} />
               ) : (
                 <Navigate to="/" replace />
@@ -1743,13 +1763,7 @@ export default function App() {
           />
           <Route
             path="/auth"
-            element={
-              isLoggingOut || isLoggingOutRef.current ? (
-                <LoginPage onAuthSuccess={handleAuthSuccess} />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            }
+            element={<Navigate to="/login" replace />}
           />
 
           {/* HOME / DEFAULT ROUTE - MODERN WHOLESALE B2B & B2C HOME */}
@@ -1778,6 +1792,9 @@ export default function App() {
               />
             }
           />
+
+          {/* Wildcard Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 

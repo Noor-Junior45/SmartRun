@@ -484,12 +484,12 @@ export const ElectricalListingPage = ({
               return (
                 <div
                   key={product.id}
-                  className="group flex flex-col justify-between transition-all duration-200 border-0 p-1"
+                  className="group flex flex-col justify-between transition-all duration-300 ease-out border border-transparent hover:border-slate-200/80 hover:shadow-xl rounded-2xl p-2 sm:p-2.5 hover:-translate-y-1 bg-white"
                 >
                   {/* Clean Product Image with Floating Discount Tag */}
                   <Link
                     to={`/electrical/product/${product.id}`}
-                    className="block aspect-square overflow-hidden rounded-xl bg-slate-50/60 p-3 sm:p-4 mb-2.5 flex items-center justify-center relative cursor-pointer"
+                    className="block aspect-square overflow-hidden rounded-xl bg-slate-50/70 group-hover:bg-slate-100/60 p-3 sm:p-4 mb-2.5 flex items-center justify-center relative cursor-pointer transition-colors duration-200"
                   >
                     {/* Floating discount text (no background box) */}
                     {product.discount_percent > 0 && (
@@ -613,7 +613,7 @@ export const ElectricalListingPage = ({
                               selectedColor: defColor || adapted.selectedColor || undefined
                             });
                           }}
-                          className="w-full py-2 px-3 rounded-lg bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-xs border border-yellow-500/20"
+                          className="w-full py-2 px-3 rounded-lg bg-yellow-400 hover:bg-yellow-500 hover:shadow-md text-slate-950 font-black text-xs transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 shadow-xs border border-yellow-500/20"
                         >
                           <ShoppingCart className="w-3.5 h-3.5" />
                           <span>Add to Cart</span>

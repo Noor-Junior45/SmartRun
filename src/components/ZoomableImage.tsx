@@ -177,30 +177,20 @@ export const ZoomableImage = ({
         draggable={false}
       />
 
-      {/* Glassmorphic Zoom Toggle Button & Indicator */}
-      <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5 pointer-events-auto">
-        {isZoomed && (
+      {/* Reset Zoom Indicator (only appears when actively zoomed in) */}
+      {isZoomed && (
+        <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5 pointer-events-auto">
           <button
             type="button"
             onClick={handleResetZoom}
-            className="px-2 py-1 rounded-full bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-bold shadow-md border border-white/20 flex items-center gap-1 active:scale-90 transition-transform cursor-pointer"
+            className="px-2.5 py-1 rounded-full bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-bold shadow-md border border-white/20 flex items-center gap-1 active:scale-90 transition-transform cursor-pointer"
             title="Reset Zoom"
           >
             <ZoomOut className="w-3 h-3 text-amber-400" />
-            <span>{(scale).toFixed(1)}x</span>
+            <span>{(scale).toFixed(1)}x Reset</span>
           </button>
-        )}
-        {!isZoomed && (
-          <button
-            type="button"
-            onClick={() => handleDoubleTap(0, 0)}
-            className="w-7 h-7 rounded-full bg-white/80 hover:bg-white backdrop-blur-md text-slate-700 shadow-sm border border-slate-200/80 flex items-center justify-center active:scale-90 transition-transform cursor-pointer opacity-70 hover:opacity-100"
-            title="Double-tap or tap to zoom"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

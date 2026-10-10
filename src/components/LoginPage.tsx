@@ -14,7 +14,8 @@ import {
   User,
   AlertTriangle,
   Copy,
-  ExternalLink
+  ExternalLink,
+  ArrowLeft
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '../lib/supabaseClient';
@@ -103,6 +104,18 @@ const saveTermsAgreed = (agreed: boolean): void => {
     localStorage.setItem('terms_agreed', val);
   } catch {
     // Ignore storage quota / private mode errors
+  }
+};
+
+// Helper: Determine target destination route after successful authentication
+const getPostAuthRedirect = (): string => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get('redirect') || sessionStorage.getItem('auth_redirect_target') || '/';
+    sessionStorage.removeItem('auth_redirect_target');
+    return target;
+  } catch {
+    return '/';
   }
 };
 
@@ -439,7 +452,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         const finalEmail = targetEmail.includes('@girirajpower.internal') ? undefined : targetEmail;
 
         saveTermsAgreed(true);
-        navigate('/', { replace: true });
+        navigate(getPostAuthRedirect(), { replace: true });
         onAuthSuccess(formattedPhone, resolvedName, finalEmail, data.user);
       }
     } catch (err: unknown) {
@@ -479,7 +492,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         const finalEmail = profile?.email || '';
 
         saveTermsAgreed(true);
-        navigate('/', { replace: true });
+        navigate(getPostAuthRedirect(), { replace: true });
         onAuthSuccess(finalPhone, userFullName, finalEmail, result.user);
 
         if (finalEmail) {
@@ -534,7 +547,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         const finalPhone = data.user.phone || data.user.user_metadata?.phone || '';
 
         saveTermsAgreed(true);
-        navigate('/', { replace: true });
+        navigate(getPostAuthRedirect(), { replace: true });
         onAuthSuccess(finalPhone, userFullName, cleanEmail, data.user);
         sendLoginNotificationEmail({
           email: cleanEmail,
@@ -716,7 +729,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         }).catch(() => {});
 
         saveTermsAgreed(true);
-        navigate('/', { replace: true });
+        navigate(getPostAuthRedirect(), { replace: true });
         onAuthSuccess(formattedPhone, finalFullName, cleanEmail || undefined, data.user);
         if (cleanEmail) {
           sendLoginNotificationEmail({
@@ -896,7 +909,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       }
 
       saveTermsAgreed(true);
-      navigate('/', { replace: true });
+      navigate(getPostAuthRedirect(), { replace: true });
       onAuthSuccess(formattedPhone, finalFullName, cleanEmail || undefined, result.user);
 
       if (cleanEmail) {
@@ -1003,6 +1016,24 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     <div className="min-h-screen bg-white flex flex-col justify-center items-center px-4 py-8 sm:py-12">
       {/* Main Centered Login Container (Borderless Full-Page Look) */}
       <div className="w-full max-w-md bg-white border-0 shadow-none p-4 sm:p-6 space-y-5">
+        {/* Top Back Navigation Arrow Button (returns to storefront or previous page) */}
+        <div className="w-full flex items-center justify-between -mb-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+                navigate(-1);
+              } else {
+                navigate('/');
+              }
+            }}
+            className="p-2 -ml-2 text-slate-700 hover:text-black hover:bg-slate-100 rounded-full transition-colors cursor-pointer flex items-center gap-1.5 active:scale-95 text-xs font-bold"
+            title="Back to store"
+          >
+            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+            <span>Store</span>
+          </button>
+        </div>
         
         {/* Brand Logo & Name Header */}
         <div className="flex flex-col items-center justify-center text-center space-y-2">

@@ -6,7 +6,8 @@ import {
   getProductColorOptions,
   getDefaultProductColor,
   isWireProduct,
-  isPipeProduct
+  isPipeProduct,
+  resolveColorPreviewImage
 } from '../data/wireColors';
 import { hapticLight, hapticMedium } from '../utils/haptics';
 import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
@@ -76,6 +77,9 @@ export const ProductCard = ({
         );
         if (idx >= 0 && baseList[idx]) return baseList[idx];
       }
+
+      const colorImg = resolveColorPreviewImage(activeColorOption, product);
+      if (colorImg && colorImg !== NEUTRAL_PRODUCT_PLACEHOLDER) return colorImg;
     }
 
     return (
@@ -118,13 +122,13 @@ export const ProductCard = ({
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="bg-white rounded-2xl border border-slate-200 hover:border-yellow-400 hover:shadow-lg transition-all duration-200 flex flex-col justify-between overflow-hidden relative group p-3 sm:p-4"
+      className="bg-white rounded-2xl border border-slate-200 hover:border-yellow-400 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between overflow-hidden relative group p-3 sm:p-4"
     >
       {/* Top Badges: Discount & Favorite Heart */}
       <div className="flex items-center justify-between gap-1 mb-2">
         <div className="flex items-center gap-1">
           {product.discountPercentage > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-yellow-400 text-slate-950 text-[10px] sm:text-[11px] font-extrabold">
+            <span className="px-1.5 py-0.5 rounded bg-yellow-400 text-slate-950 text-[10px] sm:text-[11px] font-extrabold shadow-2xs">
               {product.discountPercentage}% OFF
             </span>
           )}
@@ -139,14 +143,14 @@ export const ProductCard = ({
         <button
           type="button"
           onClick={handleFavoriteClick}
-          className={`p-1.5 rounded-full transition-all cursor-pointer ${
+          className={`p-1.5 rounded-full transition-all cursor-pointer active:scale-90 ${
             isFav
-              ? 'bg-pink-50 text-pink-600 hover:bg-pink-100'
+              ? 'bg-pink-50 text-pink-600 hover:bg-pink-100 shadow-2xs'
               : 'text-slate-400 hover:text-pink-600 hover:bg-slate-100'
           }`}
           title={isFav ? 'Remove from favourites' : 'Add to favourites'}
         >
-          <Heart className={`w-4 h-4 ${isFav ? 'fill-pink-500 text-pink-500' : ''}`} />
+          <Heart className={`w-4 h-4 transition-transform ${isFav ? 'fill-pink-500 text-pink-500 scale-110' : ''}`} />
         </button>
       </div>
 
@@ -158,7 +162,7 @@ export const ProductCard = ({
         <img
           src={displayImage}
           alt={product.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
           loading="lazy"
           referrerPolicy="no-referrer"
           onError={(e) => {
@@ -167,15 +171,15 @@ export const ProductCard = ({
         />
 
         {/* Brand Tag Pill */}
-        <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold">
+        <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold shadow-2xs">
           {product.brand}
         </span>
 
         {/* Quick View Button on Hover */}
-        <div className={`absolute inset-0 bg-black/20 flex items-center justify-center transition-opacity ${
+        <div className={`absolute inset-0 bg-black/15 backdrop-blur-[1px] flex items-center justify-center transition-opacity duration-200 ${
           isHovered ? 'opacity-100' : 'opacity-0'
         }`}>
-          <span className="px-3 py-1.5 rounded-lg bg-white/95 text-slate-900 text-xs font-bold shadow-md flex items-center gap-1">
+          <span className="px-3 py-1.5 rounded-lg bg-white/95 hover:bg-white text-slate-900 text-xs font-bold shadow-md flex items-center gap-1 transition-transform group-hover:scale-105 active:scale-95">
             <Eye className="w-3.5 h-3.5" />
             <span>Specs</span>
           </span>

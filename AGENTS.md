@@ -224,6 +224,24 @@
   - **Eliminated Hardcoded RR Kabel Photo Fallbacks**: Diagnosed and removed hardcoded fallback references (`https://images.unsplash.com/photo-1558223616-e5d79faebdd6` and fake vector coil drawings) from `server.ts`, `AddProductModal.tsx`, `electricalService.ts`, `supabaseService.ts`, `CartView.tsx`, `cartService.ts`, `ProductCardImage.tsx`, and `ProductDetailPage.tsx`.
   - **Clean Neutral Placeholder**: Introduced `NEUTRAL_PRODUCT_PLACEHOLDER` data URI with zero brand bias for newly added products that do not yet have photos in the backend.
   - **Dynamic Colour Switching on Product Cards & Details**: Connected `displayImage` in `ProductCard.tsx` and `effectiveImageUrls` in `ProductDetailPage.tsx` and `ProductDetailModal.tsx` so selecting or switching any color swatch immediately updates the product preview to that color's image.
-  - **Isolated Colour Variant Gallery**: When a product has colour options with distinct images, the gallery displays exclusively the chosen colour's photos (`return variantImages`), preventing images of other variants from mixing into the thumbnails.
+- [x] **Product Details Thumbnail Selection & Amazon-Style Color Side Preview Synchronization**:
+  - Restored and enhanced thumbnail image selection on product details (`ProductDetailPage.tsx` and `ProductDetailModal.tsx`).
+  - Added Amazon-style **Side Preview Bar (Thumbnails Gallery)**:
+    - Thumbnails remain persistently available whenever multiple photos or multiple color variants exist.
+    - Combines the active color's angle photos with preview thumbnails for every available color option (with subtle color indicator dots on each swatch thumbnail).
+    - Clicking any side preview thumbnail immediately selects that color or angle, updating both the main image and color selection.
+    - Hovering on any thumbnail provides instant live preview on the main viewer, identical to Amazon.
+  - Added Amazon-style **Miniature Thumbnail Preview Swatches** in the color selection section:
+    - Upgraded color options from simple solid circles to rich thumbnail cards featuring the actual product photo in that individual color, corner color dot, color name, and variant pricing.
+    - Hovering over any color card temporarily live-previews that color's image on the main screen and side preview bar.
+    - Clicking locks in that color variant, updating effective pricing, specifications, and cart payload.
+  - Exported and integrated `resolveColorPreviewImage` in `wireColors.ts` for clean, authentic image resolution across custom database variants, product gallery mapping, and standard wire/pipe options.
+- [x] **Seamless Guest Store Browsing, Smooth Transitions & Zero-Redirect Architecture**:
+  - **Eliminated Unauthenticated Redirect Gate**: Removed the blocking unauthenticated router return in `App.tsx` that previously forced guest users and shared product link recipients directly onto `/login` and discarded their target route.
+  - **Post-Login Target Route Preservation**: Added `getPostAuthRedirect()` in `LoginPage.tsx` and destination extraction in `App.tsx` (`?redirect=...` & `auth_redirect_target`) so after logging in with phone OTP or Google, customers return directly to the exact product, category, or cart they intended.
+  - **Zero-Jitter Search Scrolling**: Separated scroll-to-top reset to trigger strictly on `location.pathname` page switches rather than `location.search` keystrokes.
+  - **Smooth Hardware Back Button & Modal Handling**: Extended Capacitor back button listener to cleanly close active modals (`isLiveOrderModalOpen`, `selectedProductQuickView`, `isLocationModalOpen`, `addressToEdit`) and navigate back to the storefront instead of abruptly exiting the app from `/login`.
+  - **Modal Dismissal & Scroll Locks**: Added backdrop click-to-close, keyboard Escape listeners, and body scroll lock (`overflow: hidden`) on `ProductDetailModal` and `LocationModal` to prevent background scrolling and layout shifts.
+  - **Refined Hover & Touch Micro-Interactions**: Enhanced product cards (`ProductCard.tsx` and `ElectricalListingPage.tsx`) with smooth elevation lift (`hover:-translate-y-1 hover:shadow-xl`), image zoom (`group-hover:scale-105 transition-transform duration-300 ease-out`), and tactile button feedback (`active:scale-95`).
 
 
