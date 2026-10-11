@@ -21,6 +21,7 @@ import { Capacitor } from '@capacitor/core';
 import { supabase } from '../lib/supabaseClient';
 import { apiUrl } from '../lib/apiBase';
 import { isAndroidAppEnvironment } from '../utils/platformDetection';
+import { SEOHead } from './SEOHead';
 import {
   saveUserProfile,
   signInWithGoogle,
@@ -83,16 +84,21 @@ const isPhoneInput = (input: string): boolean => {
   return digits.length >= 7;
 };
 
-// Helper: Check and persist terms agreement across sessions
+// Helper: Check and persist terms agreement across sessions (defaults to YES tick)
 const isTermsAgreedSaved = (): boolean => {
   try {
-    return (
-      localStorage.getItem('smartrun_terms_agreed') === 'true' ||
-      localStorage.getItem('gp_terms_agreed') === 'true' ||
-      localStorage.getItem('terms_agreed') === 'true'
-    );
+    const val =
+      localStorage.getItem('smartrun_terms_agreed') ??
+      localStorage.getItem('gp_terms_agreed') ??
+      localStorage.getItem('terms_agreed');
+    // If the user has explicitly unticked it, return false
+    if (val === 'false') {
+      return false;
+    }
+    // By default, keep yes tick checked
+    return true;
   } catch {
-    return false;
+    return true;
   }
 };
 
@@ -543,7 +549,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           data.user.user_metadata?.full_name ||
           data.user.user_metadata?.name ||
           cleanEmail.split('@')[0] ||
-          'Giriraj Customer';
+          'SmartRun Customer';
         const finalPhone = data.user.phone || data.user.user_metadata?.phone || '';
 
         saveTermsAgreed(true);
@@ -1014,6 +1020,17 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
 
   return (
     <div className="min-h-screen bg-white flex flex-col justify-center items-center px-4 py-8 sm:py-12">
+      <SEOHead
+        title={
+          mode === 'signup'
+            ? 'Create Account & Register | SmartRun'
+            : mode === 'forgot'
+            ? 'Reset Password | SmartRun'
+            : 'Sign In / Register | SmartRun Express Electricals'
+        }
+        description="Sign in to your SmartRun account with mobile OTP or email to track express delivery orders, manage addresses, and access wholesale pricing."
+        keywords="smartrun login, smartrun signup, electrical depot account, mobile otp login"
+      />
       {/* Main Centered Login Container (Borderless Full-Page Look) */}
       <div className="w-full max-w-md bg-white border-0 shadow-none p-4 sm:p-6 space-y-5">
         {/* Top Back Navigation Arrow Button (returns to storefront or previous page) */}

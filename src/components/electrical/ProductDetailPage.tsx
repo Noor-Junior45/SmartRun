@@ -646,8 +646,8 @@ export const ProductDetailPage = ({
   return (
     <div className="min-h-screen bg-white text-slate-900 pb-32 sm:pb-36 font-sans relative">
       <SEOHead
-        title={`${product.name} - Buy Online at Best Price in Kolkata | Giriraj Power`}
-        description={`Buy authentic ${product.brand} ${product.subcategory}, ₹${effectivePrice} in Kolkata. Fast 60-min delivery, genuine manufacturer warranty, and certified quality from Giriraj Power.`}
+        title={`${product.name} - Buy Online at Best Price in Kolkata | SmartRun`}
+        description={`Buy authentic ${product.brand} ${product.subcategory}, ₹${effectivePrice} in Kolkata. Fast 60-min delivery, genuine manufacturer warranty, and certified quality from SmartRun.`}
         keywords={`${product.name}, ${product.brand}, ${product.subcategory}, buy ${product.name} Kolkata, wholesale electrical shop near me`}
         image={currentImage}
         productData={{
@@ -1157,7 +1157,7 @@ export const ProductDetailPage = ({
                 <div className="flex items-start gap-2">
                   <Tag className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                   <span>
-                    <strong className="font-bold text-slate-900">Express Delivery:</strong> Rapid dispatch from Giriraj Power Kasba Kolkata warehouse hub for eligible orders.
+                    <strong className="font-bold text-slate-900">Express Delivery:</strong> Rapid dispatch from SmartRun Kasba Kolkata warehouse hub for eligible orders.
                   </span>
                 </div>
               </div>

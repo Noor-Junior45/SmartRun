@@ -41,6 +41,7 @@ import {
   RiderReviewCard,
   OrderProductReviewCard
 } from './orders/OrderReviewComponents';
+import { SEOHead } from './SEOHead';
 
 interface OrderHistoryViewProps {
   orders: Order[];
@@ -1296,6 +1297,11 @@ export const OrderHistoryView = ({
   // =========================================================================
   return (
     <PullToRefresh onRefresh={onRefresh || (() => {})} refreshingText="Syncing real-time order status...">
+      <SEOHead
+        title="My Orders & Tax Invoices | SmartRun Express Depot"
+        description="View your active orders, past delivery history, download GST invoices, and reorder electrical supplies on SmartRun."
+        noIndex={true}
+      />
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         {/* Top Header */}
       <div className="flex items-center justify-between gap-4">

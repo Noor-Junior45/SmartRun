@@ -9,6 +9,7 @@ import { TechnicianFiltersModal, TechnicianFilterState } from './TechnicianFilte
 import { TechnicianSortModal, TechnicianSortOption } from './TechnicianSortModal';
 import { hapticLight, hapticSelection } from '../../utils/haptics';
 import { getPaginationPages } from '../../utils/paginationHelper';
+import { SEOHead } from '../SEOHead';
 
 interface TechniciansPageProps {
   searchQuery?: string;
@@ -393,6 +394,11 @@ export const TechniciansPage = ({
 
   return (
     <div className="min-h-[85vh] bg-slate-50 flex flex-col justify-start items-center px-4 pt-4 sm:pt-6 pb-36 sm:pb-28">
+      <SEOHead
+        title={activeQuery ? `"${activeQuery}" - Certified Electricians & Wiring Contractors Kolkata | SmartRun` : 'Certified Electricians & House Wiring Contractors Kolkata | SmartRun'}
+        description="Book verified, licensed electrical contractors, home wiring technicians, switchboard repair, and industrial electrification specialists in Kolkata with instant booking."
+        keywords="electrician kolkata, licensed electrical contractor, home wiring specialist, switchboard repair kolkata, real estate electrification"
+      />
       {/* Top Bar for Technician Quick Actions & Active Filter Badges */}
       <div className="w-full max-w-5xl mx-auto mb-3">
         {/* Active Filter Tags Row */}

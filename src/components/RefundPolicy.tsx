@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   PhoneCall
 } from 'lucide-react';
+import { SEOHead } from './SEOHead';
 
 export interface RefundPolicyProps {
   onBack?: () => void;
@@ -20,6 +21,11 @@ export const RefundPolicy = ({
       id="refund-policy-container"
       className="min-h-screen bg-white text-slate-900 pb-20 font-sans"
     >
+      <SEOHead
+        title="Refund & Cancellation Policy | SmartRun Kolkata"
+        description="SmartRun 7-day direct refund & replacement policy: 100% genuine guarantees, direct-to-source instant refunds, and transparent SLAs."
+        keywords="smartrun refund policy, return policy, replacement guarantee, order cancellation"
+      />
       {/* Top Header: Simple Heading 'Refund policy' and Arrow Back Button in the same line with White Background */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 sm:px-6 py-3.5">
         <div className="max-w-3xl mx-auto flex items-center gap-3">

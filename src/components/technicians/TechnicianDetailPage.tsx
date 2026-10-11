@@ -22,6 +22,7 @@ import { Technician, TechnicianReview } from '../../types/technician';
 import { fetchTechnicianById, submitTechnicianReview } from '../../services/technicianService';
 import { showToast } from '../../utils/toast';
 import { hapticLight, hapticMedium } from '../../utils/haptics';
+import { SEOHead } from '../SEOHead';
 
 interface TechnicianDetailPageProps {
   technician?: Technician | null;
@@ -115,7 +116,7 @@ export const TechnicianDetailPage = ({
     hapticLight();
     const shareData = {
       title: `${tech?.name} - Verified Technician`,
-      text: `View profile, visiting rates and credentials of ${tech?.name} (${tech?.title}) on Giriraj Power.`,
+      text: `View profile, visiting rates and credentials of ${tech?.name} (${tech?.title}) on SmartRun.`,
       url: window.location.href
     };
 
@@ -243,7 +244,7 @@ export const TechnicianDetailPage = ({
   const phoneDigits = ((tech.whatsapp || tech.phone) || '').replace(/[^0-9]/g, '');
   const formattedPhone = phoneDigits.length === 10 ? `91${phoneDigits}` : phoneDigits;
   const whatsappBookingMsg = encodeURIComponent(
-    `Hello ${tech.name}, I have booked your electrical service for ${bookingDate} (${bookingTimeSlot}) via Giriraj Power. Please confirm your arrival.`
+    `Hello ${tech.name}, I have booked your electrical service for ${bookingDate} (${bookingTimeSlot}) via SmartRun. Please confirm your arrival.`
   );
   const whatsappUrl = `https://wa.me/${formattedPhone}?text=${whatsappBookingMsg}`;
 
@@ -263,6 +264,11 @@ export const TechnicianDetailPage = ({
 
   return (
     <div className="min-h-screen bg-white text-slate-900 pb-32">
+      <SEOHead
+        title={tech ? `${tech.name} - Certified ${tech.primarySector || 'Electrician'} | SmartRun Kolkata` : 'Certified Electrician Specialist Profile | SmartRun Kolkata'}
+        description={tech ? `${tech.name} (${tech.rating || 4.9}★) - Certified electrical specialist in Kolkata serving ${workingAreaText}. Book instant on-site wiring and repair.` : 'View certified electrician profile, service ratings, expertise, license details, and book instant on-site electrical service in Kolkata.'}
+        keywords="electrician profile kolkata, licensed electrical contractor, house wiring booking"
+      />
       {/* Top Header Navigation [Minimal & Clean] */}
       <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md px-4 sm:px-6 py-3.5 flex items-center justify-between border-b border-slate-100">
         <div className="flex items-center gap-3">

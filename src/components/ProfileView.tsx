@@ -31,6 +31,7 @@ import {
   cleanPhoneAutofill
 } from '../services/supabaseService';
 import { getFavoriteProductIds, toggleProductFavorite, clearAllFavorites } from '../services/favorites';
+import { SEOHead } from './SEOHead';
 
 // Sub-page component modules for each button in Profile
 import { FavoritesSubPage } from './profile/FavoritesSubPage';
@@ -416,6 +417,11 @@ export const ProfileView = ({
   // -------------------------------------------------------------
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-10">
+      <SEOHead
+        title="My Profile & Saved Addresses | SmartRun"
+        description="Manage your SmartRun profile, saved delivery addresses, wallet balance, GST tax details, and account preferences."
+        noIndex={true}
+      />
       {/* 1. TOP HEADER BANNER (Full width touching top & both sides, bottom curves only) */}
       <div className="bg-gradient-to-b from-[#8B0000] via-[#A30000] to-[#B31B1B] text-white pt-3.5 pb-5 px-4 sm:px-6 relative shadow-md rounded-b-2xl border-b border-red-950/30">
         {/* Top Control Bar with Back Arrow & Actions */}

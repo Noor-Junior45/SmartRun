@@ -44,7 +44,7 @@ export async function getEmailServiceStatus(): Promise<EmailServiceStatus> {
     if (!res.ok) {
       return {
         configured: false,
-        fromEmail: 'Giriraj Power <orders@oieldiakir.resend.app>',
+        fromEmail: 'SmartRun <orders@oieldiakir.resend.app>',
         officialEmail: 'orders@oieldiakir.resend.app',
         resendInboundEmail: 'orders@oieldiakir.resend.app',
         resendInboundDomain: 'oieldiakir.resend.app',
@@ -57,7 +57,7 @@ export async function getEmailServiceStatus(): Promise<EmailServiceStatus> {
     console.warn('Failed to check email service status:', err);
     return {
       configured: false,
-      fromEmail: 'Giriraj Power <orders@oieldiakir.resend.app>',
+      fromEmail: 'SmartRun <orders@oieldiakir.resend.app>',
       officialEmail: 'orders@oieldiakir.resend.app',
       resendInboundEmail: 'orders@oieldiakir.resend.app',
       resendInboundDomain: 'oieldiakir.resend.app',
@@ -81,7 +81,7 @@ export async function getReceivedEmails(): Promise<ReceivedEmailsResponse> {
     console.warn('Failed to fetch received emails:', err);
     return {
       success: false,
-      officialEmail: 'team@girirajpower.in',
+      officialEmail: 'team@smartrun.in',
       totalCount: 0,
       unreadCount: 0,
       emails: []
@@ -90,7 +90,7 @@ export async function getReceivedEmails(): Promise<ReceivedEmailsResponse> {
 }
 
 /**
- * Submits a contact / quote inquiry email to team@girirajpower.in
+ * Submits a contact / quote inquiry email to team@smartrun.in
  */
 export async function sendContactInquiry(params: {
   name: string;
@@ -205,12 +205,12 @@ export function formatOrderWhatsAppMessage(order: Order): string {
     .map((it, idx) => {
       const color = it.selectedColor || it.product?.selectedColor;
       const colorTag = color ? ` [🎨 Colour: ${color}]` : '';
-      return `${idx + 1}. *${it.product?.name || 'Product'}* (${it.product?.brand || 'Giriraj'})${colorTag} × ${it.quantity} ${it.product?.unit || 'pc'} = ₹${((it.product?.price || 0) * it.quantity).toLocaleString('en-IN')}`;
+      return `${idx + 1}. *${it.product?.name || 'Product'}* (${it.product?.brand || 'SmartRun'})${colorTag} × ${it.quantity} ${it.product?.unit || 'pc'} = ₹${((it.product?.price || 0) * it.quantity).toLocaleString('en-IN')}`;
     })
     .join('\n');
 
   return (
-    `⚡ *NEW ORDER RECEIVED - GIRIRAJ POWER* ⚡\n\n` +
+    `⚡ *NEW ORDER RECEIVED - SMARTRUN* ⚡\n\n` +
     `📦 *Order ID:* #${getShortOrderUuid(order.id)}\n` +
     `📅 *Time:* ${new Date(order.createdAt || Date.now()).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST\n\n` +
     `👤 *Customer:* ${order.customerName}\n` +
@@ -226,7 +226,7 @@ export function formatOrderWhatsAppMessage(order: Order): string {
     `${(order.discount || 0) > 0 ? `🎟️ *Discount:* -₹${order.discount}\n` : ''}` +
     `💳 *GRAND TOTAL:* ₹${(order.totalAmount || 0).toLocaleString('en-IN')}\n` +
     `💵 *Payment Mode:* ${order.paymentMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Online UPI / Card (PAID)'}\n\n` +
-    `⚡ *Central Dispatch:* Giriraj Power Kasba Hub, Kolkata 700039`
+    `⚡ *Central Dispatch:* SmartRun Kasba Hub, Kolkata 700039`
   );
 }
 

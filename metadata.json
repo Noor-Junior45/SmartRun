@@ -1,6 +1,6 @@
 {
   "name": "SmartRun",
-  "description": "SmartRun (formerly BuildNow) - Kolkata's trusted electrical goods, construction materials wholesale platform, and certified wiring services with 60-minute express delivery.",
+  "description": "SmartRun - Kolkata's trusted electrical goods, construction materials wholesale platform, and certified wiring services with 60-minute express delivery.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

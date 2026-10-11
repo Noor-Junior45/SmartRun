@@ -27,6 +27,7 @@ import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../../data/productColorImages';
 import { hapticLight, hapticSelection } from '../../utils/haptics';
 import { getFlattenedSpecifications } from '../../utils/productSpecifications';
 import { getPaginationPages } from '../../utils/paginationHelper';
+import { SEOHead } from '../SEOHead';
 
 interface ElectricalListingPageProps {
   onAddToCart: (product: Product) => void;
@@ -363,7 +364,11 @@ export const ElectricalListingPage = ({
 
   return (
     <div className="min-h-screen bg-white text-slate-900 pb-36 sm:pb-24 font-sans">
-      
+      <SEOHead
+        title={searchQuery ? `"${searchQuery}" - Electrical Supplies Wholesale Kolkata | SmartRun` : 'Electrical Goods & House Wiring Cables Wholesale Kolkata | SmartRun'}
+        description="Shop RR Kabel, Polycab, Havells copper wires, Schneider MCBs, distribution boards, and modular switches at factory-direct wholesale prices in Kolkata."
+        keywords="electrical goods kolkata, polycab wire kolkata, rr kabel online, buy switches kolkata, schneider mcb, distribution board, electrical depot kolkata"
+      />
       {/* ACTIVE FILTER TAGS & RESET ROW (Top navbar now houses the All Filters & Sort buttons) */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-2 pb-2 mb-2 flex items-center justify-between gap-2 overflow-x-auto scrollbar-none">
         {hasActiveFilters ? (

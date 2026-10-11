@@ -12,7 +12,6 @@ import { ProductDetailModal } from './components/ProductDetailModal';
 import { CartView } from './components/CartView';
 import { MapsGroundingAssistant } from './components/MapsGroundingAssistant';
 import { OrderHistoryView } from './components/OrderHistoryView';
-import { Footer } from './components/Footer';
 import { LegalView } from './components/LegalViews';
 import { ResetPassword } from './components/ResetPassword';
 import { ElectricalListingPage } from './components/electrical/ElectricalListingPage';
@@ -29,6 +28,7 @@ import { FloatingLiveOrderButton } from './components/orders/FloatingLiveOrderBu
 import { LiveOrderDetailsModal } from './components/orders/LiveOrderDetailsModal';
 import { LiveOrderPage } from './components/orders/LiveOrderPage';
 import { AccountDeletionPage } from './components/AccountDeletionPage';
+import { SitemapPage } from './components/SitemapPage';
 import { SEOHead } from './components/SEOHead';
 import {
   trackPageView,
@@ -1442,11 +1442,12 @@ export default function App() {
       <SEOHead />
       <AndroidAppBridgePrompt />
       
-      {/* Top Header - Hidden when viewing profile, live-order, cart, delete account, login, auth, or reset-password */}
+      {/* Top Header - Hidden when viewing profile, live-order, cart, delete account, login, auth, sitemap, or reset-password */}
       {location.pathname !== '/profile' &&
         location.pathname !== '/login' &&
         location.pathname !== '/auth' &&
         location.pathname !== '/reset-password' &&
+        location.pathname !== '/sitemap' &&
         !location.pathname.startsWith('/live-order') &&
         !location.pathname.startsWith('/cart') &&
         !location.pathname.startsWith('/delete') &&
@@ -1747,6 +1748,9 @@ export default function App() {
             }
           />
 
+          {/* SITEMAP & DIRECTORY */}
+          <Route path="/sitemap" element={<SitemapPage />} />
+
           {/* PASSWORD RESET */}
           <Route path="/reset-password" element={<ResetPassword onOpenAuth={() => navigate('/login')} />} />
 
@@ -1797,19 +1801,6 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-
-      {/* Row 11: Company, Policy & Contact Footer (Hidden on Electrical and Construction pages) */}
-      {(location.pathname === '/' ||
-        location.pathname.startsWith('/about') ||
-        location.pathname.startsWith('/faq') ||
-        location.pathname.startsWith('/refund') ||
-        location.pathname.startsWith('/shipping') ||
-        location.pathname.startsWith('/privacy') ||
-        location.pathname.startsWith('/terms')) && (
-        <Footer
-          onOpenInstallApp={() => setIsInstallModalOpen(true)}
-        />
-      )}
 
       {/* Floating Liquid Glass Bottom Navigation (Visible on discovery & catalog views: Home, Electrical, Construction, Technicians, and Wiring/Services) */}
       {(location.pathname === '/' ||

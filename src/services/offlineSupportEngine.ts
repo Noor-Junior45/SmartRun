@@ -32,15 +32,15 @@ export const SUPPORT_CONTACTS: EscalationContacts = {
   whatsapp: {
     phone: '918777400280',
     label: 'Open WhatsApp Chat',
-    prefilledText: 'Hello Giriraj Power Kasba, I need assistance with my order / contractor inquiry.',
-    url: 'https://wa.me/918777400280?text=' + encodeURIComponent('Hello Giriraj Power Kasba, I need assistance with my order / contractor inquiry.')
+    prefilledText: 'Hello SmartRun Kasba, I need assistance with my order / contractor inquiry.',
+    url: 'https://wa.me/918777400280?text=' + encodeURIComponent('Hello SmartRun Kasba, I need assistance with my order / contractor inquiry.')
   },
   email: {
-    address: 'team@girirajpower.in',
+    address: 'team@smartrun.in',
     label: 'Send Email to Support Desk',
-    subject: 'Customer Support Inquiry - Giriraj Power',
-    body: 'Hi Support Team,\n\nI am contacting you regarding my BuildNow / Giriraj Power account.\n\nQuery details:\n',
-    url: 'mailto:team@girirajpower.in?subject=' + encodeURIComponent('Customer Support Inquiry - Giriraj Power') + '&body=' + encodeURIComponent('Hi Support Team,\n\nI am contacting you regarding my BuildNow / Giriraj Power account.\n\nQuery details:\n')
+    subject: 'Customer Support Inquiry - SmartRun',
+    body: 'Hi Support Team,\n\nI am contacting you regarding my SmartRun account.\n\nQuery details:\n',
+    url: 'mailto:team@smartrun.in?subject=' + encodeURIComponent('Customer Support Inquiry - SmartRun') + '&body=' + encodeURIComponent('Hi Support Team,\n\nI am contacting you regarding my SmartRun account.\n\nQuery details:\n')
   },
   phone: {
     number: '+919007168561',

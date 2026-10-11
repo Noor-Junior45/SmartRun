@@ -43,6 +43,7 @@ import { getFeeSettings, calculateOrderFees, DEFAULT_FEE_SETTINGS } from '../ser
 import { INDIAN_STANDARD_WIRE_COLORS, PIPE_COLOR_OPTIONS, getProductColorOptions } from '../data/wireColors';
 import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
 import { trackBeginCheckout, trackPurchase } from '../utils/analytics';
+import { SEOHead } from './SEOHead';
 import {
   hapticLight,
   hapticMedium,
@@ -745,6 +746,11 @@ export const CartView = ({
   if (items.length === 0) {
     return (
       <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans pb-16">
+        <SEOHead
+          title="Shopping Cart | SmartRun Kolkata"
+          description="Your SmartRun shopping cart is empty. Explore express electrical items and building materials."
+          noIndex={true}
+        />
         <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
           {/* Header */}
           <div className="flex items-center gap-2.5 mb-6">
@@ -844,6 +850,11 @@ export const CartView = ({
   // ==========================================================================
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 pb-36 font-sans">
+      <SEOHead
+        title={`Shopping Cart (${items.length} ${items.length === 1 ? 'item' : 'items'}) | SmartRun Kolkata`}
+        description="Review your electrical supplies and building materials cart with instant express delivery to your doorstep in Kolkata."
+        noIndex={true}
+      />
       <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         
         {/* 1. HEADER */}

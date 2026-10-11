@@ -43,12 +43,12 @@ function getSenderFromEmail(): string {
     !envFrom.includes("example.com")
   ) {
     if (!envFrom.includes("<")) {
-      return `BuildNow <${envFrom}>`;
+      return `SmartRun <${envFrom}>`;
     }
     return envFrom;
   }
   // Default verified sandbox sender for Resend (works out-of-the-box on all Resend accounts)
-  return "BuildNow <onboarding@resend.dev>";
+  return "SmartRun <onboarding@resend.dev>";
 }
 
 interface ResendDispatchOptions {
@@ -134,7 +134,7 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
     fromEmail.includes("oieldiakir.resend.app") ||
     fromEmail.includes("example.com")
   ) {
-    fromEmail = "BuildNow <onboarding@resend.dev>";
+    fromEmail = "SmartRun <onboarding@resend.dev>";
   }
 
   let deliveredIds: string[] = [];
@@ -150,7 +150,7 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
         effectiveSender.includes("oieldiakir.resend.app") ||
         effectiveSender.includes("example.com")
       ) {
-        effectiveSender = "BuildNow <onboarding@resend.dev>";
+        effectiveSender = "SmartRun <onboarding@resend.dev>";
       }
 
       let res = await callResendApi(apiKey, {
@@ -174,7 +174,7 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
 
         if (isDomainErr && !effectiveSender.includes("onboarding@resend.dev")) {
           res = await callResendApi(apiKey, {
-            from: "BuildNow <onboarding@resend.dev>",
+            from: "SmartRun <onboarding@resend.dev>",
             to: [recipient],
             subject: options.subject,
             html: options.html,
@@ -187,7 +187,7 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
         if (errMsgNow.includes("only send testing emails to your own email address") && recipient !== "noorpos.alerts@gmail.com") {
           try {
             await callResendApi(apiKey, {
-              from: "BuildNow <onboarding@resend.dev>",
+              from: "SmartRun <onboarding@resend.dev>",
               to: ["noorpos.alerts@gmail.com"],
               subject: `[OTP for ${recipient}] ${options.subject}`,
               html: `<p style="font-family: sans-serif; font-size: 13px; color: #334155; margin-bottom: 16px;"><strong>Resend Test Mode Notice:</strong> Resend account is currently using the onboarding sandbox. Direct delivery was requested for <strong>${recipient}</strong>:</p>` + options.html,
@@ -243,7 +243,7 @@ function generateOrderEmailHtml(order: any, customerName: string): string {
         <td style="padding: 12px 8px; font-size: 14px; color: #1e293b; font-weight: 600;">
           ${item.product?.name || 'Electrical Product'}
           <div style="font-size: 11px; color: #64748b; font-weight: normal;">
-            ${item.product?.brand || 'Giriraj Genuine'} • Unit: ${item.product?.unit || '1 pc'}
+            ${item.product?.brand || 'SmartRun Genuine'} • Unit: ${item.product?.unit || '1 pc'}
           </div>
           ${colorHtml}
         </td>
@@ -264,7 +264,7 @@ function generateOrderEmailHtml(order: any, customerName: string): string {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>BuildNow Order Confirmation</title>
+  <title>SmartRun Order Confirmation</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
@@ -272,13 +272,13 @@ function generateOrderEmailHtml(order: any, customerName: string): string {
     <!-- Brand Header -->
     <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 28px 24px; text-align: center; border-bottom: 3px solid #00875a;">
       <div style="display: inline-block; background-color: #ffffff; color: #000000; font-weight: 900; font-size: 18px; padding: 6px 14px; border-radius: 8px; margin-bottom: 8px; letter-spacing: 0.5px;">
-        <span>Build</span><span style="color: #00875a;">Now</span>
+        <span>Smart</span><span style="color: #00875a;">Run</span>
       </div>
       <h1 style="color: #ffffff; font-size: 22px; font-weight: 800; margin: 6px 0 2px 0;">
         Express Order Confirmed!
       </h1>
       <p style="color: #cbd5e1; font-size: 13px; margin: 0;">
-        Kolkata 60-Minute Rapid Electrical & Construction Delivery
+        Kolkata 60-Minute Rapid Electrical &amp; Construction Delivery
       </p>
     </div>
 
@@ -356,20 +356,20 @@ function generateOrderEmailHtml(order: any, customerName: string): string {
         <strong style="color: #0f172a;">Shipping Address:</strong><br>
         ${order.address || 'Address on file'}, ${order.area || 'Kolkata'} ${order.landmark ? `(Landmark: ${order.landmark})` : ''}<br>
         <strong>Phone:</strong> ${order.phone || '+91'}<br><br>
-        <strong>Central Hub Dispatch:</strong> BuildNow, Bediadanga 1st Ln, Nator Park, Kasba, Kolkata 700039
+        <strong>Central Hub Dispatch:</strong> SmartRun, Bediadanga 1st Ln, Nator Park, Kasba, Kolkata 700039
       </div>
     </div>
 
     <!-- Footer -->
     <div style="background-color: #0f172a; color: #94a3b8; padding: 20px; text-align: center; font-size: 11px;">
       <p style="margin: 0 0 6px 0; color: #f1f5f9; font-weight: 700;">
-        BuildNow &amp; Construction Supplies Kolkata
+        SmartRun Quick Commerce &amp; Electrical Supplies Kolkata
       </p>
       <p style="margin: 0 0 8px 0;">
-        Business WP: +91 87774 00280 | Contractor Helpline: +91 90071 68561 | Email: team@girirajpower.in
+        Business WP: +91 87774 00280 | Contractor Helpline: +91 90071 68561 | Email: team@smartrun.in
       </p>
       <p style="margin: 0; color: #64748b;">
-        Automated invoice generated via Resend Transactional Mail Service.
+        Automated invoice generated via SmartRun Transactional Mail Service.
       </p>
     </div>
 
@@ -386,16 +386,16 @@ function generateWiringBookingEmailHtml(booking: any, customerName: string): str
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Giriraj Power Wiring Service Confirmation</title>
+  <title>SmartRun Wiring Service Confirmation</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden;">
-    <div style="background: #0f172a; padding: 24px; text-align: center; border-bottom: 3px solid #facc15;">
-      <div style="display: inline-block; background-color: #facc15; color: #0f172a; font-weight: 900; font-size: 16px; padding: 6px 12px; border-radius: 6px;">
-        ⚡ GIRIRAJ POWER SERVICES
+    <div style="background: #0f172a; padding: 24px; text-align: center; border-bottom: 3px solid #00875a;">
+      <div style="display: inline-block; background-color: #00875a; color: #ffffff; font-weight: 900; font-size: 16px; padding: 6px 12px; border-radius: 6px;">
+        ⚡ SMARTRUN SERVICES
       </div>
       <h1 style="color: #ffffff; font-size: 20px; font-weight: 800; margin: 10px 0 0 0;">
-        Wiring Consultation & Site Visit Confirmed
+        Wiring Consultation &amp; Site Visit Confirmed
       </h1>
     </div>
 
@@ -404,14 +404,14 @@ function generateWiringBookingEmailHtml(booking: any, customerName: string): str
         Dear <strong>${customerName || booking.contactName || 'Valued Customer'}</strong>,
       </p>
       <p style="font-size: 14px; color: #334155; line-height: 1.6;">
-        Your booking for certified Kolkata electrical wiring & installation services has been received. Our senior WBSEDCL/CESC licensed electrical supervisor is assigned to your site.
+        Your booking for certified Kolkata electrical wiring &amp; installation services has been received. Our senior WBSEDCL/CESC licensed electrical supervisor is assigned to your site.
       </p>
 
       <div style="background-color: #f1f5f9; border-radius: 12px; padding: 16px; margin: 20px 0;">
         <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
           <tr>
             <td style="color: #64748b; padding-bottom: 8px;"><strong>Booking ID:</strong></td>
-            <td style="color: #0f172a; font-weight: 700; text-align: right; padding-bottom: 8px;">${booking.id || 'GP-SRV-201'}</td>
+            <td style="color: #0f172a; font-weight: 700; text-align: right; padding-bottom: 8px;">${booking.id || 'SR-SRV-201'}</td>
           </tr>
           <tr>
             <td style="color: #64748b; padding-bottom: 8px;"><strong>Service:</strong></td>
@@ -422,7 +422,7 @@ function generateWiringBookingEmailHtml(booking: any, customerName: string): str
             <td style="color: #0f172a; font-weight: 700; text-align: right; padding-bottom: 8px;">${booking.projectType || '2BHK'} (${booking.approxAreaSqFt || 950} sq.ft)</td>
           </tr>
           <tr>
-            <td style="color: #64748b; padding-bottom: 8px;"><strong>Date & Slot:</strong></td>
+            <td style="color: #64748b; padding-bottom: 8px;"><strong>Date &amp; Slot:</strong></td>
             <td style="color: #0f172a; font-weight: 700; text-align: right; padding-bottom: 8px;">${booking.preferredDate || 'Tomorrow'} (${booking.preferredTimeSlot || '10:00 AM - 01:00 PM'})</td>
           </tr>
           <tr>
@@ -438,7 +438,7 @@ function generateWiringBookingEmailHtml(booking: any, customerName: string): str
     </div>
 
     <div style="background-color: #0f172a; color: #94a3b8; padding: 16px; text-align: center; font-size: 11px;">
-      Giriraj Power Services • Kolkata Engineering Division • Helpline: +91 87774 00280 | Contractor: +91 90071 68561
+      SmartRun Services • Kolkata Engineering Division • Helpline: +91 87774 00280 | Contractor: +91 90071 68561
     </div>
   </div>
 </body>
@@ -453,16 +453,16 @@ function generateTestEmailHtml(customerName: string): string {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Giriraj Power - Resend API Test</title>
+  <title>SmartRun - Email Service Test</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px;">
   <div style="max-width: 540px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-    <div style="background-color: #0f172a; padding: 24px; text-align: center; border-bottom: 3px solid #facc15;">
-      <div style="display: inline-block; background-color: #facc15; color: #0f172a; font-weight: 900; font-size: 16px; padding: 6px 12px; border-radius: 6px; margin-bottom: 6px;">
-        ⚡ GIRIRAJ POWER
+    <div style="background-color: #0f172a; padding: 24px; text-align: center; border-bottom: 3px solid #00875a;">
+      <div style="display: inline-block; background-color: #00875a; color: #ffffff; font-weight: 900; font-size: 16px; padding: 6px 12px; border-radius: 6px; margin-bottom: 6px;">
+        ⚡ SMARTRUN
       </div>
       <h2 style="color: #ffffff; font-size: 18px; font-weight: 800; margin: 0;">
-        Resend Email Service Active
+        Email Service Active
       </h2>
     </div>
 
@@ -475,17 +475,17 @@ function generateTestEmailHtml(customerName: string): string {
       </h3>
       <p style="color: #475569; font-size: 14px; line-height: 1.5; margin: 0 0 16px 0;">
         Hello <strong>${customerName}</strong>,<br>
-        Your Resend API email integration is successfully operational. Order tax invoices, delivery updates, and electrical wiring booking alerts will be delivered via this channel.
+        Your SmartRun transactional email service is successfully operational. Order tax invoices, delivery updates, and electrical service booking alerts will be delivered via this channel.
       </p>
       <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 12px; color: #64748b; text-align: left;">
-        <strong>Service:</strong> Resend Transactional Mailer<br>
+        <strong>Service:</strong> SmartRun Transactional Mailer<br>
         <strong>Time:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)<br>
-        <strong>Hub:</strong> Giriraj Power Kasba Central Dispatch, Kolkata 700039
+        <strong>Hub:</strong> SmartRun Kasba Central Dispatch, Kolkata 700039
       </div>
     </div>
 
     <div style="background-color: #0f172a; color: #64748b; padding: 14px; text-align: center; font-size: 11px;">
-      Giriraj Power Kolkata Express Mail Gateway
+      SmartRun Kolkata Express Mail Gateway
     </div>
   </div>
 </body>
@@ -511,7 +511,7 @@ function generateLoginAlertEmailHtml(params: {
   const ip = params.ipAddress || 'Protected / Encrypted';
   const device = params.device || 'Android Smartphone';
   const os = params.os || 'Android';
-  const browser = params.browser || 'BuildNow App';
+  const browser = params.browser || 'SmartRun App';
   const method = params.loginMethod || 'Email & Password';
 
   return `
@@ -520,21 +520,21 @@ function generateLoginAlertEmailHtml(params: {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Security Alert: New Sign-in to your BuildNow Account</title>
+  <title>Security Alert: New Sign-in to your SmartRun Account</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0b1120; margin: 0; padding: 24px; color: #1e293b;">
   <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border-radius: 18px; overflow: hidden; box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5); border: 1px solid #e2e8f0;">
     
     <!-- Top Security Banner -->
-    <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 28px 24px 22px 24px; text-align: center; border-bottom: 3px solid #facc15;">
-      <div style="display: inline-flex; align-items: center; justify-content: center; background-color: rgba(250, 204, 21, 0.15); border: 1px solid #facc15; color: #fef08a; font-weight: 800; font-size: 12px; padding: 6px 14px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;">
+    <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 28px 24px 22px 24px; text-align: center; border-bottom: 3px solid #00875a;">
+      <div style="display: inline-flex; align-items: center; justify-content: center; background-color: rgba(0, 135, 90, 0.15); border: 1px solid #00875a; color: #6ee7b7; font-weight: 800; font-size: 12px; padding: 6px 14px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;">
         🛡️ ACCOUNT SECURITY ALERT
       </div>
       <h1 style="color: #ffffff; font-size: 22px; font-weight: 800; margin: 0 0 6px 0; letter-spacing: -0.3px;">
         New Login Detected
       </h1>
       <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">
-        BuildNow &amp; Giriraj Power Security Center
+        SmartRun Security Center
       </p>
     </div>
 
@@ -544,7 +544,7 @@ function generateLoginAlertEmailHtml(params: {
         Hello <strong style="color: #0f172a;">${name}</strong>,
       </p>
       <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 22px 0;">
-        We detected a successful sign-in to your <strong>BuildNow</strong> account (<span style="color: #2563eb; font-weight: 600;">${params.email}</span>). Please review the details below:
+        We detected a successful sign-in to your <strong>SmartRun</strong> account (<span style="color: #2563eb; font-weight: 600;">${params.email}</span>). Please review the details below:
       </p>
 
       <!-- Activity Details Card (Binance / Uber style) -->
@@ -595,7 +595,7 @@ function generateLoginAlertEmailHtml(params: {
           <div>
             <strong style="color: #065f46; font-size: 13px; display: block; margin-bottom: 2px;">Was this you?</strong>
             <span style="color: #047857; font-size: 12px; line-height: 1.4; display: block;">
-              If you just logged into BuildNow, you can safely ignore this email. No further action is required.
+              If you just logged into SmartRun, you can safely ignore this email. No further action is required.
             </span>
           </div>
         </div>
@@ -614,7 +614,7 @@ function generateLoginAlertEmailHtml(params: {
         </div>
 
         <div style="text-align: center; margin-top: 14px;">
-          <a href="https://smartrun.in/login" style="display: inline-block; background-color: #dc2626; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 13px; padding: 10px 22px; border-radius: 8px; margin: 4px; box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2);">
+          <a href="https://www.smartrun.in/login" style="display: inline-block; background-color: #dc2626; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 13px; padding: 10px 22px; border-radius: 8px; margin: 4px; box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2);">
             🔒 Secure Account &amp; Reset Password
           </a>
           <a href="tel:+918777400280" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 13px; padding: 10px 18px; border-radius: 8px; margin: 4px;">
@@ -625,11 +625,11 @@ function generateLoginAlertEmailHtml(params: {
 
       <!-- Security Best Practices -->
       <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #64748b; line-height: 1.5;">
-        <strong style="color: #334155; font-size: 12px;">🛡️ Security Tips from SmartRun &amp; Giriraj Power:</strong>
+        <strong style="color: #334155; font-size: 12px;">🛡️ Security Tips from SmartRun:</strong>
         <ul style="margin: 6px 0 0 0; padding-left: 18px;">
           <li>Never share your passwords, OTP codes, or magic links with anyone.</li>
-          <li>SmartRun / Giriraj Power staff will <strong>never</strong> call or email you asking for your password.</li>
-          <li>Always verify you are visiting <code>https://smartrun.in</code> (or <code>https://www.girirajpower.in</code>) before entering your credentials.</li>
+          <li>SmartRun staff will <strong>never</strong> call or email you asking for your password or verification codes.</li>
+          <li>Always verify you are visiting <code>https://www.smartrun.in</code> before entering your credentials.</li>
         </ul>
       </div>
 
@@ -638,10 +638,10 @@ function generateLoginAlertEmailHtml(params: {
     <!-- Footer -->
     <div style="background-color: #0f172a; color: #94a3b8; padding: 20px 24px; text-align: center; font-size: 11px; line-height: 1.5; border-top: 1px solid #334155;">
       <p style="margin: 0 0 6px 0; color: #f1f5f9; font-weight: 700;">
-        SmartRun by Giriraj Power — Kasba Central Dispatch Hub
+        SmartRun — Kasba Central Dispatch Hub
       </p>
       <p style="margin: 0 0 8px 0;">
-        Kasba, Kolkata 700039, West Bengal | Support: team@girirajpower.in | Web: https://smartrun.in
+        Kasba, Kolkata 700039, West Bengal | Support: team@smartrun.in | Web: https://www.smartrun.in
       </p>
       <p style="margin: 0; color: #64748b; font-size: 10px;">
         This automated security notification was sent to ${params.email} in accordance with our account protection protocol.
@@ -681,7 +681,7 @@ function generateAdminOrderAlertHtml(order: any): string {
         <td style="padding: 10px 8px; font-size: 13px; color: #0f172a; font-weight: 700;">
           ${idx + 1}. ${item.product?.name || 'Item'}
           <div style="font-size: 11px; color: #64748b; font-weight: normal;">
-            Brand: ${item.product?.brand || 'Giriraj'} | Unit: ${item.product?.unit || '1 pc'}
+            Brand: ${item.product?.brand || 'SmartRun'} | Unit: ${item.product?.unit || '1 pc'}
           </div>
           ${colorHtml}
         </td>
@@ -702,21 +702,21 @@ function generateAdminOrderAlertHtml(order: any): string {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>🚨 NEW CUSTOMER PURCHASE ALERT - Giriraj Power</title>
+  <title>🚨 NEW CUSTOMER PURCHASE ALERT - SmartRun</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; margin: 0; padding: 20px; color: #1e293b;">
   <div style="max-width: 620px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);">
     
     <!-- Top Alert Banner -->
-    <div style="background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%); padding: 24px 20px; text-align: center; color: #ffffff;">
+    <div style="background: linear-gradient(135deg, #00875a 0%, #064e3b 100%); padding: 24px 20px; text-align: center; color: #ffffff;">
       <div style="display: inline-block; background-color: #facc15; color: #0f172a; font-weight: 900; font-size: 13px; padding: 5px 12px; border-radius: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
         🚨 NEW CUSTOMER ORDER RECEIVED
       </div>
       <h1 style="color: #ffffff; font-size: 22px; font-weight: 900; margin: 4px 0;">
-        Order #${order.id || 'GP-100000'} — ₹${(order.totalAmount || 0).toLocaleString('en-IN')}
+        Order #${order.id || 'SR-100000'} — ₹${(order.totalAmount || 0).toLocaleString('en-IN')}
       </h1>
-      <p style="color: #fecaca; font-size: 13px; margin: 0;">
-        Fulfillment & Dispatch Alert (${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST)
+      <p style="color: #d1fae5; font-size: 13px; margin: 0;">
+        Fulfillment &amp; Dispatch Alert (${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST)
       </p>
     </div>
 
@@ -725,7 +725,7 @@ function generateAdminOrderAlertHtml(order: any): string {
       <a href="tel:${order.phone}" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 13px; padding: 10px 16px; border-radius: 8px; margin: 4px;">
         📞 Call Customer (${order.phone})
       </a>
-      <a href="https://wa.me/91${phoneClean}?text=Hello%20${encodeURIComponent(order.customerName || 'Customer')},%20we%20have%20received%20your%20Giriraj%20Power%20Order%20${order.id}!%20We%20are%20processing%20it%20for%20dispatch." style="display: inline-block; background-color: #16a34a; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 13px; padding: 10px 16px; border-radius: 8px; margin: 4px;">
+      <a href="https://wa.me/91${phoneClean}?text=Hello%20${encodeURIComponent(order.customerName || 'Customer')},%20we%20have%20received%20your%20SmartRun%20Order%20${order.id}!%20We%20are%20processing%20it%20for%20dispatch." style="display: inline-block; background-color: #16a34a; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 13px; padding: 10px 16px; border-radius: 8px; margin: 4px;">
         💬 WhatsApp Customer
       </a>
     </div>
@@ -835,7 +835,7 @@ function generateAdminOrderAlertHtml(order: any): string {
 
     <!-- Footer -->
     <div style="background-color: #0f172a; color: #94a3b8; padding: 18px; text-align: center; font-size: 11px;">
-      Giriraj Power Store Admin Notification System • Kasba Hub Kolkata 700039<br>
+      SmartRun Store Admin Notification System • Kasba Hub Kolkata 700039<br>
       Admin Alert Email: ${ADMIN_EMAIL}
     </div>
   </div>
@@ -874,7 +874,7 @@ let receivedEmailsStore: ReceivedEmailRecord[] = [
     fromName: "Subhojit Bannerjee (Kasba Project)",
     to: OFFICIAL_EMAIL,
     subject: "Bulk Quote Request: 200 Coils 2.5mm Polycab Wire & 50 Switch Plates",
-    text: "Hello Giriraj Power Team,\n\nWe have a 4-storey residential wiring project commencing at Kasba Bosepukur. Need best bulk rates for:\n- 200 Coils Polycab FR-LSH 2.5 sq mm\n- 100 Coils 1.5 sq mm\n- 50 Schneider Opale 8-Module plates\n\nCan you deliver via 60-min express dispatch to Kasba site? GST invoice required.\n\nRegards,\nSubhojit (+91 98301 22456)",
+    text: "Hello SmartRun Team,\n\nWe have a 4-storey residential wiring project commencing at Kasba Bosepukur. Need best bulk rates for:\n- 200 Coils Polycab FR-LSH 2.5 sq mm\n- 100 Coils 1.5 sq mm\n- 50 Schneider Opale 8-Module plates\n\nCan you deliver via 60-min express dispatch to Kasba site? GST invoice required.\n\nRegards,\nSubhojit (+91 98301 22456)",
     receivedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
     status: "unread",
     category: "quote",
@@ -1333,7 +1333,7 @@ const aiAssistantLimiter = rateLimit({
     mapsSources: [
       {
         uri: "https://share.google/EWHvo68Oi2DsChWWV",
-        title: "Giriraj Power Kasba Hub, Kolkata"
+        title: "SmartRun Kasba Hub, Kolkata"
       }
     ]
   }
@@ -1496,7 +1496,7 @@ async function startServer() {
   // Health check endpoint
   app.get("/api/health", (req, res) => {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.json({ status: "ok", app: "Giriraj Power Kolkata Express" });
+    res.json({ status: "ok", app: "SmartRun Kolkata Express" });
   });
 
   // Digital Asset Links for Android App Links, Credential Sharing, and Google Play Store App Verification
@@ -1779,7 +1779,7 @@ async function startServer() {
       // Nominatim Fallback
       const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
       const osmRes = await fetch(osmUrl, {
-        headers: { "Accept-Language": "en", "User-Agent": "GirirajPowerKolkata/1.0" }
+        headers: { "Accept-Language": "en", "User-Agent": "SmartRunKolkata/1.0" }
       });
       if (osmRes.ok) {
         const osmData = await osmRes.json();
@@ -1885,7 +1885,7 @@ async function startServer() {
           queryWithKolkata
         )}&viewbox=88.10,22.75,88.58,22.35&bounded=0&countrycodes=in&limit=8&addressdetails=1`,
         {
-          headers: { "Accept-Language": "en", "User-Agent": "GirirajPowerKolkata/1.0" },
+          headers: { "Accept-Language": "en", "User-Agent": "SmartRunKolkata/1.0" },
         }
       );
 
@@ -2096,7 +2096,7 @@ async function startServer() {
 
       const newProductRow: any = {
         name: body.name.trim(),
-        brand: (body.brand && String(body.brand).trim()) || "Giriraj Genuine",
+        brand: (body.brand && String(body.brand).trim()) || "SmartRun Genuine",
         category: (body.category && String(body.category).trim()) || "Electrical",
         subcategory: (body.subcategory || body.subCategory || body.sub_category || "General").trim(),
         price,
@@ -2630,26 +2630,26 @@ async function startServer() {
         .map((it, i) => {
           const color = it.selectedColor || it.product?.selectedColor;
           const colorBadge = color ? ` [${color} COLOR]` : '';
-          return `${i + 1}. ${it.product?.name || "Item"}${colorBadge} (${it.product?.brand || "Giriraj"}) x ${it.quantity} = ₹${(
+          return `${i + 1}. ${it.product?.name || "Item"}${colorBadge} (${it.product?.brand || "SmartRun"}) x ${it.quantity} = ₹${(
             (it.product?.price || 0) * it.quantity
           ).toLocaleString("en-IN")}`;
         })
         .join("\n");
 
       const whatsappText =
-        `⚡ *NEW ORDER RECEIVED - GIRIRAJ POWER* ⚡\n\n` +
+        `⚡ *NEW ORDER RECEIVED - SMARTRUN* ⚡\n\n` +
         `📦 *Order ID:* ${shortDisplayId}\n` +
         `👤 *Customer:* ${validatedOrder.customerName}\n` +
         `📱 *Mobile:* ${validatedOrder.phone}\n` +
         `📍 *DELIVERY ADDRESS:* ${validatedOrder.address}, Area: ${validatedOrder.area}, PIN: ${validatedOrder.pincode}\n\n` +
         `🛒 *ORDERED ITEMS:*\n${itemsListText}\n\n` +
         `💳 *GRAND TOTAL:* ₹${validatedOrder.totalAmount.toLocaleString("en-IN")} (${validatedOrder.paymentMethod.toUpperCase()})\n` +
-        `⚡ *Dispatch:* Giriraj Power Kasba Central Hub, Kolkata 700039`;
+        `⚡ *Dispatch:* SmartRun Kasba Central Hub, Kolkata 700039`;
 
       const whatsappUrl = `https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappText)}`;
       const customerWhatsappUrl = phoneClean
         ? `https://wa.me/91${phoneClean}?text=${encodeURIComponent(
-            `Hello ${validatedOrder.customerName}, thank you for ordering from Giriraj Power! Your Order ${shortDisplayId} for ₹${validatedOrder.totalAmount.toLocaleString("en-IN")} is confirmed for 60-min express dispatch.`
+            `Hello ${validatedOrder.customerName}, thank you for ordering from SmartRun! Your Order ${shortDisplayId} for ₹${validatedOrder.totalAmount.toLocaleString("en-IN")} is confirmed for 60-min express dispatch.`
           )}`
         : null;
 
@@ -2666,12 +2666,12 @@ async function startServer() {
 
         if (validatedOrder.customerEmail && validatedOrder.customerEmail.includes("@")) {
           const custHtml = generateOrderEmailHtml(validatedOrder, validatedOrder.customerName);
-          const custSubject = `⚡ Order Confirmed ${shortDisplayId} - Giriraj Power Express Kolkata`;
+          const custSubject = `⚡ Order Confirmed ${shortDisplayId} - SmartRun Express Kolkata`;
           dispatchResendEmail({
             to: [validatedOrder.customerEmail.trim()],
             subject: custSubject,
             html: custHtml,
-            text: `Your Giriraj Power order ${shortDisplayId} has been confirmed. Total: ₹${validatedOrder.totalAmount}. Delivery to ${validatedOrder.area}, Kolkata.`
+            text: `Your SmartRun order ${shortDisplayId} has been confirmed. Total: ₹${validatedOrder.totalAmount}. Delivery to ${validatedOrder.area}, Kolkata.`
           }).catch(() => {});
         }
       } catch (emailErr) {
@@ -4922,7 +4922,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
   app.get("/api/email-status", (req, res) => {
     const apiKey = process.env.RESEND_API_KEY;
     const isConfigured = Boolean(apiKey && apiKey !== "MY_RESEND_API_KEY" && apiKey.trim() !== "");
-    const fromEmail = process.env.RESEND_FROM_EMAIL || `Giriraj Power <${OFFICIAL_EMAIL}>`;
+    const fromEmail = process.env.RESEND_FROM_EMAIL || `SmartRun <${OFFICIAL_EMAIL}>`;
     const unreadCount = receivedEmailsStore.filter((m) => m.status === "unread").length;
 
     res.json({
@@ -4968,15 +4968,15 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
 
       // Select template based on type
       if (type === "order_confirmation" && order) {
-        subject = subject || `⚡ Order Confirmed #${order.id} - Giriraj Power Express Kolkata`;
+        subject = subject || `⚡ Order Confirmed #${order.id} - SmartRun Express Kolkata`;
         html = html || generateOrderEmailHtml(order, customerName || order.customerName || "Customer");
-        text = text || `Your Giriraj Power order #${order.id} has been confirmed. Total: ₹${order.totalAmount}. Delivery to ${order.area}, Kolkata.`;
+        text = text || `Your SmartRun order #${order.id} has been confirmed. Total: ₹${order.totalAmount}. Delivery to ${order.area}, Kolkata.`;
       } else if (type === "service_booking" && booking) {
-        subject = subject || `⚡ Service Booking Confirmed #${booking.id} - Giriraj Power Wiring`;
+        subject = subject || `⚡ Service Booking Confirmed #${booking.id} - SmartRun Services`;
         html = html || generateWiringBookingEmailHtml(booking, customerName || booking.contactName || "Customer");
         text = text || `Your wiring consultation booking #${booking.id} has been confirmed for ${booking.projectType} at ${booking.siteAddress}.`;
       } else if (type === "login_alert") {
-        subject = subject || `🛡️ Security Alert: New sign-in to your BuildNow account`;
+        subject = subject || `🛡️ Security Alert: New sign-in to your SmartRun account`;
         html = html || generateLoginAlertEmailHtml({
           customerName: customerName || "Customer",
           email: to,
@@ -4985,17 +4985,17 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
           location: req.body?.location || "Kolkata, West Bengal, India",
           device: req.body?.device || "Mobile Device",
           os: req.body?.os || "Android",
-          browser: req.body?.browser || "BuildNow App",
+          browser: req.body?.browser || "SmartRun App",
           loginMethod: req.body?.loginMethod || "Email & Password"
         });
-        text = text || `Security Alert: A new sign-in was detected on your SmartRun account (${to}) at ${req.body?.loginTime || 'recently'}. Location: ${req.body?.location || 'Kolkata, India'}. If this wasn't you, secure your account at https://smartrun.in/login`;
+        text = text || `Security Alert: A new sign-in was detected on your SmartRun account (${to}) at ${req.body?.loginTime || 'recently'}. Location: ${req.body?.location || 'Kolkata, India'}. If this wasn't you, secure your account at https://www.smartrun.in/login`;
       } else if (type === "test_email") {
-        subject = subject || "⚡ Resend Email Verification - Giriraj Power Kolkata";
+        subject = subject || "⚡ Email Verification - SmartRun Kolkata";
         html = html || generateTestEmailHtml(customerName || "Valued Customer");
-        text = text || "Your Resend API email integration is successfully operational!";
+        text = text || "Your SmartRun email integration is successfully operational!";
       } else {
-        subject = subject || "Notification from Giriraj Power";
-        html = html || `<p>${customText || "Notification from Giriraj Power Kolkata"}</p>`;
+        subject = subject || "Notification from SmartRun";
+        html = html || `<p>${customText || "Notification from SmartRun Kolkata"}</p>`;
       }
 
       const dispatchResult = await dispatchResendEmail({
@@ -5128,7 +5128,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
           </div>
           
           <div style="background: #f8fafc; padding: 12px 24px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0;">
-            Giriraj Power (SmartRun) • Kasba Central Warehouse Hub • 24/7 Support Desk
+            SmartRun • Kasba Central Warehouse Hub • 24/7 Support Desk
           </div>
         </div>
       `;
@@ -5238,12 +5238,12 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         location: finalLocation,
         device: device || "Mobile Device",
         os: os || "Android",
-        browser: browser || "BuildNow App",
+        browser: browser || "SmartRun App",
         loginMethod: loginMethod || "Email & Password"
       });
 
-      const subject = `🛡️ Security Alert: New sign-in to your BuildNow account (${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })} IST)`;
-      const text = `Hello ${customerName},\n\nA new login was detected on your SmartRun account (${cleanEmail}) on ${displayTime}.\nLocation: ${finalLocation}\nDevice: ${device || 'Mobile'} (${os || 'Android'})\nBrowser: ${browser || 'BuildNow App'}\nMethod: ${loginMethod || 'Password'}\n\nIf this was you, no action is required.\nIf you did not make this login, please secure your account immediately at https://smartrun.in/login or call support at +91 87774 00280.`;
+      const subject = `🛡️ Security Alert: New sign-in to your SmartRun account (${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })} IST)`;
+      const text = `Hello ${customerName},\n\nA new login was detected on your SmartRun account (${cleanEmail}) on ${displayTime}.\nLocation: ${finalLocation}\nDevice: ${device || 'Mobile'} (${os || 'Android'})\nBrowser: ${browser || 'SmartRun App'}\nMethod: ${loginMethod || 'Password'}\n\nIf this was you, no action is required.\nIf you did not make this login, please secure your account immediately at https://www.smartrun.in/login or call support at +91 87774 00280.`;
 
       const dispatchResult = await dispatchResendEmail({
         to: cleanEmail,
@@ -5288,11 +5288,11 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
 
       // Build Itemized Text for WhatsApp & SMS
       const itemsListText = (order.items || [])
-        .map((it: any, i: number) => `${i + 1}. ${it.product?.name || 'Item'} (${it.product?.brand || 'Giriraj'}) x ${it.quantity} ${it.product?.unit || 'pc'} = ₹${((it.product?.price || 0) * it.quantity).toLocaleString('en-IN')}`)
+        .map((it: any, i: number) => `${i + 1}. ${it.product?.name || 'Item'} (${it.product?.brand || 'SmartRun'}) x ${it.quantity} ${it.product?.unit || 'pc'} = ₹${((it.product?.price || 0) * it.quantity).toLocaleString('en-IN')}`)
         .join('\n');
 
-      const whatsappText = `⚡ *NEW ORDER RECEIVED - GIRIRAJ POWER* ⚡\n\n` +
-        `📦 *Order ID:* #${order.id || 'GP-100000'}\n` +
+      const whatsappText = `⚡ *NEW ORDER RECEIVED - SMARTRUN* ⚡\n\n` +
+        `📦 *Order ID:* #${order.id || 'SR-100000'}\n` +
         `📅 *Date/Time:* ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)\n\n` +
         `👤 *Customer Name:* ${order.customerName || 'Customer'}\n` +
         `📱 *Mobile Phone:* ${order.phone || '+91'}\n` +
@@ -5310,11 +5310,11 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         `${(order.discount || 0) > 0 ? `🎟️ *Discount:* -₹${order.discount}\n` : ''}` +
         `💳 *GRAND TOTAL:* ₹${(order.totalAmount || 0).toLocaleString('en-IN')}\n` +
         `💵 *Payment Mode:* ${order.paymentMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Online UPI / Card (PAID)'}\n\n` +
-        `⚡ *Dispatch Central:* Giriraj Power Kasba Hub Kolkata 700039`;
+        `⚡ *Dispatch Central:* SmartRun Kasba Hub Kolkata 700039`;
 
       const whatsappUrl = `https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappText)}`;
       const customerWhatsappUrl = phoneClean
-        ? `https://wa.me/91${phoneClean}?text=${encodeURIComponent(`Hello ${order.customerName || 'Customer'}, thank you for ordering from Giriraj Power! Your Order #${order.id} for ₹${(order.totalAmount || 0).toLocaleString('en-IN')} has been received and is being dispatched.`)}`
+        ? `https://wa.me/91${phoneClean}?text=${encodeURIComponent(`Hello ${order.customerName || 'Customer'}, thank you for ordering from SmartRun! Your Order #${order.id} for ₹${(order.totalAmount || 0).toLocaleString('en-IN')} has been received and is being dispatched.`)}`
         : null;
 
       let adminAlertSent = false;
@@ -5341,13 +5341,13 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
       if (targetCustEmail && targetCustEmail.includes("@")) {
         try {
           const custHtml = generateOrderEmailHtml(order, order.customerName || "Valued Customer");
-          const custSubject = `⚡ Order Confirmed #${order.id} - Giriraj Power Express Kolkata`;
+          const custSubject = `⚡ Order Confirmed #${order.id} - SmartRun Express Kolkata`;
           
           const custDispatch = await dispatchResendEmail({
             to: [targetCustEmail.trim()],
             subject: custSubject,
             html: custHtml,
-            text: `Your Giriraj Power order #${order.id} has been confirmed. Total: ₹${order.totalAmount}. Delivery to ${order.area}, Kolkata.`
+            text: `Your SmartRun order #${order.id} has been confirmed. Total: ₹${order.totalAmount}. Delivery to ${order.area}, Kolkata.`
           });
           customerInvoiceSent = custDispatch.success;
         } catch (custErr: any) {
@@ -5358,7 +5358,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
       // 3. Dispatch Push Notification to registered customer device
       try {
         const orderStatus = (order.status || "confirmed").toUpperCase();
-        const notificationTitle = `🚚 BuildNow Order #${order.id} ${orderStatus}`;
+        const notificationTitle = `🚚 SmartRun Order #${order.id} ${orderStatus}`;
         const notificationBody = `Your order of ₹${(order.totalAmount || 0).toLocaleString("en-IN")} is confirmed! 60-min delivery to ${order.area || "Kolkata"}.`;
 
         // Log push notification dispatch for native devices
@@ -5451,12 +5451,12 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         processing: "Packing in Progress 📦",
         packed: "Packed & Ready for Rider 📦",
         out_for_delivery: "Out for Delivery 🚀 (Rider is nearby)",
-        delivered: "Delivered 🎉 (Thank you for choosing BuildNow)",
+        delivered: "Delivered 🎉 (Thank you for choosing SmartRun)",
         cancelled: "Order Cancelled ⚠️"
       };
 
       const pushTitle = title || `Order #${orderId}: ${statusLabels[status] || status || "Update"}`;
-      const pushBody = body || `Your Kolkata BuildNow order #${orderId} status has been updated to "${status || "processing"}".`;
+      const pushBody = body || `Your Kolkata SmartRun order #${orderId} status has been updated to "${status || "processing"}".`;
 
       // Match target tokens
       let targetTokens = Array.from(pushTokensStore.values());
@@ -5524,7 +5524,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
       const emailData = payload.data || payload;
       const fromRaw = emailData.from || emailData.sender || "inbound-sender@example.com";
       const toRaw = emailData.to || OFFICIAL_EMAIL;
-      const subject = emailData.subject || "Incoming Message to team@girirajpower.in";
+      const subject = emailData.subject || "Incoming Message to team@smartrun.in";
       const text = emailData.text || emailData.body || "";
       const html = emailData.html || "";
       const headers = emailData.headers || {};
@@ -5588,7 +5588,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
     }
   });
 
-  // 3. Contact Form / Inbound Inquiry Submission to team@girirajpower.in
+  // 3. Contact Form / Inbound Inquiry Submission to team@smartrun.in
   app.post("/api/contact-inquiry", strictLimiter, async (req, res) => {
     try {
       const rawBody = req.body || {};
@@ -5616,7 +5616,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         });
       }
 
-      const subject = rawSubject || `Inquiry from ${name || email} for Giriraj Power`;
+      const subject = rawSubject || `Inquiry from ${name || email} for SmartRun`;
       const senderName = name || email.split("@")[0];
 
       // Save to received emails inbox
@@ -5644,11 +5644,11 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         // 1. Send receipt acknowledgement to customer
         const ackDispatch = await dispatchResendEmail({
           to: [email],
-          subject: `✓ Received: ${subject} - Giriraj Power Kasba`,
+          subject: `✓ Received: ${subject} - SmartRun Kasba`,
           html: `
             <div style="font-family: sans-serif; max-width: 540px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-              <div style="background-color: #0f172a; padding: 20px; text-align: center;">
-                <h2 style="color: #facc15; margin: 0; font-size: 18px;">⚡ GIRIRAJ POWER</h2>
+              <div style="background-color: #0f172a; padding: 20px; text-align: center; border-bottom: 3px solid #00875a;">
+                <h2 style="color: #ffffff; margin: 0; font-size: 18px; font-weight: 900;">⚡ SMARTRUN</h2>
                 <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 12px;">Kasba Central Hub, Kolkata</p>
               </div>
               <div style="padding: 24px;">
@@ -5656,7 +5656,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
                 <p style="color: #475569; font-size: 14px; line-height: 1.5; margin: 0 0 16px 0;">
                   We have received your message at <strong>${OFFICIAL_EMAIL}</strong>. Our Kasba engineering and wholesale desk will get back to you shortly.
                 </p>
-                <div style="background-color: #f8fafc; border-left: 4px solid #facc15; padding: 12px; margin: 16px 0; font-size: 13px; color: #334155;">
+                <div style="background-color: #f8fafc; border-left: 4px solid #00875a; padding: 12px; margin: 16px 0; font-size: 13px; color: #334155;">
                   <strong>Your Message:</strong><br>${message.replace(/\n/g, '<br>')}
                 </div>
                 <p style="font-size: 12px; color: #64748b; margin: 16px 0 0 0;">
@@ -5710,8 +5710,8 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
           text: replyText,
           html: `
             <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-              <div style="background-color: #0f172a; padding: 18px 24px; border-bottom: 3px solid #facc15;">
-                <h2 style="color: #facc15; margin: 0; font-size: 16px;">⚡ GIRIRAJ POWER RESPONSE</h2>
+              <div style="background-color: #0f172a; padding: 18px 24px; border-bottom: 3px solid #00875a;">
+                <h2 style="color: #ffffff; margin: 0; font-size: 16px; font-weight: 900;">⚡ SMARTRUN RESPONSE</h2>
                 <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 11px;">Official Reply from ${OFFICIAL_EMAIL}</p>
               </div>
               <div style="padding: 24px; font-size: 14px; color: #1e293b; line-height: 1.6;">
@@ -5719,7 +5719,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
                 <p style="margin: 0 0 20px 0; white-space: pre-line;">${replyText}</p>
                 
                 <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 20px; font-size: 12px; color: #64748b;">
-                  <strong>Giriraj Power Support & Wholesale Desk</strong><br>
+                  <strong>SmartRun Support &amp; Wholesale Desk</strong><br>
                   Kasba Central Warehouse, Kolkata 700039<br>
                   WhatsApp: +91 87774 00280 | Phone: +91 90071 68561 | Email: ${OFFICIAL_EMAIL}
                 </div>
@@ -5818,7 +5818,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
       const defaultMapsSources = [
         {
           uri: "https://share.google/EWHvo68Oi2DsChWWV",
-          title: "Giriraj Power Kasba Hub, Kolkata"
+          title: "SmartRun Kasba Hub, Kolkata"
         }
       ];
 
@@ -5846,7 +5846,7 @@ Express delivery is available across Kolkata within ~60 minutes!`;
           }
         });
 
-        const systemPrompt = `You are the expert Electrical Engineer, Construction Estimator & Store Advisor for Giriraj Power in Kolkata, India.
+        const systemPrompt = `You are the expert Electrical Engineer, Construction Estimator & Store Advisor for SmartRun in Kolkata, India.
 Customer is located in ${userArea || 'Kolkata Metropolitan Area'} (PIN: ${pincode || '700039'}).
 Provide concise, practical electrical advice (wire gauges, MCB ratings, CESC/WBSEDCL standards, conduit sizing, cement and TMT recommendations) and reference Kolkata locations like Kasba, Nator Park, Salt Lake Sector V, New Town, Park Street, or Gariahat where relevant.`;
 
@@ -5913,14 +5913,14 @@ Express delivery is available across Kolkata within ~60 minutes!`,
         mapsSources: [
           {
             uri: "https://share.google/EWHvo68Oi2DsChWWV",
-            title: "Giriraj Power Kasba Hub, Kolkata"
+            title: "SmartRun Kasba Hub, Kolkata"
           }
         ]
       });
     }
   });
 
-  // Intelligent domain response generator for Mayra (BuildNow AI Support Specialist)
+  // Intelligent domain response generator for Mayra (SmartRun AI Support Specialist)
   function getMayraSmartResponse(query: string, customerName: string = "Customer"): { text: string; needsEscalation: boolean } {
     const lower = (query || "").toLowerCase();
     let needsEscalation = false;
@@ -5937,7 +5937,7 @@ Express delivery is available across Kolkata within ~60 minutes!`,
       lower.includes("talk to someone") ||
       lower.includes("real person")
     ) {
-      text = `I can connect you directly with our specialized human support and contractor desk! 🤝\n\nPlease select your preferred way to reach us below:\n• **1. WhatsApp**: Instant chat with our Kasba dispatch desk\n• **2. Official Email**: Send your inquiry to team@girirajpower.in\n• **3. Support Helpline**: Call our customer helpline directly`;
+      text = `I can connect you directly with our specialized human support and contractor desk! 🤝\n\nPlease select your preferred way to reach us below:\n• **1. WhatsApp**: Instant chat with our Kasba dispatch desk (+91 87774 00280)\n• **2. Official Email**: Send your inquiry to team@smartrun.in\n• **3. Support Helpline**: Call our customer helpline directly (+91 90071 68561)`;
       needsEscalation = true;
     } else if (
       lower.includes("thank") ||
@@ -6064,7 +6064,7 @@ Express delivery is available across Kolkata within ~60 minutes!`,
     ) {
       text = `Hello ${customerName || 'there'} 👋, I am Mayra your 24/7 AI support specialist.\n\nI can help you with Kolkata 60-min delivery updates, technical wire/MCB sizing recommendations, GST invoices, electrician bookings, and store policies. How may I assist you today?`;
     } else {
-      text = `I have noted your query regarding "${query}".\n\nAt BuildNow Electricals (Kasba, Kolkata), we provide 60-minute express delivery, 100% genuine ISI certified electricals (Polycab, Havells, Schneider, Anchor), verified electrician services, and official GST invoices.\n\nIf you need specific assistance or customized contractor quotes, please ask or tap below to speak directly with our desk.`;
+      text = `I have noted your query regarding "${query}".\n\nAt SmartRun Electricals (Kasba, Kolkata), we provide 60-minute express delivery, 100% genuine ISI certified electricals (Polycab, Havells, Schneider, Anchor), verified electrician services, and official GST invoices.\n\nIf you need specific assistance or customized contractor quotes, please ask or tap below to speak directly with our desk.`;
     }
 
     return { text, needsEscalation };
@@ -6092,7 +6092,7 @@ Express delivery is available across Kolkata within ~60 minutes!`,
             }
           });
 
-          const systemPrompt = `You are Mayra, the friendly, expert 24/7 AI Customer Support Specialist for BuildNow Electricals & Construction Supplies, located at Kasba, Kolkata 700039.
+          const systemPrompt = `You are Mayra, the friendly, expert 24/7 AI Customer Support Specialist for SmartRun Electricals & Construction Supplies, located at Kasba, Kolkata 700039.
 Customer Name: ${customerName || "Customer"}
 Customer Email: ${customerEmail || "Not specified"}
 Customer Area: ${customerArea || "Kolkata"}
@@ -6110,7 +6110,7 @@ Knowledge Base & Service Details:
 5. Invoicing: GST invoices generated with registered GSTIN on all orders for input tax credit.
 6. Returns: 7-day return/exchange on factory-sealed items and intact uncut wire coils.
 7. Escalation Policy:
-   - If the customer asks to speak to a real person, call, or talk to human support, warmly let them know they can connect directly with our human team via: 1. WhatsApp, 2. Email (team@girirajpower.in), and 3. Support Helpline (+91 90071 68561).
+   - If the customer asks to speak to a real person, call, or talk to human support, warmly let them know they can connect directly with our human team via: 1. WhatsApp (+91 87774 00280), 2. Email (team@smartrun.in), and 3. Support Helpline (+91 90071 68561).
    - Format responses cleanly with bold bullet points or short paragraphs for great mobile readability. Avoid verbose fluff.`;
 
           const response = await ai.models.generateContent({
@@ -6136,7 +6136,7 @@ Knowledge Base & Service Details:
           lowerResp.includes("contractor desk") ||
           lowerResp.includes("human") ||
           lowerResp.includes("escalate") ||
-          lowerResp.includes("team@girirajpower.in") ||
+          lowerResp.includes("team@smartrun.in") ||
           lowerResp.includes("whatsapp") ||
           lowerReq.includes("human") ||
           lowerReq.includes("real person") ||
@@ -6242,7 +6242,7 @@ Knowledge Base & Service Details:
         engineeringAdvice: [
           `For ${area}, ensure all circuit neutrals are kept independent to prevent MCB nuisance tripping during high-humidity monsoons.`,
           `Dedicated 4.0 sq.mm copper wire runs are strongly recommended for master bedroom 1.5 Ton AC units and instant water geysers.`,
-          `UltraTech cement bags are dispatched fresh from Giriraj Power Kasba warehouse with guaranteed manufacturing within 15 days.`
+          `UltraTech cement bags are dispatched fresh from SmartRun Kasba warehouse with guaranteed manufacturing within 15 days.`
         ]
       };
 
@@ -6262,7 +6262,7 @@ Knowledge Base & Service Details:
           }
         });
 
-        const prompt = `You are the Principal Chief Electrical Engineer and Civil Construction Quantity Estimator for Giriraj Power, located at Kasba Hub, Kolkata.
+        const prompt = `You are the Principal Chief Electrical Engineer and Civil Construction Quantity Estimator for SmartRun, located at Kasba Hub, Kolkata.
 Calculate a realistic, wholesale Bill of Materials (BOM) for the following project:
 - Client Name: ${clientName}
 - Location: ${area}, Kolkata (PIN: ${pincode})
@@ -6752,9 +6752,9 @@ Respond ONLY with a valid JSON object matching the following structure:
         <head><meta charset="utf-8"></head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px;">
           <div style="max-width: 480px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-            <div style="background-color: #f59e0b; padding: 20px; text-align: center;">
-              <h2 style="color: #0f172a; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.5px;">Giriraj Power (SmartRun)</h2>
-              <p style="color: #451a03; margin: 4px 0 0 0; font-size: 12px; font-weight: 600;">Security Verification Code</p>
+            <div style="background-color: #00875a; padding: 20px; text-align: center;">
+              <h2 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.5px;">SmartRun</h2>
+              <p style="color: #d1fae5; margin: 4px 0 0 0; font-size: 12px; font-weight: 600;">Security Verification Code</p>
             </div>
             <div style="padding: 28px 24px; text-align: center;">
               <p style="font-size: 14px; color: #334155; margin: 0 0 16px 0;">
@@ -6763,8 +6763,8 @@ Respond ONLY with a valid JSON object matching the following structure:
               <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0 0 24px 0;">
                 You requested to update your account's mobile number${cleanPhone ? ` to <strong>+91 ${cleanPhone}</strong>` : ''}. Enter this 6-digit verification code to authorize this change:
               </p>
-              <div style="background-color: #fef3c7; border: 2px dashed #f59e0b; border-radius: 12px; padding: 16px 28px; margin: 0 auto 24px auto; display: inline-block;">
-                <span style="font-size: 32px; font-weight: 900; font-family: monospace; letter-spacing: 6px; color: #78350f;">
+              <div style="background-color: #ecfdf5; border: 2px dashed #00875a; border-radius: 12px; padding: 16px 28px; margin: 0 auto 24px auto; display: inline-block;">
+                <span style="font-size: 32px; font-weight: 900; font-family: monospace; letter-spacing: 6px; color: #065f46;">
                   ${generatedOtp}
                 </span>
               </div>
@@ -6783,9 +6783,9 @@ Respond ONLY with a valid JSON object matching the following structure:
       try {
         await dispatchResendEmail({
           to: cleanEmail,
-          subject: `🔐 ${generatedOtp} is your Giriraj Power verification code`,
+          subject: `🔐 ${generatedOtp} is your SmartRun verification code`,
           html: emailHtml,
-          text: `Your Giriraj Power verification code to update your mobile number is: ${generatedOtp}. Valid for 10 minutes.`
+          text: `Your SmartRun verification code to update your mobile number is: ${generatedOtp}. Valid for 10 minutes.`
         });
       } catch (sendErr) {
         console.warn("[Email OTP Dispatch Notice]:", sendErr);
@@ -7274,7 +7274,7 @@ Respond ONLY with a valid JSON object matching the following structure:
   }
 
   const serverInstance = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Giriraj Power Server running on http://0.0.0.0:${PORT}`);
+    console.log(`SmartRun Server running on http://0.0.0.0:${PORT}`);
   });
 
   serverInstance.on("error", (err: any) => {

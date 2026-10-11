@@ -24,6 +24,7 @@ import { UserProfile, Order } from '../types';
 import { API_BASE_URL } from '../lib/apiBase';
 import { showToast } from '../utils/toast';
 import { purgeAllUserCacheAndStorage, signOutUser } from '../services/supabaseService';
+import { SEOHead } from './SEOHead';
 
 interface AccountDeletionPageProps {
   userProfile?: UserProfile | null;
@@ -220,6 +221,11 @@ export const AccountDeletionPage = ({
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans pb-20" id="account-deletion-page">
+      <SEOHead
+        title="Account & Data Deletion Portal | SmartRun"
+        description="Permanently delete your SmartRun account and personal data in compliance with Google Play Developer policies."
+        noIndex={true}
+      />
       {/* Top Header: Simple Heading 'Account delete' and Arrow Back Button in the same line with White Background */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 sm:px-6 py-3.5">
         <div className="max-w-3xl mx-auto flex items-center gap-3">

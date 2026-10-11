@@ -34,10 +34,11 @@ import {
   OrderProductReviewCard
 } from './OrderReviewComponents';
 import { HelpCenterSubPage } from '../profile/HelpCenterSubPage';
+import { SEOHead } from '../SEOHead';
 
-// Giriraj Power Kasba Central Warehouse Exact Coordinates
+// SmartRun Kasba Central Warehouse Exact Coordinates
 const WAREHOUSE_LOCATION = {
-  name: 'Giriraj Power Warehouse',
+  name: 'SmartRun Central Hub Warehouse',
   area: 'Kasba Industrial Estate, Kolkata',
   lat: 22.5186,
   lng: 88.3832
@@ -760,6 +761,11 @@ export const LiveOrderPage = ({
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900">
+      <SEOHead
+        title={order ? `Live Tracking #${getShortOrderUuid(order.id)} | SmartRun` : 'Live Order Tracking & GPS Delivery | SmartRun'}
+        description="Track your SmartRun express delivery partner in real-time with live GPS coordinates, vehicle registration details, and instant rider contact."
+        noIndex={true}
+      />
       {/* Top Sticky Header for Order Page: Shows Current Background Process */}
       <div className="sticky top-0 z-30 bg-white px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-xs border-b border-slate-100">
         <div className="flex items-center gap-3 min-w-0">

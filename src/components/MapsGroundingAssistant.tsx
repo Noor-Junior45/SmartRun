@@ -24,7 +24,7 @@ export const MapsGroundingAssistant = ({
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: `Hello! I am your Giriraj Power AI Electrical Engineer & Kolkata Grounding Assistant. Ask me anything about:
+      content: `Hello! I am your SmartRun AI Electrical Engineer & Kolkata Grounding Assistant. Ask me anything about:
 • Wire gauge sizing (1.5mm vs 2.5mm vs 4mm for ACs & flats)
 • Kolkata delivery hub locations and real estate wiring advice
 • MCB breaker & DB box selection for WBSEDCL / CESC meters.`
@@ -76,7 +76,7 @@ export const MapsGroundingAssistant = ({
 • Lighting circuits: Use 1.5 sq mm Polycab/Havells FR-LSH wire with 10A C-Curve MCB.
 • Power & Air Conditioners: Use 2.5 sq mm wire with 16A/20A MCB.
 • Main Meter to Distribution Board: Use 4.0 sq mm or 6.0 sq mm wire with 32A DP Isolator.
-• Giriraj Power Kasba Hub has fast local dispatch ready for these materials!`;
+• SmartRun Kasba Hub has fast local dispatch ready for these materials!`;
 
       if (query.toLowerCase().includes('ac') || query.toLowerCase().includes('air conditioner')) {
         fallbackText = `For a 1.5 Ton Inverter AC in Kolkata:
@@ -92,7 +92,7 @@ All items are in stock for fast delivery (1–7 Days) to ${currentArea.name}!`;
           role: 'assistant',
           content: fallbackText,
           mapsSources: [
-            { uri: 'https://share.google/EWHvo68Oi2DsChWWV', title: 'Giriraj Power (Kasba Hub), Kolkata' }
+            { uri: 'https://share.google/EWHvo68Oi2DsChWWV', title: 'SmartRun (Kasba Hub), Kolkata' }
           ]
         }
       ]);
@@ -104,7 +104,7 @@ All items are in stock for fast delivery (1–7 Days) to ${currentArea.name}!`;
   const sampleQueries = [
     'How many wire coils for 2BHK 950 sq ft flat in Kolkata?',
     'What MCB rating for 1.5 ton inverter AC?',
-    'Where is Giriraj Power Kasba hub located in Kolkata?',
+    'Where is SmartRun Kasba hub located in Kolkata?',
     'Difference between 1.5mm and 2.5mm Polycab wire?'
   ];
 

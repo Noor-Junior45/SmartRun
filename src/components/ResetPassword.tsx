@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Lock, Eye, EyeOff, CheckCircle2, ArrowRight, ShieldCheck, Sparkles, AlertTriangle, RefreshCw, LogIn } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { saveUserProfile } from '../services/supabaseService';
+import { SEOHead } from './SEOHead';
 
 interface ResetPasswordProps {
   onSuccess?: () => void;
@@ -115,7 +116,7 @@ export const ResetPassword = ({ onSuccess, onOpenAuth }: ResetPasswordProps) => 
         if (data.user) {
           saveUserProfile({
             email: data.user.email,
-            name: data.user.user_metadata?.full_name || 'Giriraj Customer',
+            name: data.user.user_metadata?.full_name || 'SmartRun Customer',
           });
         }
         if (onSuccess) {
@@ -139,6 +140,11 @@ export const ResetPassword = ({ onSuccess, onOpenAuth }: ResetPasswordProps) => 
 
   return (
     <div className="min-h-[75vh] flex items-center justify-center px-4 py-12">
+      <SEOHead
+        title="Reset Password | SmartRun"
+        description="Securely reset your password for your SmartRun customer account."
+        noIndex={true}
+      />
       <div className="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-xl border border-slate-200 relative overflow-hidden">
         
         {/* Top Decorative Header Banner */}

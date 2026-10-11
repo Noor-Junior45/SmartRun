@@ -29,6 +29,7 @@ import { ProductCardImage } from './ProductCardImage';
 import { hapticLight, hapticSelection } from '../utils/haptics';
 import { getFlattenedSpecifications } from '../utils/productSpecifications';
 import { getPaginationPages } from '../utils/paginationHelper';
+import { SEOHead } from './SEOHead';
 
 interface ConstructionPageProps {
   onAddToCart: (product: Product) => void;
@@ -83,7 +84,7 @@ const ALL_CONSTRUCTION_BRANDS = [
   'CenturyPly',
   'Action TESA',
   'Fevicol',
-  'Giriraj Genuine',
+  'SmartRun Genuine',
   'Jaquar',
   'Hindware',
   'Geberit',
@@ -291,7 +292,7 @@ export const ConstructionPage = ({
             return {
               id: String(row.id),
               name: row.name || 'Construction Material',
-              brand: row.brand || 'Giriraj Genuine',
+              brand: row.brand || 'SmartRun Genuine',
               category: 'construction',
               subCategory: row.subcategory || row.sub_category || 'General Materials',
               price,
@@ -306,7 +307,7 @@ export const ConstructionPage = ({
               image_urls: imageList,
               inStock: (row.stock_quantity ?? row.stock_count ?? row.stockCount ?? 10) > 0,
               stockCount: Number(row.stock_quantity ?? row.stock_count ?? row.stockCount ?? 10),
-              tags: Array.isArray(row.tags) ? row.tags : (typeof row.tags === 'string' ? row.tags.split(',').map((t: string) => t.trim()) : [row.brand || 'Giriraj', 'Construction']),
+              tags: Array.isArray(row.tags) ? row.tags : (typeof row.tags === 'string' ? row.tags.split(',').map((t: string) => t.trim()) : [row.brand || 'SmartRun', 'Construction']),
               isEmergency: false,
               specs: getFlattenedSpecifications(row.specifications || row.specs, row.brand).reduce((acc, curr) => {
                 acc[curr.key] = curr.value;
@@ -574,7 +575,11 @@ export const ConstructionPage = ({
 
   return (
     <div className="min-h-screen bg-white text-slate-900 pb-36 sm:pb-24 font-sans">
-      
+      <SEOHead
+        title={searchQuery ? `"${searchQuery}" - Building Materials & Cement Kolkata | SmartRun` : 'Building Materials, UltraTech Cement & Tata TMT Steel Kolkata | SmartRun'}
+        description="Procure construction supplies online: UltraTech & ACC cement, Tata Tiscon TMT rebars, waterproofing chemicals, and plumbing pipes with direct site delivery across Kolkata."
+        keywords="construction materials kolkata, ultratech cement kolkata, tata tiscon tmt rebars, building materials procurement, dr fixit waterproofing"
+      />
       {/* ACTIVE FILTER TAGS & RESET ROW (Top navbar houses All Filters & Sort) */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-2 pb-2 mb-2 flex items-center justify-between gap-2 overflow-x-auto scrollbar-none">
         {hasActiveFilters ? (
@@ -750,7 +755,7 @@ export const ConstructionPage = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-xl mx-auto pt-3">
                 {/* 1. WhatsApp Liquid Gloss Button */}
                 <a
-                  href="https://wa.me/918777400280?text=Hello%20Giriraj%20Power,%20I%20need%20a%20wholesale%20quote%20for%20construction%20materials."
+                  href="https://wa.me/918777400280?text=Hello%20SmartRun,%20I%20need%20a%20wholesale%20quote%20for%20construction%20materials."
                   target="_blank"
                   rel="noopener noreferrer"
                   className="relative group overflow-hidden w-full h-12 min-h-[48px] px-3.5 rounded-2xl bg-gradient-to-b from-emerald-500 via-emerald-600 to-emerald-700 text-white font-bold text-xs sm:text-[13px] tracking-tight shadow-[0_8px_20px_-4px_rgba(16,185,129,0.38),inset_0_1px_1px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(0,0,0,0.18)] border border-emerald-400/40 hover:from-emerald-400 hover:to-emerald-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer before:absolute before:inset-x-0 before:top-0 before:h-1/2 before:bg-gradient-to-b before:from-white/35 before:to-transparent before:pointer-events-none before:rounded-t-2xl"

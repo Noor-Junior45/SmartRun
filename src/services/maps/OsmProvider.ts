@@ -93,7 +93,7 @@ export class OsmProvider implements IMapProvider {
       {
         headers: {
           'Accept-Language': 'en',
-          'User-Agent': 'BuildNowKolkata/2.4'
+          'User-Agent': 'SmartRunKolkata/2.4'
         }
       }
     );
@@ -146,7 +146,7 @@ export class OsmProvider implements IMapProvider {
       {
         headers: {
           'Accept-Language': 'en',
-          'User-Agent': 'BuildNowKolkata/2.4'
+          'User-Agent': 'SmartRunKolkata/2.4'
         }
       }
     );

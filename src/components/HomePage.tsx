@@ -31,6 +31,7 @@ import { MaterialCostCalculator } from './MaterialCostCalculator';
 import { hapticLight, hapticSelection } from '../utils/haptics';
 import { PullToRefresh } from './PullToRefresh';
 import { isElectricalProduct, isConstructionProduct } from '../utils/categoryHelper';
+import { SEOHead } from './SEOHead';
 
 export interface HomePageProps {
   onAddToCart: (product: Product) => void;
@@ -607,6 +608,11 @@ export const HomePage = ({
 
   return (
     <PullToRefresh onRefresh={handleRefresh}>
+      <SEOHead
+        title="SmartRun | Buy Electrical Goods, Construction Materials & Wiring Services Kolkata"
+        description="Shop genuine electrical goods, Polycab & RR Kabel wires, switches, cement, TMT rebars, and book licensed electrician wiring services in Kolkata with 60-min express delivery."
+        keywords="SmartRun, smartrun, smartrun kolkata, smartrun electricals, electrical shop near me, buy electrical goods online Kolkata, house wiring contractor, electrical wiring services, modular switches, Polycab wire, Havells cables, Finolex wire, Schneider MCB, distribution board, LED lighting, construction materials Kolkata, cement delivery, UltraTech cement, ACC cement, TMT steel bars, Tata Tiscon rebars, waterproofing chemicals, real estate electrification, licensed electrician Kolkata, Kasba electrical shop, wholesale electrical market Kolkata, B2B building materials procurement, direct depot Kolkata"
+      />
       <div className="min-h-screen bg-white text-slate-900 pb-4 sm:pb-6 font-sans">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-12 sm:space-y-16 pt-3 sm:pt-4">
 
@@ -1003,7 +1009,7 @@ export const HomePage = ({
                 </h2>
               </div>
               <p className="text-[11px] sm:text-xs text-[#5F6B7A] font-medium leading-relaxed max-w-lg mx-auto">
-                <span className="font-bold text-[#0F1B2D]">SmartRun</span> and <span className="font-bold text-[#0F1B2D]">Giriraj Power</span> are under the same ownership &amp; management—delivering genuine electricals and construction materials with wholesale transparency across Kolkata.
+                <span className="font-bold text-[#0F1B2D]">SmartRun</span> delivers genuine electricals, certified wiring supplies, and construction materials with wholesale transparency across Kolkata.
               </p>
             </div>
 
@@ -1106,12 +1112,12 @@ export const HomePage = ({
               </div>
             </div>
 
-            {/* Compact Delivery & Ownership Notice Strip with Liquid Glass styling */}
+            {/* Compact Delivery Notice Strip with Liquid Glass styling */}
             <div className="relative overflow-hidden rounded-xl border border-white/80 bg-gradient-to-r from-white/95 via-[#FDFBF7]/90 to-amber-50/80 backdrop-blur-md p-2.5 sm:p-3 flex items-center gap-2.5 shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.9),0_2px_8px_rgba(245,158,11,0.08)]">
               <span className="pointer-events-none absolute inset-x-0 top-0 h-[50%] bg-gradient-to-b from-white/60 to-transparent z-1" />
               <Info className="relative z-10 w-4 h-4 text-[#FF9800] shrink-0" />
               <p className="relative z-10 text-[10px] sm:text-xs text-[#5F6B7A] leading-relaxed">
-                <span className="font-semibold text-[#0F1B2D]">Giriraj Power &amp; SmartRun</span> operate under unified ownership. Standard deliveries take 1–7 working days with express local dispatch available.
+                <span className="font-semibold text-[#0F1B2D]">SmartRun Express Logistics</span>: Standard deliveries take 1–7 working days with express local dispatch available across Greater Kolkata.
               </p>
             </div>
 
@@ -1123,7 +1129,7 @@ export const HomePage = ({
                     onOpenBulkQuoteModal();
                   } else {
                     window.open(
-                      'https://wa.me/918777400280?text=Hi%20SmartRun%20/%20Giriraj%20Power,%20I%20would%20like%20to%20request%20a%20project%20wholesale%20quote.',
+                      'https://wa.me/918777400280?text=Hi%20SmartRun,%20I%20would%20like%20to%20request%20a%20project%20wholesale%20quote.',
                       '_blank',
                       'noopener,noreferrer'
                     );
@@ -1252,7 +1258,7 @@ export const HomePage = ({
 
             <div className="relative z-10 pt-1">
               <a
-                href="https://wa.me/918777400280?text=Hi%20Giriraj%20Power,%20I%20have%20a%20contractor%20bulk%20inquiry."
+                href="https://wa.me/918777400280?text=Hi%20SmartRun,%20I%20have%20a%20contractor%20bulk%20inquiry."
                 target="_blank"
                 rel="noreferrer"
                 className="relative overflow-hidden inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-b from-white via-slate-100 to-slate-200 hover:from-white hover:via-amber-50 hover:to-amber-100 text-slate-950 font-black font-sf-pro text-xs transition-all duration-200 cursor-pointer active:scale-98 border border-white/90 shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.9),inset_0_-2px_4px_rgba(0,0,0,0.15),0_4px_12px_rgba(0,0,0,0.2)]"

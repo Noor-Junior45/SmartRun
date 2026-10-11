@@ -851,11 +851,11 @@ export const ProductDetailModal = ({
                   {[
                     {
                       q: `Is this ${product.brand} product 100% genuine?`,
-                      a: `Yes, all ${product.brand} products on Giriraj Power are 100% original, brand-sealed, and ISI / BIS certified.`
+                      a: `Yes, all ${product.brand} products on SmartRun are 100% original, brand-sealed, and ISI / BIS certified.`
                     },
                     {
                       q: 'How fast is dispatch in Kolkata?',
-                      a: 'Dispatched directly from Giriraj Power Kasba warehouse hub within minimum 60 minutes or maximum 7 days.'
+                      a: 'Dispatched directly from SmartRun Kasba warehouse hub within minimum 60 minutes or maximum 7 days.'
                     },
                     {
                       q: 'Do I get a valid GST invoice?',
