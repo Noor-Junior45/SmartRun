@@ -246,9 +246,27 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     try {
       const res = await signInWithGoogle();
       if (res.error) {
-        setError(res.error.message || 'Google Sign-In failed. Please try again.');
+        const msg = res.error.message || '';
+        if (
+          msg.toLowerCase().includes('cancel') ||
+          msg.includes('12501') ||
+          msg.toLowerCase().includes('closed')
+        ) {
+          // User simply closed the Google account selector
+          return;
+        }
+        setError(msg || 'Google Sign-In failed. Please try again.');
       } else {
         saveTermsAgreed(true);
+        if (res.user) {
+          // Native device login succeeded immediately with zero web redirects
+          const userPhone = res.user.phone || '';
+          const userName = res.user.name || res.user.user_metadata?.full_name || 'Customer';
+          const userEmail = res.user.email || '';
+          onAuthSuccess(userPhone, userName, userEmail, res.user);
+          const target = getPostAuthRedirect();
+          navigate(target, { replace: true });
+        }
       }
     } catch (e: unknown) {
       const err = e as { message?: string };

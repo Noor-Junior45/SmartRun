@@ -1,21 +1,36 @@
-# Robots.txt for Giriraj Power
-# https://girirajpower.com (and all associated domains)
+# Robots.txt for SmartRun
+# Official Production Domain: https://www.smartrun.in
 
 User-agent: *
 Allow: /
 Allow: /electrical
+Allow: /electrical/*
 Allow: /construction
-Allow: /services
-Allow: /terms/*
+Allow: /construction/*
 Allow: /product/*
+Allow: /technicians
+Allow: /technicians/*
+Allow: /sitemap
+Allow: /about
+Allow: /faqs
+Allow: /refund-policy
+Allow: /shipping-policy
+Allow: /privacy
+Allow: /terms
+Allow: /account-deletion
+Allow: /login
 
-# Disallow private user admin & profile routes from crawling
-Disallow: /admin
-Disallow: /checkout
-Disallow: /order-success
+# Disallow private user sessions and transactional paths from crawling
+Disallow: /cart
+Disallow: /profile
+Disallow: /orders
+Disallow: /live-order
+Disallow: /live-order/*
+Disallow: /reset-password
+Disallow: /api/*
 
 # Crawl Delay
 Crawl-delay: 1
 
-# Sitemaps
-Sitemap: /sitemap.xml
+# XML Sitemap
+Sitemap: https://www.smartrun.in/sitemap.xml

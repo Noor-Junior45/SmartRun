@@ -1415,27 +1415,6 @@ export default function App() {
     });
   };
 
-  // 1. If auth session is still checking on app launch, show brand loading screen
-  if (isAuthLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
-        <SEOHead />
-        <div className="flex flex-col items-center space-y-3 animate-pulse">
-          <img
-            src="/SmartRun.png"
-            alt="SmartRun Logo"
-            className="w-16 h-16 object-cover rounded-2xl shadow-sm border border-slate-200 bg-white p-0.5"
-          />
-          <div className="text-3xl font-bold font-bodoni flex items-center justify-center">
-            <span className="text-slate-950">Smart</span>
-            <span className="text-[#00875a]">Run</span>
-          </div>
-          <p className="text-xs text-slate-400 font-semibold">Starting secure session...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 selection:bg-yellow-400 selection:text-black">
       {/* Dynamic SEO Meta & Structured Data Manager */}

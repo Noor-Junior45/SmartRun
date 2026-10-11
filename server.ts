@@ -1524,6 +1524,7 @@ async function startServer() {
           namespace: "android_app",
           package_name: "in.smartrun.app",
           sha256_cert_fingerprints: [
+            "83:35:6B:EA:95:7A:69:7A:BB:7D:A4:4F:C3:B1:96:AE:7A:9F:65:CC:46:00:56:52:FA:12:42:6B:CC:F2:A7:DE",
             "23:B9:84:0D:7F:F5:08:E9:87:61:C5:F5:9C:B6:2C:22:60:75:30:27:68:20:1B:D6:B9:A0:EA:94:C9:D4:06:8C",
             "14:6D:E9:7D:0C:6D:77:E5:EE:DE:28:B6:F0:4B:92:47:FD:B3:36:CF:BE:0C:F0:7C:1E:58:E6:C3:FF:11:EB:7B",
             "91:E1:44:1D:A9:F0:1B:BA:B7:7E:33:E5:14:7C:A6:AE:7E:5B:0A:ED:AB:EC:C2:6F:DD:0E:DF:C6:84:72:7A:E5",
@@ -7041,6 +7042,123 @@ Respond ONLY with a valid JSON object matching the following structure:
       return res.status(500).json({
         success: false,
         error: err?.message || "Failed to resolve phone profile."
+      });
+    }
+  });
+
+  /**
+   * Google User Account Resolution & Linking Endpoint
+   * POST /api/auth/resolve-google-user
+   * Matches Google email against user_profiles and historic orders to retrieve existing user identity,
+   * phone number, saved addresses, and master account ID so the user signs in to the SAME account.
+   */
+  app.post("/api/auth/resolve-google-user", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { email, name, avatarUrl } = req.body || {};
+      const cleanEmail = String(email || "").trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes("@")) {
+        return res.status(400).json({ success: false, message: "Valid email is required." });
+      }
+
+      const sb = getServerSupabase();
+      let resolvedProfile: any = null;
+
+      // 0. Check in-memory store
+      const memProf = serverProfileStore.get(cleanEmail);
+      if (memProf) {
+        resolvedProfile = { ...memProf };
+      }
+
+      if (sb) {
+        // 1. Query user_profiles by email or linked_email
+        try {
+          const { data: profiles, error: pErr } = await sb
+            .from("user_profiles")
+            .select("*")
+            .or(`email.ilike.${cleanEmail},linked_email.ilike.${cleanEmail}`)
+            .order("updated_at", { ascending: false })
+            .limit(5);
+
+          if (!pErr && Array.isArray(profiles) && profiles.length > 0) {
+            const bestRow = profiles.find((p: any) => p.phone) || profiles[0];
+            resolvedProfile = {
+              user_id: bestRow.user_id || resolvedProfile?.user_id || null,
+              full_name: bestRow.full_name || bestRow.name || name || resolvedProfile?.full_name || null,
+              email: cleanEmail,
+              phone: bestRow.phone || resolvedProfile?.phone || null,
+              avatar_url: avatarUrl || bestRow.avatar_url || resolvedProfile?.avatar_url || null,
+              dob: bestRow.dob || resolvedProfile?.dob || null,
+              wallet_balance: bestRow.wallet_balance !== undefined ? bestRow.wallet_balance : resolvedProfile?.wallet_balance,
+              refund_balance: bestRow.refund_balance !== undefined ? bestRow.refund_balance : resolvedProfile?.refund_balance,
+              cashback_balance: bestRow.cashback_balance !== undefined ? bestRow.cashback_balance : resolvedProfile?.cashback_balance
+            };
+          }
+        } catch (e) {
+          console.debug("[Resolve Google User] user_profiles query notice:", e);
+        }
+
+        // 2. If phone still missing, check past orders placed with this email
+        if (!resolvedProfile?.phone) {
+          try {
+            const { data: orderRows, error: oErr } = await sb
+              .from("orders")
+              .select("user_id, phone, recipient_phone, customer_name, recipient_name, address, address_line1, city, pincode, updated_at")
+              .or(`customer_email.ilike.${cleanEmail},recipient_email.ilike.${cleanEmail}`)
+              .order("updated_at", { ascending: false })
+              .limit(5);
+
+            if (!oErr && Array.isArray(orderRows) && orderRows.length > 0) {
+              const bestOrder = orderRows.find((o: any) => o.phone || o.recipient_phone) || orderRows[0];
+              const phoneFound = (bestOrder.phone || bestOrder.recipient_phone || "").replace(/\D/g, "").slice(-10);
+              const formattedPhone = phoneFound.length === 10 ? `+91${phoneFound}` : null;
+
+              resolvedProfile = {
+                user_id: resolvedProfile?.user_id || bestOrder.user_id || null,
+                full_name: resolvedProfile?.full_name || bestOrder.customer_name || bestOrder.recipient_name || name || null,
+                email: cleanEmail,
+                phone: resolvedProfile?.phone || formattedPhone,
+                avatar_url: avatarUrl || resolvedProfile?.avatar_url || null,
+                dob: resolvedProfile?.dob || null
+              };
+            }
+          } catch (e) {
+            console.debug("[Resolve Google User] orders lookup notice:", e);
+          }
+        }
+      }
+
+      // Cache if resolved
+      if (resolvedProfile) {
+        const toCache: ServerUserProfileRecord = {
+          user_id: resolvedProfile.user_id || `uid_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
+          phone: resolvedProfile.phone || '',
+          full_name: resolvedProfile.full_name || name || '',
+          email: cleanEmail,
+          avatar_url: resolvedProfile.avatar_url,
+          dob: resolvedProfile.dob,
+          updated_at: new Date().toISOString()
+        };
+        serverProfileStore.set(cleanEmail, toCache);
+        if (resolvedProfile.phone) {
+          const digits = resolvedProfile.phone.replace(/\D/g, "").slice(-10);
+          if (digits.length === 10) {
+            serverProfileStore.set(digits, toCache);
+            serverProfileStore.set(`+91${digits}`, toCache);
+          }
+        }
+        if (resolvedProfile.user_id) serverProfileStore.set(resolvedProfile.user_id, toCache);
+      }
+
+      return res.json({
+        success: true,
+        exists: Boolean(resolvedProfile),
+        profile: resolvedProfile || null
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to resolve Google user profile."
       });
     }
   });

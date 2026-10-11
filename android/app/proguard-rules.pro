@@ -32,3 +32,9 @@
 -keepclassmembers class com.google.firebase.crashlytics.** { *; }
 -dontwarn com.google.firebase.crashlytics.**
 
+# Firebase Cloud Messaging & Capacitor Push Notifications
+-keep class com.google.firebase.messaging.** { *; }
+-dontwarn com.google.firebase.messaging.**
+-keep class com.capacitorjs.plugins.pushnotifications.** { *; }
+-dontwarn com.capacitorjs.plugins.pushnotifications.**
+

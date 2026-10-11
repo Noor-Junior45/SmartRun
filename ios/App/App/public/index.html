@@ -41,21 +41,22 @@
       });
       
       // Global helper for quick-commerce tracking events
-      window.trackGirirajEvent = function(eventName, params) {
+      window.trackSmartRunEvent = function(eventName, params) {
         if (typeof window.gtag === 'function') {
           window.gtag('event', eventName, params);
         }
       };
+      window.trackGirirajEvent = window.trackSmartRunEvent;
     </script>
 
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     
     <!-- Primary SEO Meta Tags -->
-    <title>SmartRun (formerly BuildNow) | Electrical Goods, Construction Supplies & Wiring Services Kolkata</title>
-    <meta name="title" content="SmartRun (formerly BuildNow) | Electrical Goods, Construction Supplies & Wiring Services Kolkata" />
-    <meta name="description" content="SmartRun (formerly BuildNow): Kolkata's premier depot and e-commerce platform for genuine electrical goods, modular switches, Polycab & Havells house wiring cables, UltraTech cement, Tata Tiscon TMT bars, and certified electrical wiring contractor services with 60-minute express delivery." />
-    <meta name="keywords" content="SmartRun, smartrun, smartrun kolkata, smartrun electricals, BuildNow, build now kolkata, buildnow electricals, electrical shop near me, buy electrical goods online Kolkata, house wiring contractor, electrical wiring services, modular switches, Polycab wire, Havells cables, Finolex wire, Schneider MCB, distribution board, LED lighting, construction materials Kolkata, cement delivery, UltraTech cement, ACC cement, TMT steel bars, Tata Tiscon rebars, waterproofing chemicals, real estate electrification, licensed electrician Kolkata, emergency electrician 60 mins, Kasba electrical shop, wholesale electrical market Kolkata, B2B building materials procurement, direct factory depot Kolkata" />
+    <title>SmartRun | Electrical Goods, Construction Supplies &amp; Wiring Services Kolkata</title>
+    <meta name="title" content="SmartRun | Electrical Goods, Construction Supplies &amp; Wiring Services Kolkata" />
+    <meta name="description" content="SmartRun: Kolkata's premier depot &amp; e-commerce store for genuine electrical goods, modular switches, Polycab wires, UltraTech cement, Tata Tiscon TMT rebars, and licensed house wiring contractors with 60-minute express delivery." />
+    <meta name="keywords" content="SmartRun, smartrun, smartrun kolkata, smartrun electricals, electrical shop near me, buy electrical goods online Kolkata, house wiring contractor, electrical wiring services, modular switches, Polycab wire, Havells cables, Finolex wire, Schneider MCB, distribution board, LED lighting, construction materials Kolkata, cement delivery, UltraTech cement, ACC cement, TMT steel bars, Tata Tiscon rebars, waterproofing chemicals, real estate electrification, licensed electrician Kolkata, emergency electrician 60 mins, Kasba electrical shop, wholesale electrical market Kolkata, B2B building materials procurement, direct factory depot Kolkata" />
     
     <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
     <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
@@ -74,53 +75,58 @@
     <!-- OpenGraph / Facebook / WhatsApp SEO -->
     <meta property="og:site_name" content="SmartRun" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://www.girirajpower.in/" />
-    <meta property="og:title" content="SmartRun (formerly BuildNow) | Electrical Goods, Construction Supplies & Wiring Services" />
-    <meta property="og:description" content="Shop branded electrical goods, wires, modular switches, cement, TMT steel, and book certified electrician wiring services in Kolkata with SmartRun (formerly BuildNow)." />
-    <meta property="og:image" content="./buildnow.png" />
-    <meta property="og:image:alt" content="SmartRun - Electrical, Construction & Wiring Platform" />
+    <meta property="og:url" content="https://www.smartrun.in/" />
+    <meta property="og:title" content="SmartRun | Electrical Goods, Construction Supplies &amp; Wiring Services" />
+    <meta property="og:description" content="Shop branded electrical goods, wires, modular switches, cement, TMT steel, and book certified electrician wiring services in Kolkata with SmartRun." />
+    <meta property="og:image" content="https://www.smartrun.in/SmartRun.png" />
+    <meta property="og:image:secure_url" content="https://www.smartrun.in/SmartRun.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="SmartRun Logo - Electrical, Construction &amp; Wiring Platform" />
     <meta property="og:locale" content="en_IN" />
+    <link rel="canonical" href="https://www.smartrun.in/" />
 
     <!-- Twitter Card SEO -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="SmartRun (formerly BuildNow) - Electrical Goods & Construction Supplies" />
-    <meta name="twitter:description" content="Wholesale & retail electrical supplies, wires, switches, cement, TMT rebars, and licensed real estate wiring in Kolkata with SmartRun (formerly BuildNow)." />
-    <meta name="twitter:image" content="./buildnow.png" />
+    <meta name="twitter:title" content="SmartRun - Electrical Goods &amp; Construction Supplies Kolkata" />
+    <meta name="twitter:description" content="Wholesale &amp; retail electrical supplies, wires, switches, cement, TMT rebars, and licensed real estate wiring in Kolkata with SmartRun." />
+    <meta name="twitter:image" content="https://www.smartrun.in/SmartRun.png" />
 
-    <!-- Comprehensive JSON-LD Structured Data Schema Graph -->
+    <!-- Comprehensive JSON-LD Structured Data Schema Graph (Google Site Name & Logo compliant) -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@graph": [
         {
           "@type": "WebSite",
-          "@id": "https://www.girirajpower.in/#website",
-          "url": "https://www.girirajpower.in",
+          "@id": "https://www.smartrun.in/#website",
+          "url": "https://www.smartrun.in/",
           "name": "SmartRun",
-          "alternateName": ["SmartRun", "Smartrun", "Smartrun Kolkata", "BuildNow", "BuildNow Kolkata", "Giriraj Power Depot"],
-          "description": "Kolkata's trusted SmartRun (formerly BuildNow) electrical goods, electronics, construction materials, and real estate wiring service platform.",
+          "alternateName": ["SmartRun", "Smartrun", "Smartrun Kolkata", "SmartRun Central Depot"],
+          "sameAs": ["https://www.smartrun.in"],
+          "description": "Kolkata's trusted SmartRun electrical goods, electronics, construction materials, and real estate wiring service platform.",
           "inLanguage": "en-IN",
           "potentialAction": {
             "@type": "SearchAction",
-            "target": "https://www.girirajpower.in/electrical?q={search_term_string}",
+            "target": "https://www.smartrun.in/electrical?q={search_term_string}",
             "query-input": "required name=search_term_string"
           }
         },
         {
-          "@type": ["ElectricalSupplyStore", "HardwareStore", "LocalBusiness"],
-          "@id": "https://www.girirajpower.in/#store",
+          "@type": ["Organization", "ElectricalSupplyStore", "HardwareStore", "LocalBusiness"],
+          "@id": "https://www.smartrun.in/#store",
           "name": "SmartRun",
-          "alternateName": ["SmartRun Central Depot", "Smartrun Central Depot", "BuildNow Central Depot", "Giriraj Power Building Supplies"],
-          "url": "https://www.girirajpower.in",
-          "image": "https://i.imgur.com/tGG9UN0.png",
-          "logo": "https://i.imgur.com/tGG9UN0.png",
-          "description": "Top-rated SmartRun (formerly BuildNow) electrical supplies, house wiring cables, modular switchgear, construction materials, UltraTech cement, Tata Tiscon TMT rebars, and real estate wiring contractors in Kolkata.",
+          "alternateName": ["SmartRun Central Depot", "Smartrun Central Depot", "SmartRun Express Depot"],
+          "url": "https://www.smartrun.in/",
+          "sameAs": ["https://www.smartrun.in"],
+          "image": "https://www.smartrun.in/SmartRun.png",
+          "logo": "https://www.smartrun.in/SmartRun.png",
+          "description": "Top-rated SmartRun electrical supplies, house wiring cables, modular switchgear, construction materials, UltraTech cement, Tata Tiscon TMT rebars, and real estate wiring contractors in Kolkata.",
           "telephone": "+91-8777400280",
-          "email": "team@girirajpower.in",
+          "email": "team@smartrun.in",
           "priceRange": "₹₹",
           "currenciesAccepted": "INR",
           "paymentAccepted": "Cash, UPI, Credit Card, Debit Card, Net Banking",
-          "keywords": "smartrun, smartRun, buildnow, electrical goods, construction materials, cement delivery, tmt steel, house wiring, kolkata depot",
+          "keywords": "smartrun, smartRun, electrical goods, construction materials, cement delivery, tmt steel, house wiring, kolkata depot",
           "address": {
             "@type": "PostalAddress",
             "streetAddress": "Bediadanga 1st Lane, Nator Park, Kasba",
@@ -189,11 +195,12 @@
         },
         {
           "@type": "Service",
-          "@id": "https://www.girirajpower.in/#wiring-service",
+          "@id": "https://www.smartrun.in/#wiring-service",
           "name": "Real Estate & Residential Electrical Wiring Services",
           "provider": {
             "@type": "LocalBusiness",
-            "name": "SmartRun"
+            "name": "SmartRun",
+            "url": "https://www.smartrun.in"
           },
           "serviceType": "Electrical Contractor & House Wiring",
           "description": "Licensed and certified electrical wiring contractors for residential flats, high-rise real estate buildings, commercial complexes, and renovation electrification in Kolkata with 60-min emergency technician availability.",
@@ -219,28 +226,59 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
     <!-- PWA & Mobile Web App Capabilities -->
-    <link rel="manifest" href="./manifest.json" />
+    <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SmartRun" />
-    <!-- Favicon & App Icons -->
-    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./favicon.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png" />
-    <link rel="shortcut icon" href="./favicon.ico" />
-    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-    <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png" />
-    <link rel="apple-touch-icon" sizes="512x512" href="./icons/icon-512.png" />
+    <!-- Favicon & App Icons (Google Search & Browser Tab Compliant) -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link rel="icon" type="image/jpeg" href="/smartrun.jpeg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png" />
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Libre+Bodoni:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="./assets/index-BFFbUN_v.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-ijwDzAhx.css">
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Libre+Bodoni:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
+
+    <!-- Razorpay Checkout Gateway SDK -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <!-- Global Scrollbar Removal: Hide scrollbar universally everywhere across the app -->
+    <style>
+      *,
+      *::before,
+      *::after,
+      html,
+      body {
+        -ms-overflow-style: none !important;
+        scrollbar-width: none !important;
+      }
+      *::-webkit-scrollbar,
+      html::-webkit-scrollbar,
+      body::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        background: transparent !important;
+      }
+      *::-webkit-scrollbar-thumb,
+      *::-webkit-scrollbar-track {
+        display: none !important;
+        background: transparent !important;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-D18x43Jl.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BfLHcbyt.css">
   </head>
   <body class="bg-white text-slate-900 font-sans antialiased selection:bg-yellow-400 selection:text-black">
     <div id="root"></div>

@@ -26,8 +26,8 @@ if (isDevOrPreviewHost) {
   });
 }
 
-const CACHE_PREFIX = 'buildnow';
-const CACHE_VERSION = 'v2.2.0';
+const CACHE_PREFIX = 'smartrun';
+const CACHE_VERSION = 'v2.3.0';
 
 const CACHES = {
   static: `${CACHE_PREFIX}-static-${CACHE_VERSION}`,
@@ -43,6 +43,7 @@ const PRECACHE_ASSETS = [
   '/manifest.json',
   '/favicon.ico',
   '/favicon.png',
+  '/smartrun.jpeg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
 ];
@@ -52,7 +53,7 @@ const MAX_IMAGE_ENTRIES = 160;
 
 // Fallback SVG image data URI when totally offline and image is not cached
 const OFFLINE_IMAGE_FALLBACK_SVG =
-  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" fill="%23f8fafc"><rect width="400" height="400" fill="%23f1f5f9"/><circle cx="200" cy="180" r="48" fill="%23e2e8f0"/><path d="M120 310 L280 310 L250 240 L200 280 L160 230 Z" fill="%23cbd5e1"/><text x="200" y="345" font-family="sans-serif" font-size="14" font-weight="600" fill="%2394a3b8" text-anchor="middle">BuildNow Offline Image</text></svg>';
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" fill="%23f8fafc"><rect width="400" height="400" fill="%23f1f5f9"/><circle cx="200" cy="180" r="48" fill="%23e2e8f0"/><path d="M120 310 L280 310 L250 240 L200 280 L160 230 Z" fill="%23cbd5e1"/><text x="200" y="345" font-family="sans-serif" font-size="14" font-weight="600" fill="%2394a3b8" text-anchor="middle">SmartRun Offline Image</text></svg>';
 
 /**
  * Clean up old cache entries if cache exceeds max size (LRU-like eviction)

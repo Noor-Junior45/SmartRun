@@ -4,4 +4,5 @@
     <string name="title_activity_main">SmartRun</string>
     <string name="package_name">in.smartrun.app</string>
     <string name="custom_url_scheme">in.smartrun.app</string>
+    <string name="default_web_client_id">535136714942-6ft9vu9nd1dc97h085f8h1ln6himme52.apps.googleusercontent.com</string>
 </resources>

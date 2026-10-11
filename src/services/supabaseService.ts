@@ -598,34 +598,164 @@ export async function resetPasswordForEmail(
 /**
  * 4. Google OAuth Sign-in using Supabase
  */
-export async function signInWithGoogle(): Promise<{ error: Error | null; url?: string | null }> {
+/**
+ * 4. Google OAuth Sign-in: Native Android Play Services Google Sign-In with Web Fallback
+ * Guaranteed Account Unification: Matches and merges profile with existing master account so the user
+ * signs into the SAME account (preserving past orders, delivery addresses, phone number, and wallet).
+ */
+export async function signInWithGoogle(): Promise<{ error: Error | null; url?: string | null; user?: any }> {
   try {
     // Reset any previous active user scope to prevent cross-account profile inheritance
     activeUserScope = null;
     clearUserProfile();
 
     const isIframe = typeof window !== 'undefined' && window.self !== window.top;
-    const isApp = isAndroidAppEnvironment();
     const isNative = Capacitor.isNativePlatform();
 
+    // -----------------------------------------------------------------
+    // 1. NATIVE ANDROID / IOS DEVICE GOOGLE SIGN IN (Play Services / Credential Manager)
+    // -----------------------------------------------------------------
+    if (isNative) {
+      try {
+        const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+
+        // Trigger native Google Play Services account chooser sheet
+        const result = await FirebaseAuthentication.signInWithGoogle();
+
+        if (!result || !result.user) {
+          return { error: new Error('User cancelled sign-in or no account was selected.') };
+        }
+
+        const googleEmail = (result.user.email || '').trim().toLowerCase();
+        const googleName = result.user.displayName || 'Customer';
+        const googleAvatar = result.user.photoUrl || '';
+        const idToken =
+          (result.credential as any)?.idToken ||
+          (await FirebaseAuthentication.getIdToken().then((r) => r.token).catch(() => null));
+
+        // Authenticate into Supabase using Google OpenID ID Token
+        let supabaseUser: User | null = null;
+        if (idToken) {
+          try {
+            const { data: supaAuthData, error: supaErr } = await supabase.auth.signInWithIdToken({
+              provider: 'google',
+              token: idToken
+            });
+            if (!supaErr && supaAuthData?.user) {
+              supabaseUser = supaAuthData.user;
+            }
+          } catch (tokenErr) {
+            console.debug('Supabase signInWithIdToken note:', tokenErr);
+          }
+        }
+
+        // Resolve Identity against database so user signs into the EXACT SAME account
+        let masterUserId = supabaseUser?.id || result.user.uid || '';
+        let linkedPhone: string | null = null;
+        let existingName = googleName;
+        let existingAvatar = googleAvatar;
+
+        try {
+          const resolveRes = await fetch(apiUrl('/api/auth/resolve-google-user'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: googleEmail,
+              name: googleName,
+              avatarUrl: googleAvatar
+            })
+          });
+
+          if (resolveRes.ok) {
+            const resolveData = await resolveRes.json();
+            if (resolveData?.exists && resolveData.profile) {
+              if (resolveData.profile.user_id) {
+                masterUserId = resolveData.profile.user_id;
+              }
+              if (resolveData.profile.phone) {
+                linkedPhone = resolveData.profile.phone;
+              }
+              if (resolveData.profile.full_name) {
+                existingName = resolveData.profile.full_name;
+              }
+              if (resolveData.profile.avatar_url) {
+                existingAvatar = resolveData.profile.avatar_url;
+              }
+            }
+          }
+        } catch (resolveErr) {
+          console.debug('Google account unification note:', resolveErr);
+        }
+
+        const effectiveUserId = masterUserId || `uid_${googleEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        setActiveUserScope(effectiveUserId);
+
+        const profileToSave: UserProfile = {
+          id: effectiveUserId,
+          email: googleEmail,
+          name: existingName || googleName,
+          photoURL: existingAvatar || googleAvatar,
+          phone: linkedPhone || '',
+          emailVerified: true
+        };
+        saveUserProfile(profileToSave);
+
+        // Sync unified profile into Supabase user_profiles table asynchronously
+        try {
+          await supabase.from('user_profiles').upsert(
+            {
+              user_id: effectiveUserId,
+              email: googleEmail,
+              full_name: existingName || googleName,
+              avatar_url: existingAvatar || googleAvatar,
+              phone: linkedPhone || null,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'user_id' }
+          );
+        } catch (upsertErr) {
+          console.debug('Supabase user_profiles upsert note:', upsertErr);
+        }
+
+        return {
+          error: null,
+          user: {
+            id: effectiveUserId,
+            email: googleEmail,
+            phone: linkedPhone,
+            name: existingName || googleName,
+            user_metadata: {
+              full_name: existingName || googleName,
+              avatar_url: existingAvatar || googleAvatar
+            }
+          }
+        };
+      } catch (nativeErr: any) {
+        const msg = nativeErr?.message || String(nativeErr);
+        if (
+          msg.includes('cancel') ||
+          msg.includes('12501') ||
+          msg.toLowerCase().includes('user cancelled') ||
+          msg.toLowerCase().includes('canceled')
+        ) {
+          return { error: new Error('Sign in cancelled.') };
+        }
+        console.warn('Native Google Auth encountered issue, falling back to Web OAuth:', nativeErr);
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // 2. WEB BROWSER / FALLBACK OAUTH FLOW
+    // -----------------------------------------------------------------
+    const isApp = isAndroidAppEnvironment();
     let redirectTo: string;
     if (isApp) {
-      // IN ANDROID APP:
-      // Pass the canonical HTTPS app-redirect callback URL:
-      // https://www.smartrun.in/login?target=app&source=android_app
-      // 1. Supabase allows https://www.smartrun.in/** by default (primary domain).
-      // 2. When Google OAuth completes, browser opens https://www.smartrun.in/login?target=app&source=android_app#access_token=...
-      // 3. AndroidAppBridgePrompt recognizes target=app and instantly forwards tokens to smartrun://login and intent://
-      // 4. Capacitor App receives session via appUrlOpen, closes the browser tab, and logs in inside the app!
       try {
         localStorage.setItem('smartrun_oauth_target', 'android_app');
         sessionStorage.setItem('smartrun_oauth_target', 'android_app');
       } catch {}
       redirectTo = 'https://www.smartrun.in/login?target=app&source=android_app';
     } else {
-      // IN STANDARD WEBSITE:
-      // User is browsing via web browser on desktop or mobile phone.
-      // Must stay and log into the website directly. No app redirect or app bridge prompt.
       try {
         localStorage.removeItem('smartrun_oauth_target');
         sessionStorage.removeItem('smartrun_oauth_target');
@@ -655,13 +785,11 @@ export async function signInWithGoogle(): Promise<{ error: Error | null; url?: s
 
     if (data?.url) {
       if (isIframe) {
-        // In an iframe preview (like AI Studio canvas), open in a new window to bypass iframe 403 security blocks
         const authWindow = window.open(data.url, '_blank', 'noopener,noreferrer');
         if (!authWindow) {
           window.location.href = data.url;
         }
       } else if (isNative) {
-        // In native Android APK, open in Chrome Custom Tab via Capacitor Browser
         try {
           await Browser.open({
             url: data.url,
@@ -670,14 +798,11 @@ export async function signInWithGoogle(): Promise<{ error: Error | null; url?: s
             toolbarColor: '#F9C017'
           });
         } catch (browserErr) {
-          console.warn('Capacitor Browser.open error, falling back to window.open:', browserErr);
           window.open(data.url, '_system', 'noopener,noreferrer');
         }
       } else if (isApp) {
-        // In Android WebView wrapper, open via external browser to avoid Google 403 disallowed_useragent
         window.open(data.url, '_system', 'noopener,noreferrer') || (window.location.href = data.url);
       } else {
-        // Standard website in browser: redirect current page
         window.location.href = data.url;
       }
     }

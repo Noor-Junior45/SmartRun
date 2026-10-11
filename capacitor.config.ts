@@ -29,6 +29,10 @@ const config: CapacitorConfig = {
     App: {
       // Custom URL scheme deep link handling (smartrun://product/:id or https://www.smartrun.in/...)
     },
+    FirebaseAuthentication: {
+      skipNativeAuth: false,
+      providers: ['google.com'],
+    },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },

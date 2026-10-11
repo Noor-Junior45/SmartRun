@@ -1,13 +1,18 @@
 {
-	"appId": "com.girirajpower.buildnow",
+	"appId": "in.smartrun.app",
 	"appName": "SmartRun",
 	"webDir": "dist",
 	"server": {
 		"androidScheme": "https",
 		"cleartext": true,
 		"allowNavigation": [
+			"smartrun.in",
+			"www.smartrun.in",
 			"www.girirajpower.in",
 			"girirajpower.in",
+			"*.razorpay.com",
+			"api.razorpay.com",
+			"checkout.razorpay.com",
 			"*.run.app",
 			"*.supabase.co",
 			"*.googleapis.com",
@@ -20,6 +25,12 @@
 	},
 	"plugins": {
 		"App": {},
+		"FirebaseAuthentication": {
+			"skipNativeAuth": false,
+			"providers": [
+				"google.com"
+			]
+		},
 		"PushNotifications": {
 			"presentationOptions": [
 				"badge",
@@ -30,20 +41,24 @@
 		"SplashScreen": {
 			"launchShowDuration": 2000,
 			"launchAutoHide": true,
-			"backgroundColor": "#153d43",
+			"backgroundColor": "#F9C017",
 			"androidSplashResourceName": "splash",
 			"androidScaleType": "CENTER_CROP",
 			"showSpinner": false
 		},
 		"StatusBar": {
 			"style": "DARK",
-			"backgroundColor": "#153d43"
+			"backgroundColor": "#F9C017"
 		}
 	},
 	"packageClassList": [
+		"FirebaseAuthenticationPlugin",
 		"AppPlugin",
+		"CAPBrowserPlugin",
+		"GeolocationPlugin",
 		"PreferencesPlugin",
 		"PushNotificationsPlugin",
+		"SharePlugin",
 		"SplashScreenPlugin",
 		"StatusBarPlugin"
 	]
