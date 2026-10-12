@@ -8,6 +8,7 @@ import {
 } from '@capacitor/push-notifications';
 import { apiUrl } from '../lib/apiBase';
 import { getActiveUserScope } from './supabaseService';
+import { supabase } from '../lib/supabaseClient';
 
 export interface PushNotificationPayload {
   orderId?: string;
@@ -56,6 +57,84 @@ export async function syncPushTokenWithServer(token: string, userId?: string, us
     });
   } catch (err) {
     console.warn('Could not sync push token with server:', err);
+  }
+}
+
+/**
+ * Persist FCM token directly to Supabase Auth User Metadata & user_profiles / profiles
+ */
+export async function syncPushTokenWithSupabase(token?: string | null, userId?: string) {
+  try {
+    const validToken = token || (typeof window !== 'undefined' ? localStorage.getItem(PUSH_TOKEN_KEY) : null);
+    if (!validToken) return;
+
+    // Cache locally
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(PUSH_TOKEN_KEY, validToken);
+      }
+    } catch {}
+
+    // 1. Update Supabase Auth user metadata if user has active session
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.auth.updateUser({
+          data: {
+            fcm_token: validToken,
+            push_token: validToken,
+            fcm_token_updated_at: new Date().toISOString()
+          }
+        }).catch((e) => console.debug('Supabase Auth user metadata push token update notice:', e));
+      }
+    } catch (authErr) {
+      console.debug('Supabase auth user check notice:', authErr);
+    }
+
+    // 2. Also update user_profiles & profiles tables in Supabase
+    const effectiveUid = userId || (getActiveUserScope()?.replace(/^uid_/, ''));
+    if (effectiveUid && effectiveUid !== 'guest') {
+      try {
+        await supabase
+          .from('user_profiles')
+          .upsert({
+            user_id: effectiveUid,
+            fcm_token: validToken,
+            push_token: validToken,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id' });
+      } catch (profErr) {
+        console.debug('user_profiles push token update notice:', profErr);
+      }
+
+      try {
+        await supabase
+          .from('profiles')
+          .upsert({
+            id: effectiveUid,
+            fcm_token: validToken,
+            push_token: validToken,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+      } catch (profErr) {
+        console.debug('profiles push token update notice:', profErr);
+      }
+    }
+
+    // 3. Register token with server backend
+    await syncPushTokenWithServer(validToken, effectiveUid);
+  } catch (err) {
+    console.debug('Could not sync push token with Supabase:', err);
+  }
+}
+
+/**
+ * Sync the currently stored device FCM push token into Supabase for the active user
+ */
+export async function syncStoredPushTokenToSupabase(userId?: string) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem(PUSH_TOKEN_KEY) : null;
+  if (token) {
+    await syncPushTokenWithSupabase(token, userId);
   }
 }
 
@@ -124,7 +203,11 @@ export async function initPushNotifications(onNavigate?: NavigationHandler): Pro
       try {
         const pushToken = token.value;
         localStorage.setItem(PUSH_TOKEN_KEY, pushToken);
-        await syncPushTokenWithServer(pushToken);
+        await Promise.allSettled([
+          syncPushTokenWithServer(pushToken),
+          syncPushTokenWithSupabase(pushToken)
+        ]);
+        console.log('[Push Notification]: FCM token registered and synced with Supabase successfully.');
       } catch (e) {
         console.warn('Push token registration storage notice:', e);
       }
@@ -202,6 +285,9 @@ export async function initPushNotifications(onNavigate?: NavigationHandler): Pro
 
     isInitialized = true;
     const token = localStorage.getItem(PUSH_TOKEN_KEY);
+    if (token) {
+      syncPushTokenWithSupabase(token).catch(() => {});
+    }
 
     return {
       isSupported: true,

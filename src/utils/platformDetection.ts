@@ -72,3 +72,16 @@ export function isAndroidAppEnvironment(): boolean {
 export function isWebsiteEnvironment(): boolean {
   return !isAndroidAppEnvironment();
 }
+
+/**
+ * Accurately detects whether the current environment is running inside the
+ * SmartRun native mobile app (Capacitor native Android/iOS APK, Android WebView wrapper),
+ * as opposed to the public website www.smartrun.in.
+ */
+export function isNativePhoneApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (Capacitor.isNativePlatform()) return true;
+  } catch {}
+  return isAndroidAppEnvironment();
+}

@@ -1274,9 +1274,22 @@ export async function syncUserProfileToSupabase(
     profilesPayload.address = profile.address;
   }
 
+  // Include stored FCM push token if available
+  const storedFcmToken = typeof window !== 'undefined' ? localStorage.getItem('giriraj_push_token_v1') : null;
+  if (storedFcmToken) {
+    userProfilesPayload.fcm_token = storedFcmToken;
+    userProfilesPayload.push_token = storedFcmToken;
+    profilesPayload.fcm_token = storedFcmToken;
+    profilesPayload.push_token = storedFcmToken;
+  }
+
   // 1. Update Supabase Auth User Metadata so it travels automatically with the session across devices
   try {
     const metaUpdates: Record<string, any> = {};
+    if (storedFcmToken) {
+      metaUpdates.fcm_token = storedFcmToken;
+      metaUpdates.push_token = storedFcmToken;
+    }
     if (cleanPhone) metaUpdates.phone = cleanPhone;
     if (profile.full_name) {
       metaUpdates.full_name = profile.full_name;

@@ -1540,11 +1540,7 @@ export const CartView = ({
           </p>
         </div>
 
-        {/* 8. TRUST BADGE ROW */}
-        <div className="flex items-center justify-center gap-2 text-xs text-slate-500 py-3 text-center mb-6">
-          <ShieldCheck className="w-4 h-4 text-slate-400 shrink-0" />
-          <span>Safe and secure payments. Easy returns. 100% Authentic products.</span>
-        </div>
+
 
       </div>
 

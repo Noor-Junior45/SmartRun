@@ -252,5 +252,25 @@
   - Successfully connected the custom Google Maps API key (`AIzaSyB9lRr20cz1sxfsfvWO3t-Qrcn5XB9iRz0`) across backend proxy endpoints and client `GoogleMapsProvider`.
   - Verified active status on `/api/maps/google/status` (`available: true`, `billingEnabled: true`).
   - Google Maps JavaScript API now loads natively without billing errors, and automatically falls back to OpenStreetMap / Nominatim whenever geocoding or places API restrictions apply.
-
+- [x] **Privacy Policy & Terms of Service Redesign (Beige Theme, Numbered Headings & Mobile Content Tables)**:
+  - **Beige Palette & Box Styling**: Implemented warm beige background (`#F9F6F0`), subtle borders (`#E6DEC8`), and cream box cards (`#FFFDF9`, `#FBF9F4`) with zero pill tags across `PrivacyPolicyPage.tsx`, `TermsOfServicePage.tsx`, and `HowToUseAppPage.tsx`.
+  - **Responsive Content Tables**: Converted multi-column HTML tables into mobile-friendly numbered card rows with anchor links that never require horizontal scrolling on phone screens.
+  - **Numbered Headings & Operational Disclosures**: Added clear numbered headings (`1.` through `12.` / `14.`), detailed Kasba warehouse dispatch operations, 60-minute express courier logistics, commercial freight deliveries, and verified electrician safety guidelines.
+  - **Indian Government Compliance**: Incorporated full statutory disclosures for Digital Personal Data Protection Act, 2023 (DPDP Act), Information Technology Act, 2000 & SPDI Rules 2011, Consumer Protection (E-Commerce) Rules 2020, CGST Act Section 36 (72-month invoice retention), RBI card tokenization/UPI rules, and Bharatiya Sakshya Adhiniyam, 2023 (BSA electronic audit logs).
+- [x] **Repositioned "How to Use App" Button Directly Below "Help Center"**:
+  - In `ProfileView.tsx`, placed "How to Use App" (button 8) immediately below the "Help Center" button (button 7), followed by Privacy Policy (9), Terms of Service (10), Refund Policy (11), and Account Delete (12).
+- [x] **Phone Native App Mandatory Login vs. Public Website Open Catalog**:
+  - **Native App First-Download Guard**: When users download and launch the native phone app (`isNativePhoneApp()` via Capacitor or Android wrapper), they must log in first before seeing products, wholesale discounts, or store details.
+  - **Public Website Freedom**: Visitors to the public website (`www.smartrun.in`) can freely browse all products, view electrical and construction categories, check prices, open product detail pages, and add items to cart without any mandatory login requirement.
+  - **Route Protection**: If unauthenticated on the native app, store routes (`/`, `/electrical`, `/construction`, `/product/:id`, `/cart`, `/technicians`) cleanly redirect to `/login`. Only statutory Google Play compliance routes (`/login`, `/privacy`, `/terms`, `/refund-policy`, `/delete`, `/reset-password`) are accessible without authentication.
+  - **Login UX Adaptation**: In `LoginPage.tsx`, hides the "Store" bypass button for native app users (preventing unauthenticated bypass) and shows an onboarding welcome message; retains the "Store" return button for web visitors. On Android hardware back on `/login` in native app, calls `CapApp.exitApp()` gracefully.
+  - **Branded Native Splash**: Displays a sleek, animated SmartRun splash screen while validating initial session tokens on the native app.
+- [x] **Firebase Cloud Messaging (FCM) SDK & Supabase Push Token Synchronization**:
+  - **Verified FCM SDK**: Confirmed `google-services.json` (package `in.smartrun.app`), Google Services Gradle plugin, and `firebase-messaging` (BOM 33.10.0) in Android build configuration alongside `@capacitor/push-notifications`.
+  - **Supabase Persistence**: Enhanced `syncPushTokenWithSupabase`:
+    - Persists `fcm_token` into Supabase Auth user metadata (`supabase.auth.updateUser`).
+    - Upserts `fcm_token` and `push_token` into Supabase `user_profiles` table (`onConflict: 'user_id'`).
+    - Upserts `fcm_token` and `push_token` into Supabase `profiles` table (`onConflict: 'id'`).
+    - Syncs token with server endpoint `/api/push/register-token`.
+  - **Automated Lifecycle Sync**: Created `syncStoredPushTokenToSupabase` and integrated it across initial session retrieval (`getInitialAuthSession`), login callback (`handleAuthSuccess`), auth listener (`onAuthStateChange`), profile updates (`syncUserProfileToSupabase`), and `userProfile?.id` change effects. Ensures device push tokens are always mapped to user accounts upon login.
 

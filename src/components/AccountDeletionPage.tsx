@@ -235,10 +235,10 @@ export const AccountDeletionPage = ({
             onClick={() => {
               if (onBack) {
                 onBack();
-              } else if (window.history.length > 1) {
+              } else if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
                 navigate(-1);
               } else {
-                navigate('/profile');
+                navigate('/');
               }
             }}
             className="p-1.5 -ml-1.5 rounded-full hover:bg-slate-100 active:bg-slate-200 text-slate-700 transition-colors cursor-pointer flex items-center justify-center shrink-0"

@@ -20,7 +20,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '../lib/supabaseClient';
 import { apiUrl } from '../lib/apiBase';
-import { isAndroidAppEnvironment } from '../utils/platformDetection';
+import { isAndroidAppEnvironment, isNativePhoneApp } from '../utils/platformDetection';
 import { SEOHead } from './SEOHead';
 import {
   saveUserProfile,
@@ -127,6 +127,7 @@ const getPostAuthRedirect = (): string => {
 
 export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   const navigate = useNavigate();
+  const isNativeApp = isNativePhoneApp();
 
   // Mode: 'signin' | 'signup' | 'forgot'
   const [mode, setMode] = useState<AuthMode>('signin');
@@ -1051,24 +1052,26 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       />
       {/* Main Centered Login Container (Borderless Full-Page Look) */}
       <div className="w-full max-w-md bg-white border-0 shadow-none p-4 sm:p-6 space-y-5">
-        {/* Top Back Navigation Arrow Button (returns to storefront or previous page) */}
-        <div className="w-full flex items-center justify-between -mb-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
-                navigate(-1);
-              } else {
-                navigate('/');
-              }
-            }}
-            className="p-2 -ml-2 text-slate-700 hover:text-black hover:bg-slate-100 rounded-full transition-colors cursor-pointer flex items-center gap-1.5 active:scale-95 text-xs font-bold"
-            title="Back to store"
-          >
-            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
-            <span>Store</span>
-          </button>
-        </div>
+        {/* Top Back Navigation Arrow Button (returns to storefront on website only; hidden on native app so users log in first) */}
+        {!isNativeApp && (
+          <div className="w-full flex items-center justify-between -mb-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+                  navigate(-1);
+                } else {
+                  navigate('/');
+                }
+              }}
+              className="p-2 -ml-2 text-slate-700 hover:text-black hover:bg-slate-100 rounded-full transition-colors cursor-pointer flex items-center gap-1.5 active:scale-95 text-xs font-bold"
+              title="Back to store"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+              <span>Store</span>
+            </button>
+          </div>
+        )}
         
         {/* Brand Logo & Name Header */}
         <div className="flex flex-col items-center justify-center text-center space-y-2">
@@ -1092,6 +1095,15 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
             </p>
           </div>
         </div>
+
+        {/* Native Mobile App Onboarding Banner */}
+        {isNativeApp && (
+          <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-3 text-center shadow-2xs">
+            <p className="text-xs font-semibold text-amber-950 leading-relaxed">
+              Welcome to SmartRun App! Please sign in to explore products, wholesale prices &amp; enjoy 60-min express delivery in Kolkata.
+            </p>
+          </div>
+        )}
 
         {/* Clean Login Heading */}
         <div className="text-center pt-1 pb-1">

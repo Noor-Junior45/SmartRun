@@ -18,7 +18,8 @@ import {
   Heart,
   RotateCcw,
   Trash2,
-  Loader2
+  Loader2,
+  BookOpen
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Order, SavedAddress, UserProfile, CartItem, Product, WalletTransaction } from '../types';
@@ -32,6 +33,7 @@ import {
 } from '../services/supabaseService';
 import { getFavoriteProductIds, toggleProductFavorite, clearAllFavorites } from '../services/favorites';
 import { SEOHead } from './SEOHead';
+import { HowToUseAppPage } from './HowToUseAppPage';
 
 // Sub-page component modules for each button in Profile
 import { FavoritesSubPage } from './profile/FavoritesSubPage';
@@ -91,9 +93,9 @@ export const ProfileView = ({
     };
   }, []);
 
-  // Current active sub-page view: 'main' | 'orders' | 'addresses' | 'payments' | 'wallet' | 'services' | 'membership' | 'help' | 'notifications' | 'privacy' | 'terms' | 'favorites' | 'refund-policy'
+  // Current active sub-page view: 'main' | 'orders' | 'addresses' | 'payments' | 'wallet' | 'services' | 'membership' | 'help' | 'notifications' | 'privacy' | 'terms' | 'favorites' | 'refund-policy' | 'how-to-use'
   const [subPage, setSubPage] = useState<
-    'main' | 'orders' | 'addresses' | 'payments' | 'wallet' | 'services' | 'membership' | 'help' | 'notifications' | 'privacy' | 'terms' | 'favorites' | 'refund-policy'
+    'main' | 'orders' | 'addresses' | 'payments' | 'wallet' | 'services' | 'membership' | 'help' | 'notifications' | 'privacy' | 'terms' | 'favorites' | 'refund-policy' | 'how-to-use'
   >('main');
 
   // Favorites state
@@ -184,6 +186,28 @@ export const ProfileView = ({
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [subPage]);
 
+  // Synchronize history so browser/Android hardware back button returns from subpage to profile menu
+  useEffect(() => {
+    if (subPage !== 'main') {
+      const handlePopState = () => {
+        setSubPage('main');
+      };
+      window.history.pushState({ isProfileSubPage: true }, '');
+      window.addEventListener('popstate', handlePopState);
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+      };
+    }
+  }, [subPage]);
+
+  const handleSubPageBack = () => {
+    if (typeof window !== 'undefined' && window.history.state?.isProfileSubPage) {
+      window.history.back();
+    } else {
+      setSubPage('main');
+    }
+  };
+
   const handleOpenEdit = () => {
     setIsEditModalOpen(true);
   };
@@ -261,7 +285,7 @@ export const ProfileView = ({
           orders={sortedOrders}
           userProfile={userProfile}
           onOpenShop={onOpenShop}
-          onBack={() => setSubPage('main')}
+          onBack={handleSubPageBack}
         />
       </div>
     );
@@ -275,7 +299,7 @@ export const ProfileView = ({
       <SavedAddressesSubPage
         savedAddresses={savedAddresses}
         displayPhone={displayPhone}
-        onBack={() => setSubPage('main')}
+        onBack={handleSubPageBack}
         onOpenLocationModal={onOpenLocationModal}
         onEditAddress={onEditAddress}
         onSelectAddress={onSelectAddress}
@@ -291,7 +315,7 @@ export const ProfileView = ({
     return (
       <SavedPaymentsSubPage
         savedUpi={savedUpi}
-        onBack={() => setSubPage('main')}
+        onBack={handleSubPageBack}
       />
     );
   }
@@ -304,7 +328,7 @@ export const ProfileView = ({
       <WalletSubPage
         totalWalletBalance={totalWalletBalance}
         filteredTransactions={filteredTransactions}
-        onBack={() => setSubPage('main')}
+        onBack={handleSubPageBack}
       />
     );
   }
@@ -315,7 +339,7 @@ export const ProfileView = ({
   if (subPage === 'services') {
     return (
       <ServicesSubPage
-        onBack={() => setSubPage('main')}
+        onBack={handleSubPageBack}
       />
     );
   }
@@ -327,7 +351,7 @@ export const ProfileView = ({
     return (
       <MembershipSubPage
         totalSavings={totalSavings}
-        onBack={() => setSubPage('main')}
+        onBack={handleSubPageBack}
       />
     );
   }
@@ -341,7 +365,7 @@ export const ProfileView = ({
         userProfile={userProfile}
         orders={orders}
         savedAddresses={savedAddresses}
-        onBack={() => setSubPage('main')}
+        onBack={handleSubPageBack}
       />
     );
   }
@@ -360,7 +384,7 @@ export const ProfileView = ({
         onToggleWhatsappAlerts={setWhatsappAlerts}
         onToggleSmsAlerts={setSmsAlerts}
         onToggleEmailAlerts={setEmailAlerts}
-        onBack={() => setSubPage('main')}
+        onBack={handleSubPageBack}
         onContactSupport={() => setSubPage('help')}
       />
     );
@@ -370,14 +394,14 @@ export const ProfileView = ({
   // SUB-PAGE 8: PRIVACY POLICY
   // -------------------------------------------------------------
   if (subPage === 'privacy') {
-    return <PrivacyPolicySubPage onBack={() => setSubPage('main')} />;
+    return <PrivacyPolicySubPage onBack={handleSubPageBack} />;
   }
 
   // -------------------------------------------------------------
   // SUB-PAGE 9: TERMS OF SERVICE
   // -------------------------------------------------------------
   if (subPage === 'terms') {
-    return <TermsOfServiceSubPage onBack={() => setSubPage('main')} />;
+    return <TermsOfServiceSubPage onBack={handleSubPageBack} />;
   }
 
   // -------------------------------------------------------------
@@ -387,7 +411,7 @@ export const ProfileView = ({
     return (
       <FavoritesSubPage
         favoriteProducts={favoriteProducts}
-        onBack={() => setSubPage('main')}
+        onBack={handleSubPageBack}
         onOpenShop={onOpenShop}
         onClearAllFavorites={() => {
           clearAllFavorites();
@@ -406,10 +430,17 @@ export const ProfileView = ({
   if (subPage === 'refund-policy') {
     return (
       <RefundPolicySubPage
-        onBack={() => setSubPage('main')}
+        onBack={handleSubPageBack}
         onContactSupport={() => setSubPage('help')}
       />
     );
+  }
+
+  // -------------------------------------------------------------
+  // SUB-PAGE 12: HOW TO USE APP (STEP-BY-STEP USER GUIDE)
+  // -------------------------------------------------------------
+  if (subPage === 'how-to-use') {
+    return <HowToUseAppPage onBack={handleSubPageBack} />;
   }
 
   // -------------------------------------------------------------
@@ -684,7 +715,24 @@ export const ProfileView = ({
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
 
-          {/* 8. Privacy Policy */}
+          {/* 8. How to Use App (User Guide) */}
+          <button
+            id="btn-profile-how-to-use"
+            onClick={() => setSubPage('how-to-use')}
+            className="w-full p-4 sm:p-4.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left cursor-pointer group"
+          >
+            <div className="flex items-center gap-3.5 sm:gap-4">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-base sm:text-lg font-normal text-slate-800">How to Use App</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+          </button>
+
+          {/* 9. Privacy Policy */}
           <button
             onClick={() => setSubPage('privacy')}
             className="w-full p-4 sm:p-4.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left cursor-pointer group"
@@ -700,7 +748,7 @@ export const ProfileView = ({
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
 
-          {/* 9. Terms of Service */}
+          {/* 10. Terms of Service */}
           <button
             onClick={() => setSubPage('terms')}
             className="w-full p-4 sm:p-4.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left cursor-pointer group"
@@ -716,7 +764,7 @@ export const ProfileView = ({
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
 
-          {/* 10. Refund Policy */}
+          {/* 11. Refund Policy */}
           <button
             id="btn-profile-refund-policy"
             onClick={() => setSubPage('refund-policy')}
@@ -733,7 +781,7 @@ export const ProfileView = ({
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
 
-          {/* 11. Account Delete (Google Play Store Policy Compliant) */}
+          {/* 12. Account Delete (Google Play Store Policy Compliant) */}
           <button
             id="btn-profile-delete-account"
             onClick={() => navigate('/delete')}

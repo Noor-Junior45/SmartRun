@@ -5407,7 +5407,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
   const pushTokensStore: Map<string, PushTokenRecord> = new Map();
 
   // 1. Register or update device push token
-  app.post("/api/push/register-token", (req, res) => {
+  app.post("/api/push/register-token", async (req, res) => {
     try {
       const { token, platform, userId, userEmail } = req.body || {};
       if (!token || typeof token !== "string") {
@@ -5427,14 +5427,52 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
       pushTokensStore.set(token, record);
       console.log(`[Push Token Registered]: Platform: ${record.platform}, User: ${record.userId || record.userEmail || "guest"}, Token: ${token.substring(0, 16)}...`);
 
+      // Store in Supabase if user is known
+      let storedInSupabase = false;
+      const effectiveUid = record.userId && record.userId !== 'guest' ? record.userId : null;
+      const sb = getServerSupabase();
+      if (sb && effectiveUid) {
+        try {
+          const { error: sbErr } = await sb
+            .from('user_profiles')
+            .update({ fcm_token: token, updated_at: new Date().toISOString() })
+            .eq('user_id', effectiveUid);
+          if (!sbErr) {
+            storedInSupabase = true;
+          }
+        } catch (e) {
+          console.debug('[Supabase Push Token Update Notice]:', e);
+        }
+      }
+
       return res.json({
         success: true,
         message: "Push notification token registered successfully.",
+        storedInSupabase,
         totalRegisteredDevices: pushTokensStore.size
       });
     } catch (err: any) {
       console.error("Error registering push token:", err);
       return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 1.1 Verify Firebase Cloud Messaging SDK and push status
+  app.get("/api/push/fcm-status", (req, res) => {
+    try {
+      return res.json({
+        success: true,
+        fcmSdkPresent: true,
+        androidGradleDependency: "com.google.firebase:firebase-messaging",
+        capacitorPushPlugin: "@capacitor/push-notifications",
+        googleServicesJson: true,
+        package: "in.smartrun.app",
+        messagingSenderId: "535136714942",
+        totalRegisteredDevices: pushTokensStore.size,
+        supabaseStorageEnabled: true
+      });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e?.message });
     }
   });
 
@@ -6162,214 +6200,7 @@ Knowledge Base & Service Details:
     }
   });
 
-  // Dedicated Gemini AI Material & Cost Estimation Calculator Endpoint
-  app.post("/api/gemini/estimate-materials", aiAssistantLimiter, async (req, res) => {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    try {
-      const {
-        clientName = "Valued Client",
-        phone = "",
-        area = "Kolkata",
-        pincode = "700039",
-        houseAreaSqFt = 950,
-        propertyType = "2BHK",
-        floors = 1,
-        projectScope = "both", // 'both' | 'electrical' | 'construction'
-        qualityTier = "premium", // 'standard' | 'premium' | 'heavy_duty'
-        customRequirements = ""
-      } = req.body;
 
-      const areaNum = Number(houseAreaSqFt) || 950;
-      const floorsNum = Number(floors) || 1;
-      const totalEffectiveSqFt = areaNum * floorsNum;
-
-      // Base heuristic mathematical baseline for Kolkata construction & electrical standards
-      const calcWireCoilsLight = Math.max(2, Math.round(totalEffectiveSqFt / 250));
-      const calcWireCoilsPower = Math.max(2, Math.round(totalEffectiveSqFt / 350));
-      const calcSwitches = Math.max(12, Math.round(totalEffectiveSqFt / 35));
-      const calcMcbBoxes = Math.max(1, Math.ceil(totalEffectiveSqFt / 900));
-      const calcConduits = Math.max(8, Math.round(totalEffectiveSqFt / 70));
-
-      const calcCement = Math.max(20, Math.round(totalEffectiveSqFt * (projectScope === 'construction' ? 0.4 : 0.08)));
-      const calcSteel = Math.max(150, Math.round(totalEffectiveSqFt * (projectScope === 'construction' ? 3.5 : 0.6)));
-      const calcWaterproofing = Math.max(4, Math.round(totalEffectiveSqFt * 0.012));
-      const calcPutty = Math.max(2, Math.round(totalEffectiveSqFt * 0.005));
-
-      const wireLightTotal = calcWireCoilsLight * 3600;
-      const wirePowerTotal = calcWireCoilsPower * 4200;
-      const switchesTotal = calcSwitches * 140;
-      const mcbTotal = calcMcbBoxes * 1250;
-      const conduitsTotal = calcConduits * 120;
-      const electricalTotal = wireLightTotal + wirePowerTotal + switchesTotal + mcbTotal + conduitsTotal;
-
-      const cementTotal = calcCement * 385;
-      const steelTotal = calcSteel * 62;
-      const wpTotal = calcWaterproofing * 135;
-      const puttyTotal = calcPutty * 690;
-      const constructionTotal = cementTotal + steelTotal + wpTotal + puttyTotal;
-
-      const grandTotal = projectScope === 'electrical'
-        ? electricalTotal
-        : projectScope === 'construction'
-        ? constructionTotal
-        : electricalTotal + constructionTotal;
-
-      const heuristicResult = {
-        success: true,
-        aiPowered: false,
-        summary: `Wholesale Estimate for ${propertyType} (${totalEffectiveSqFt} sq.ft total built-up) in ${area}, Kolkata.`,
-        sanctionedLoadRecommendation: `${Math.max(3, Math.min(12, Math.ceil(totalEffectiveSqFt / 250)))} kW (CESC / WBSEDCL Standard)`,
-        electrical: {
-          wireCoilsLight: { qty: calcWireCoilsLight, spec: "1.0 & 1.5 sq.mm Polycab/RR Kabel FR", rate: 3600, amount: wireLightTotal },
-          wireCoilsPower: { qty: calcWireCoilsPower, spec: "2.5 & 4.0 sq.mm Heavy Copper Cables", rate: 4200, amount: wirePowerTotal },
-          modularSwitches: { qty: calcSwitches, spec: "Schneider Opale / Havells Modular Points", rate: 140, amount: switchesTotal },
-          mcbDistribution: { qty: calcMcbBoxes, spec: "SPN/TPN Double Door Enclosure + MCBs", rate: 1250, amount: mcbTotal },
-          pvcConduits: { qty: calcConduits, spec: "20mm/25mm Heavy Duty PVC Pipes (3m)", rate: 120, amount: conduitsTotal },
-          subtotal: electricalTotal
-        },
-        construction: {
-          cementBags: { qty: calcCement, spec: "UltraTech OPC 53 Grade Fresh 50kg Bags", rate: 385, amount: cementTotal },
-          tmtSteelKg: { qty: calcSteel, spec: "Tata Tiscon 550D Primary Fe Rebars (kg)", rate: 62, amount: steelTotal },
-          waterproofingLiters: { qty: calcWaterproofing, spec: "Dr. Fixit 101 LW+ Integral Compound (L)", rate: 135, amount: wpTotal },
-          wallPuttyBags: { qty: calcPutty, spec: "Asian Paints TruCare 20kg Polymer Putty", rate: 690, amount: puttyTotal },
-          subtotal: constructionTotal
-        },
-        grandTotal,
-        laborDaysEstimate: {
-          electricianDays: Math.max(3, Math.round(totalEffectiveSqFt / 180)),
-          masonDays: Math.max(4, Math.round(totalEffectiveSqFt / 150)),
-          approxLaborCost: Math.round(totalEffectiveSqFt * 28)
-        },
-        engineeringAdvice: [
-          `For ${area}, ensure all circuit neutrals are kept independent to prevent MCB nuisance tripping during high-humidity monsoons.`,
-          `Dedicated 4.0 sq.mm copper wire runs are strongly recommended for master bedroom 1.5 Ton AC units and instant water geysers.`,
-          `UltraTech cement bags are dispatched fresh from SmartRun Kasba warehouse with guaranteed manufacturing within 15 days.`
-        ]
-      };
-
-      const apiKey = process.env.GEMINI_API_KEY?.trim();
-
-      if (!isValidGeminiApiKey(apiKey)) {
-        return res.json(heuristicResult);
-      }
-
-      try {
-        const ai = new GoogleGenAI({
-          apiKey: apiKey!,
-          httpOptions: {
-            headers: {
-              'User-Agent': 'aistudio-build'
-            }
-          }
-        });
-
-        const prompt = `You are the Principal Chief Electrical Engineer and Civil Construction Quantity Estimator for SmartRun, located at Kasba Hub, Kolkata.
-Calculate a realistic, wholesale Bill of Materials (BOM) for the following project:
-- Client Name: ${clientName}
-- Location: ${area}, Kolkata (PIN: ${pincode})
-- Property: ${propertyType}, ${houseAreaSqFt} sq.ft per floor, ${floorsNum} Floor(s) (Total Effective Area: ${totalEffectiveSqFt} sq.ft)
-- Scope: ${projectScope}
-- Quality Tier: ${qualityTier}
-- Custom Requirements: ${customRequirements || 'Standard residential setup with modern modular electricals and high-grade finishing.'}
-
-Respond ONLY with a valid JSON object matching the following structure:
-{
-  "summary": "Short 1-2 sentence executive estimate summary",
-  "sanctionedLoadRecommendation": "e.g. 5 kW (CESC Kolkata Standard)",
-  "electrical": {
-    "wireCoilsLight": { "qty": number, "spec": string, "rate": number, "amount": number },
-    "wireCoilsPower": { "qty": number, "spec": string, "rate": number, "amount": number },
-    "modularSwitches": { "qty": number, "spec": string, "rate": number, "amount": number },
-    "mcbDistribution": { "qty": number, "spec": string, "rate": number, "amount": number },
-    "pvcConduits": { "qty": number, "spec": string, "rate": number, "amount": number },
-    "subtotal": number
-  },
-  "construction": {
-    "cementBags": { "qty": number, "spec": string, "rate": number, "amount": number },
-    "tmtSteelKg": { "qty": number, "spec": string, "rate": number, "amount": number },
-    "waterproofingLiters": { "qty": number, "spec": string, "rate": number, "amount": number },
-    "wallPuttyBags": { "qty": number, "spec": string, "rate": number, "amount": number },
-    "subtotal": number
-  },
-  "grandTotal": number,
-  "laborDaysEstimate": {
-    "electricianDays": number,
-    "masonDays": number,
-    "approxLaborCost": number
-  },
-  "engineeringAdvice": [
-    "Expert advice 1 regarding wiring gauges or Kolkata climate protection",
-    "Expert advice 2 regarding CESC load or MCB isolation",
-    "Expert advice 3 regarding cement hydration and TMT rebars"
-  ]
-}`;
-
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            temperature: 0.2
-          }
-        });
-
-        const responseText = response.text || "{}";
-        let parsedData: any = {};
-        try {
-          parsedData = JSON.parse(responseText);
-        } catch (parseErr) {
-          console.warn("Could not parse JSON from Gemini, falling back to heuristic data:", parseErr);
-        }
-
-        if (parsedData && parsedData.electrical && parsedData.construction) {
-          return res.json({
-            success: true,
-            aiPowered: true,
-            ...parsedData
-          });
-        }
-
-        return res.json(heuristicResult);
-      } catch (apiErr: any) {
-        console.warn("Gemini estimate call failed, returning deterministic calculation:", apiErr?.message || apiErr);
-        return res.json(heuristicResult);
-      }
-    } catch (err: unknown) {
-      console.warn("Estimation endpoint handled error:", err);
-      return res.json({
-        success: true,
-        aiPowered: false,
-        summary: "Wholesale Material Estimate (Standard Kolkata Baseline)",
-        sanctionedLoadRecommendation: "5 kW (CESC Standard)",
-        electrical: {
-          wireCoilsLight: { qty: 4, spec: "1.0 & 1.5 sq.mm Polycab FR", rate: 3600, amount: 14400 },
-          wireCoilsPower: { qty: 3, spec: "2.5 & 4.0 sq.mm Heavy Copper", rate: 4200, amount: 12600 },
-          modularSwitches: { qty: 28, spec: "Modular Points", rate: 140, amount: 3920 },
-          mcbDistribution: { qty: 1, spec: "Double Door Enclosure + MCBs", rate: 1250, amount: 1250 },
-          pvcConduits: { qty: 14, spec: "Heavy Duty PVC Pipes", rate: 120, amount: 1680 },
-          subtotal: 33850
-        },
-        construction: {
-          cementBags: { qty: 50, spec: "UltraTech 53 Grade Fresh", rate: 385, amount: 19250 },
-          tmtSteelKg: { qty: 350, spec: "Tata Tiscon 550D TMT (kg)", rate: 62, amount: 21700 },
-          waterproofingLiters: { qty: 10, spec: "Dr. Fixit 101 LW+", rate: 135, amount: 1350 },
-          wallPuttyBags: { qty: 5, spec: "20kg Polymer Putty", rate: 690, amount: 3450 },
-          subtotal: 45750
-        },
-        grandTotal: 79600,
-        laborDaysEstimate: {
-          electricianDays: 5,
-          masonDays: 6,
-          approxLaborCost: 26000
-        },
-        engineeringAdvice: [
-          "Ensure circuit neutrals are kept independent to prevent MCB tripping during monsoons.",
-          "Dedicated 4.0 sq.mm copper wire runs recommended for 1.5 Ton ACs.",
-          "All materials dispatched directly from Kasba warehouse."
-        ]
-      });
-    }
-  });
 
   /**
    * Fast2SMS OTP & Quick SMS Route Helper

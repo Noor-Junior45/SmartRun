@@ -15,9 +15,6 @@ import {
   MessageSquare,
   PhoneCall,
   Clock,
-  ShieldCheck,
-  Truck,
-  Sparkles,
   ArrowUpDown,
   Zap
 } from 'lucide-react';
@@ -720,36 +717,7 @@ export const ConstructionPage = ({
                 </div>
               </div>
 
-              {/* Trust Indicators */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 pt-2 max-w-xl mx-auto text-left w-full">
-                <div className="p-3 bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-[0_4px_12px_-2px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.9)] flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200/60 flex items-center justify-center shrink-0">
-                    <Truck className="w-4 h-4 text-amber-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-slate-900 truncate">Direct Site Trucks</div>
-                    <div className="text-[10px] text-slate-500 truncate">Unloaded at site</div>
-                  </div>
-                </div>
-                <div className="p-3 bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-[0_4px_12px_-2px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.9)] flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200/60 flex items-center justify-center shrink-0">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-slate-900 truncate">100% Genuine</div>
-                    <div className="text-[10px] text-slate-500 truncate">Manufacturer seals</div>
-                  </div>
-                </div>
-                <div className="p-3 bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-[0_4px_12px_-2px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.9)] flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200/60 flex items-center justify-center shrink-0">
-                    <Sparkles className="w-4 h-4 text-amber-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-slate-900 truncate">GST Invoices</div>
-                    <div className="text-[10px] text-slate-500 truncate">Official project bills</div>
-                  </div>
-                </div>
-              </div>
+
 
               {/* Action Buttons for Direct Inquiry - Equal Size & Liquid Glossy Design */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-xl mx-auto pt-3">
