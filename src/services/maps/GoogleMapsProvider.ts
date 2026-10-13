@@ -15,13 +15,14 @@ if (typeof window !== 'undefined') {
     console.warn('[GoogleMaps] Authentication or Billing notice triggered. Switching to clean resilient renderer.');
     googleMapsAuthFailed = true;
     googleBillingVerified = false;
+    window.dispatchEvent(new CustomEvent('google_maps_auth_failure'));
   };
 }
 
 /**
  * Pre-verifies whether Google Maps Platform billing is enabled on the current key.
  * This prevents the browser from loading maps.googleapis.com with an unbilled key,
- * which eliminates the fatal 'BillingNotEnabledMapError' console error.
+ * which eliminates the fatal 'BillingNotEnabledMapError' console error and watermark.
  */
 async function isGoogleMapsBillingActive(): Promise<boolean> {
   if (googleBillingVerified !== null) {
@@ -35,7 +36,7 @@ async function isGoogleMapsBillingActive(): Promise<boolean> {
   billingStatusCheckPromise = (async () => {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2000);
+      const timeout = setTimeout(() => controller.abort(), 2500);
       const res = await fetch(`${API_BASE_URL}/api/maps/google/status`, { signal: controller.signal });
       clearTimeout(timeout);
 
@@ -71,18 +72,15 @@ async function isGoogleMapsBillingActive(): Promise<boolean> {
 
 async function loadGoogleMapsScript(apiKey: string): Promise<boolean> {
   if (typeof window === 'undefined') return Promise.resolve(false);
-  if ((window as any).google && (window as any).google.maps && (window as any).google.maps.Map) {
-    return Promise.resolve(true);
-  }
-
-  if (googleMapsAuthFailed || googleBillingVerified === false) {
-    return Promise.resolve(false);
-  }
 
   // Mandatory pre-flight: Only load script if billing is verified active
   const isBilled = await isGoogleMapsBillingActive();
-  if (!isBilled) {
+  if (!isBilled || googleMapsAuthFailed || googleBillingVerified === false) {
     return Promise.resolve(false);
+  }
+
+  if ((window as any).google && (window as any).google.maps && (window as any).google.maps.Map) {
+    return Promise.resolve(true);
   }
 
   if (googleMapsScriptLoadingPromise) {
@@ -166,8 +164,11 @@ export class GoogleMapsProvider implements IMapProvider {
     container.innerHTML = '';
     const apiKey = this.getApiKey();
 
+    // Verify billing active before deciding renderer
+    const isBilled = await isGoogleMapsBillingActive();
+
     // If no key or if billing is not enabled, seamlessly use resilient clean renderer
-    if (!apiKey || googleMapsAuthFailed || googleBillingVerified === false) {
+    if (!apiKey || !isBilled || googleMapsAuthFailed || googleBillingVerified === false) {
       return this.initializeCleanTileMap(container, options);
     }
 
@@ -189,6 +190,22 @@ export class GoogleMapsProvider implements IMapProvider {
     const google = (window as any).google;
     const initialCenter = { lat: options.center.lat, lng: options.center.lng };
 
+    let currentInstance: IMapInstance | null = null;
+    let isSwapped = false;
+
+    // Safety swap helper if Google Maps watermark / billing error happens during session
+    const swapToCleanRenderer = () => {
+      if (isSwapped) return;
+      isSwapped = true;
+      googleMapsAuthFailed = true;
+      googleBillingVerified = false;
+      console.info('[GoogleMapsProvider] Swapping to clean high-definition tile map to prevent watermark display.');
+      currentInstance = this.initializeCleanTileMap(container, options);
+    };
+
+    const authFailListener = () => swapToCleanRenderer();
+    window.addEventListener('google_maps_auth_failure', authFailListener, { once: true });
+
     const map = new google.maps.Map(container, {
       center: initialCenter,
       zoom: options.zoom || 18,
@@ -209,6 +226,15 @@ export class GoogleMapsProvider implements IMapProvider {
         }
       ]
     });
+
+    // Check for Google Maps watermark banner injection (.gm-style-pbc)
+    const observer = new MutationObserver(() => {
+      if (container.querySelector('.gm-style-pbc') || container.innerText?.includes('development purposes')) {
+        observer.disconnect();
+        swapToCleanRenderer();
+      }
+    });
+    observer.observe(container, { childList: true, subtree: true });
 
     let isUserDragging = false;
 
@@ -234,30 +260,42 @@ export class GoogleMapsProvider implements IMapProvider {
 
     const instance: IMapInstance = {
       setCenter: (coords: MapCoordinates) => {
+        if (isSwapped && currentInstance) return currentInstance.setCenter(coords);
         map.setCenter({ lat: coords.lat, lng: coords.lng });
       },
       getCenter: (): MapCoordinates => {
+        if (isSwapped && currentInstance) return currentInstance.getCenter();
         const c = map.getCenter();
         return { lat: c ? c.lat() : options.center.lat, lng: c ? c.lng() : options.center.lng };
       },
       flyTo: (coords: MapCoordinates, zoom = 18) => {
+        if (isSwapped && currentInstance) return currentInstance.flyTo(coords, zoom);
         map.panTo({ lat: coords.lat, lng: coords.lng });
         if (zoom) map.setZoom(zoom);
       },
       zoomIn: () => {
+        if (isSwapped && currentInstance) return currentInstance.zoomIn();
         const z = map.getZoom() || 18;
         map.setZoom(z + 1);
       },
       zoomOut: () => {
+        if (isSwapped && currentInstance) return currentInstance.zoomOut();
         const z = map.getZoom() || 18;
         map.setZoom(Math.max(1, z - 1));
       },
       invalidateSize: () => {
+        if (isSwapped && currentInstance) return currentInstance.invalidateSize();
         google.maps.event.trigger(map, 'resize');
       },
       destroy: () => {
-        google.maps.event.clearInstanceListeners(map);
-        container.innerHTML = '';
+        observer.disconnect();
+        window.removeEventListener('google_maps_auth_failure', authFailListener);
+        if (isSwapped && currentInstance) {
+          currentInstance.destroy();
+        } else {
+          google.maps.event.clearInstanceListeners(map);
+          container.innerHTML = '';
+        }
       }
     };
 

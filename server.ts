@@ -1818,6 +1818,7 @@ async function startServer() {
     billingEnabled: boolean;
     apiKey: string;
     reason?: string;
+    message?: string;
   } | null = null;
 
   // Google Maps Platform Health & Billing Status Check
@@ -1842,29 +1843,72 @@ async function startServer() {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const testUrl = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
-      const gRes = await fetch(testUrl, { signal: controller.signal });
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      
+      // Probe Google Geocoding API to check if Google Cloud Billing is linked and active
+      const geocodeTestUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=22.5726,88.3639&key=${apiKey}`;
+      const geoRes = await fetch(geocodeTestUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
 
-      if (gRes.ok) {
-        cachedGoogleMapsStatus = {
-          checkedAt: now,
-          available: true,
-          billingEnabled: true,
-          apiKey
-        };
-        return res.json({ success: true, ...cachedGoogleMapsStatus });
-      } else {
+      if (geoRes.ok) {
+        const geoData = await geoRes.json();
+        const errLower = (geoData.error_message || "").toLowerCase();
+
+        if (geoData.status === "OK") {
+          // Both key and Google Cloud Billing are fully active
+          cachedGoogleMapsStatus = {
+            checkedAt: now,
+            available: true,
+            billingEnabled: true,
+            apiKey
+          };
+          return res.json({ success: true, ...cachedGoogleMapsStatus });
+        }
+
+        if (errLower.includes("billing")) {
+          // Google Cloud Billing is not linked on this project -> Maps API will show watermark
+          cachedGoogleMapsStatus = {
+            checkedAt: now,
+            available: false,
+            billingEnabled: false,
+            apiKey,
+            reason: "BillingNotEnabled",
+            message: geoData.error_message || "You must enable Billing on the Google Cloud Project to remove the watermark"
+          };
+          return res.json({ success: true, ...cachedGoogleMapsStatus });
+        }
+
+        if (errLower.includes("referrer")) {
+          // Browser HTTP referrer restricted key - valid for frontend usage
+          cachedGoogleMapsStatus = {
+            checkedAt: now,
+            available: true,
+            billingEnabled: true,
+            apiKey,
+            reason: "ReferrerRestrictedClientKey"
+          };
+          return res.json({ success: true, ...cachedGoogleMapsStatus });
+        }
+
         cachedGoogleMapsStatus = {
           checkedAt: now,
           available: false,
           billingEnabled: false,
           apiKey,
-          reason: `MapsJsHttp_${gRes.status}`
+          reason: geoData.status || "GeocodeDenied",
+          message: geoData.error_message || "Google Maps request denied"
         };
         return res.json({ success: true, ...cachedGoogleMapsStatus });
       }
+
+      cachedGoogleMapsStatus = {
+        checkedAt: now,
+        available: false,
+        billingEnabled: false,
+        apiKey,
+        reason: `GeocodeHttp_${geoRes.status}`
+      };
+      return res.json({ success: true, ...cachedGoogleMapsStatus });
     } catch (err: any) {
       cachedGoogleMapsStatus = {
         checkedAt: now,
