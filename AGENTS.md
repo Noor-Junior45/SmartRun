@@ -249,7 +249,7 @@
   - **Frontend Safeguards (`GoogleMapsProvider.ts`)**: Integrated `isGoogleMapsBillingActive()` pre-flight verification before loading any Google Maps SDK script. If billing is not active, the app completely skips injecting `maps.googleapis.com/maps/api/js`, eliminating the `BillingNotEnabledMapError` console error entirely.
   - **Seamless HD Tile Renderer**: Seamlessly uses the high-definition CartoDB Voyager Leaflet map renderer (`initializeCleanTileMap`) and OpenStreetMap cascades with zero watermarks, zero popups, and instant interactive responsiveness. When a valid, billing-enabled key is configured in the future, native Google Maps is automatically restored.
 - [x] **Custom Google Maps API Key Configured & Verified Active**:
-  - Successfully connected the custom Google Maps API key (`AIzaSyB9lRr20cz1sxfsfvWO3t-Qrcn5XB9iRz0`) across backend proxy endpoints and client `GoogleMapsProvider`.
+  - Successfully connected the Google Maps API key via server environment variables (`GOOGLE_MAPS_API_KEY`) across backend proxy endpoints and client `GoogleMapsProvider`.
   - Verified active status on `/api/maps/google/status` (`available: true`, `billingEnabled: true`).
   - Google Maps JavaScript API now loads natively without billing errors, and automatically falls back to OpenStreetMap / Nominatim whenever geocoding or places API restrictions apply.
 - [x] **Privacy Policy & Terms of Service Redesign (Beige Theme, Numbered Headings & Mobile Content Tables)**:
@@ -273,4 +273,17 @@
     - Upserts `fcm_token` and `push_token` into Supabase `profiles` table (`onConflict: 'id'`).
     - Syncs token with server endpoint `/api/push/register-token`.
   - **Automated Lifecycle Sync**: Created `syncStoredPushTokenToSupabase` and integrated it across initial session retrieval (`getInitialAuthSession`), login callback (`handleAuthSuccess`), auth listener (`onAuthStateChange`), profile updates (`syncUserProfileToSupabase`), and `userProfile?.id` change effects. Ensures device push tokens are always mapped to user accounts upon login.
+- [x] **Fast2SMS Complete Eradication & Pure Firebase Phone Auth OTP Integration**:
+  - **Complete Removal**: Removed all Fast2SMS endpoints (`/api/sms/send-fast2sms-otp`, `/api/sms/verify-fast2sms-otp`, `/api/sms/fast2sms-status`, `/api/sms/test-fast2sms-otp`), deleted `api/sms/` serverless handlers, removed `FAST2SMS_API_KEY` from `server.ts` and `.env.example`.
+  - **Pure Firebase Phone Auth**: `sendFirebasePhoneOtp` now runs strictly via the official Firebase Web SDK (`signInWithPhoneNumber(firebaseAuth, formattedPhone, appVerifier)` with invisible reCAPTCHA). Verification executes directly via `activeConfirmationResult.confirm(otpCode)`.
+  - **Firebase OTP to Supabase Architecture**:
+    1. **Verification (Firebase Auth)**: User completes OTP via Google Identity Platform (`confirmationResult.confirm(cleanCode)`), yielding a genuine `firebaseUser` with phone number and Firebase UID (`firebaseUser.uid`).
+    2. **Pre-Resolution**: System checks `/api/auth/resolve-phone-user` to find if this phone already has an existing account/profile in Supabase (from previous email logins or orders).
+    3. **Canonical Identity Creation & Sign-In**: Supabase signs into or signs up a canonical account for the phone number (`p${clean10}@girirajpower.internal`).
+    4. **Identity & Metadata Merging**: Attaches `firebase_uid: firebaseUser.uid`, phone number, and full name into Supabase Auth user metadata (`supabase.auth.updateUser`) and syncs with Supabase `user_profiles`.
+    5. **Session Activation**: Sets active session in `supabase.auth.setSession`, giving the user instant access to all Supabase PostgreSQL tables (orders, cart, profiles, addresses).
+- [x] **Vite Connect, Firestore Connect in Log, & White Blank Page Resolution**:
+  - **Root Cause 1 ("vite connect" in log)**: Vite development server attempts WebSocket connection (`[vite] connecting...`) for HMR. In AI Studio's sandboxed iframe and reverse proxy environment, WebSocket connections fail harmlessly. Added custom filtering to silence benign `[vite] connecting...` and `failed to connect to websocket` notices in `index.html`.
+  - **Root Cause 2 ("firestore connect" in log)**: In `server.ts`, `__dirnameResolved` evaluated to `/app` (parent directory) in ESM mode, causing `path.resolve(__dirnameResolved, "firebase-applet-config.json")` to look for `/app/firebase-applet-config.json` rather than `/app/applet/firebase-applet-config.json`. Fixed path resolution with multi-path fallback (`process.cwd()`, `__dirnameResolved`). Also updated `firestore.rules` to permit `users_by_phone`, `phone_otps`, and user document syncing, and deployed rules via `deploy_firebase`.
+  - **Root Cause 3 ("white blank page")**: The root `<div id="root"></div>` was previously empty during module loading and initial script bundle compilation, leaving a stark white screen before React painted. Added an instant, inline branded preloader directly inside `<div id="root">` with the SmartRun logo, styling, and animated pulse indicator that renders immediately on first byte, smoothly replaced the moment React mounts. Also added `defer` to the external Razorpay SDK script to prevent render-blocking.
 

@@ -9,13 +9,10 @@ import {
   CheckCircle2,
   KeyRound,
   LogIn,
-  UserPlus,
   Phone,
   User,
-  AlertTriangle,
-  Copy,
-  ExternalLink,
-  ArrowLeft
+  ArrowLeft,
+  ShieldCheck
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '../lib/supabaseClient';
@@ -24,9 +21,9 @@ import { isAndroidAppEnvironment, isNativePhoneApp } from '../utils/platformDete
 import { SEOHead } from './SEOHead';
 import {
   saveUserProfile,
-  signInWithGoogle,
-  fetchUserProfileFromSupabase
+  signInWithGoogle
 } from '../services/supabaseService';
+import { UserProfile } from '../types';
 import { sendLoginNotificationEmail } from '../services/securityNotificationService';
 import {
   sendFirebasePhoneOtp,
@@ -38,7 +35,7 @@ interface LoginPageProps {
   onAuthSuccess: (phone: string, name: string, email?: string, userObj?: any) => void;
 }
 
-type AuthMode = 'signin' | 'signup' | 'forgot';
+type AuthStep = 'primary' | 'onboarding_phone' | 'onboarding_email' | 'forgot';
 
 // Helper: If user or browser autofill entered an 11-digit number starting with 0, don't count the first zero
 const cleanAutofillPhone = (input: string): string => {
@@ -46,33 +43,10 @@ const cleanAutofillPhone = (input: string): string => {
   if (trimmed.includes('@')) return input;
 
   const digits = trimmed.replace(/[^0-9]/g, '');
-  // Only if total digits is 11 AND starts with '0'
   if (digits.length === 11 && digits.startsWith('0')) {
     return digits.slice(1);
   }
   return input;
-};
-
-// Helper: Normalize phone to E.164 (defaulting to +91 for 10-digit Indian numbers)
-const normalizePhone = (input: string): string => {
-  const trimmed = input.trim();
-  if (trimmed.startsWith('+')) {
-    return trimmed.replace(/[^0-9+]/g, '');
-  }
-  let digits = trimmed.replace(/[^0-9]/g, '');
-
-  // If 11 digits and starts with 0 (autofill adding 0 in starting), don't count the first zero
-  if (digits.length === 11 && digits.startsWith('0')) {
-    digits = digits.slice(1);
-  }
-
-  if (digits.length === 10) {
-    return `+91${digits}`;
-  }
-  if (digits.length === 12 && digits.startsWith('91')) {
-    return `+${digits}`;
-  }
-  return `+${digits}`;
 };
 
 // Helper: Detect if user entered a phone number rather than an email
@@ -109,7 +83,7 @@ const saveTermsAgreed = (agreed: boolean): void => {
     localStorage.setItem('gp_terms_agreed', val);
     localStorage.setItem('terms_agreed', val);
   } catch {
-    // Ignore storage quota / private mode errors
+    // Ignore storage quota errors
   }
 };
 
@@ -129,87 +103,58 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   const navigate = useNavigate();
   const isNativeApp = isNativePhoneApp();
 
-  // Mode: 'signin' | 'signup' | 'forgot'
-  const [mode, setMode] = useState<AuthMode>('signin');
+  // Active step: 'primary' | 'onboarding_phone' | 'onboarding_email' | 'forgot'
+  const [authStep, setAuthStep] = useState<AuthStep>('primary');
 
-  // Input states
-  const [identifier, setIdentifier] = useState(''); // Holds email or phone in signin
-  const [email, setEmail] = useState(''); // Used in signup/forgot
-  const [signupName, setSignupName] = useState(''); // Full name for signup
-  const [signupPhone, setSignupPhone] = useState(''); // Mobile number for signup
+  // Primary input states
+  const [identifier, setIdentifier] = useState(''); // Mobile number or email
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [otpCode, setOtpCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  // Signup method: 'password' | 'otp'
-  const [signupMethod, setSignupMethod] = useState<'password' | 'otp'>('password');
-  const [signupOtpSent, setSignupOtpSent] = useState(false);
-  const [signupOtpCode, setSignupOtpCode] = useState('');
-  const [signupOtpCooldown, setSignupOtpCooldown] = useState(0);
-
-  // Progressive field reveal states
-  const [showSecondField, setShowSecondField] = useState(false);
   const [phoneUsePassword, setPhoneUsePassword] = useState(false);
+
+  // Phone OTP states
   const [otpSent, setOtpSent] = useState(false);
-  const [sentToPhone, setSentToPhone] = useState('');
-
-  // Terms and Privacy Agreement state (persisted across login & logout)
-  const [termsAgreed, setTermsAgreed] = useState<boolean>(() => isTermsAgreedSaved());
-
-  const handleToggleTerms = () => {
-    setTermsAgreed((prev) => {
-      const next = !prev;
-      saveTermsAgreed(next);
-      return next;
-    });
-    if (error && error.toLowerCase().includes('terms')) {
-      setError(null);
-    }
-  };
-
-  // Timers
-  const [magicLinkCooldown, setMagicLinkCooldown] = useState(0);
+  const [otpCode, setOtpCode] = useState('');
   const [otpCooldown, setOtpCooldown] = useState(0);
+  const [sentToPhone, setSentToPhone] = useState('');
+  const [showSecondField, setShowSecondField] = useState(false);
 
-  // Feedback states
+  // Onboarding for New User via Phone OTP
+  const [onboardingPhone, setOnboardingPhone] = useState('');
+  const [onboardingName, setOnboardingName] = useState('');
+  const [onboardingEmail, setOnboardingEmail] = useState('');
+  const [onboardingPassword, setOnboardingPassword] = useState('');
+  const [showOnboardingPassword, setShowOnboardingPassword] = useState(false);
+
+  // Onboarding for New User via Email & Password
+  const [onboardingEmailAddr, setOnboardingEmailAddr] = useState('');
+  const [onboardingEmailName, setOnboardingEmailName] = useState('');
+  const [onboardingEmailPhone, setOnboardingEmailPhone] = useState('');
+  const [onboardingEmailPw, setOnboardingEmailPw] = useState('');
+  const [showOnboardingEmailPw, setShowOnboardingEmailPw] = useState(false);
+
+  // Forgot password
+  const [forgotEmail, setForgotEmail] = useState('');
+
+  // UI status
   const [isLoading, setIsLoading] = useState(false);
-  const [isMagicLoading, setIsMagicLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
-  const [copiedIp, setCopiedIp] = useState(false);
 
-  const handleCopyIp = () => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText('34.34.254.4');
-      setCopiedIp(true);
-      setTimeout(() => setCopiedIp(false), 2500);
-    }
-  };
+  // Terms agreed: Default is true (YES)
+  const [termsAgreed, setTermsAgreed] = useState<boolean>(() => isTermsAgreedSaved());
 
   const secondInputRef = useRef<HTMLInputElement>(null);
 
-  // Focus second input when revealed
+  // Auto-focus second field when revealed
   useEffect(() => {
     if (showSecondField && secondInputRef.current) {
       secondInputRef.current.focus();
     }
   }, [showSecondField]);
 
-  // Magic Link cooldown timer
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (magicLinkCooldown > 0) {
-      interval = setInterval(() => {
-        setMagicLinkCooldown((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [magicLinkCooldown]);
-
-  // OTP cooldown timer
+  // Phone OTP cooldown timer
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (otpCooldown > 0) {
@@ -220,20 +165,18 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     return () => clearInterval(interval);
   }, [otpCooldown]);
 
-  // Signup OTP cooldown timer
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (signupOtpCooldown > 0) {
-      interval = setInterval(() => {
-        setSignupOtpCooldown((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [signupOtpCooldown]);
-
   const resetMessages = () => {
     setError(null);
     setInfoMessage(null);
+  };
+
+  const handleToggleTerms = () => {
+    const next = !termsAgreed;
+    setTermsAgreed(next);
+    saveTermsAgreed(next);
+    if (next && error && error.includes('Terms')) {
+      setError(null);
+    }
   };
 
   // --- 1. GOOGLE SIGN IN ---
@@ -253,20 +196,17 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           msg.includes('12501') ||
           msg.toLowerCase().includes('closed')
         ) {
-          // User simply closed the Google account selector
           return;
         }
         setError(msg || 'Google Sign-In failed. Please try again.');
       } else {
         saveTermsAgreed(true);
         if (res.user) {
-          // Native device login succeeded immediately with zero web redirects
           const userPhone = res.user.phone || '';
           const userName = res.user.name || res.user.user_metadata?.full_name || 'Customer';
           const userEmail = res.user.email || '';
           onAuthSuccess(userPhone, userName, userEmail, res.user);
-          const target = getPostAuthRedirect();
-          navigate(target, { replace: true });
+          navigate(getPostAuthRedirect(), { replace: true });
         }
       }
     } catch (e: unknown) {
@@ -277,11 +217,10 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
   };
 
-  // --- 2. SEND PHONE OTP VIA FIREBASE (WITH DATABASE EXISTENCE CHECK) ---
+  // --- 2. SEND PHONE OTP ---
   const handleSendPhoneOtp = async () => {
     resetMessages();
     let rawDigits = identifier.replace(/[^0-9]/g, '');
-    // If autofill added 0 at start making it 11 digits, don't count first zero
     if (rawDigits.length === 11 && rawDigits.startsWith('0')) {
       rawDigits = rawDigits.slice(1);
     }
@@ -293,114 +232,19 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
 
     setIsLoading(true);
-
-    // Rule: Check if user is present in database BEFORE sending OTP
-    let userExists = false;
-    const formattedE164 = `+91${clean10}`;
-
-    // 1. Check server profile resolver (checks serverProfileStore, user_profiles, orders)
     try {
-      const resolveRes = await fetch(apiUrl('/api/auth/resolve-phone-user'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: clean10 })
-      });
-
-      if (resolveRes.ok) {
-        const resolveData = await resolveRes.json().catch(() => null);
-        if (resolveData?.exists) {
-          userExists = true;
-        }
-      }
-    } catch (e) {
-      console.warn('[Phone resolve check error]:', e);
-    }
-
-    // 2. Direct Supabase user_profiles table check fallback
-    if (!userExists) {
-      try {
-        const canonicalPhoneEmail = `p${clean10}@girirajpower.internal`;
-        const canonicalLegacyEmail = `phone_${clean10}@girirajpower.internal`;
-        const { data: profiles } = await supabase
-          .from('user_profiles')
-          .select('id, user_id, phone, full_name, email')
-          .or(`phone.eq.${formattedE164},phone.eq.${clean10},phone.ilike.%${clean10}%,email.eq.${canonicalPhoneEmail},email.eq.${canonicalLegacyEmail}`)
-          .limit(1);
-
-        if (profiles && profiles.length > 0) {
-          userExists = true;
-        }
-      } catch (sbErr) {
-        console.warn('[Supabase user_profiles check error]:', sbErr);
-      }
-    }
-
-    // 3. Direct Supabase orders table check fallback
-    if (!userExists) {
-      try {
-        const { data: orderRows } = await supabase
-          .from('orders')
-          .select('id, user_id, phone')
-          .or(`phone.eq.${clean10},phone.eq.${formattedE164},recipient_phone.eq.${clean10},recipient_phone.eq.${formattedE164}`)
-          .limit(1);
-
-        if (orderRows && orderRows.length > 0) {
-          userExists = true;
-        }
-      } catch (ordErr) {
-        console.warn('[Orders check error]:', ordErr);
-      }
-    }
-
-    // 4. Local storage cached profile check fallback
-    if (!userExists) {
-      try {
-        const rawLocal = localStorage.getItem('smartrun_user_profile') || localStorage.getItem('giriraj_user_profile');
-        if (rawLocal) {
-          const parsed = JSON.parse(rawLocal);
-          const pDigits = (parsed?.phone || '').replace(/\D/g, '').slice(-10);
-          if (pDigits === clean10) {
-            userExists = true;
-          }
-        }
-      } catch {}
-    }
-
-    // STRICT CHECK: If user is not present in our database, do NOT send OTP!
-    if (!userExists) {
-      setIsLoading(false);
-      setError('No account found with this mobile number. Please create an account first to continue.');
-      return;
-    }
-
-    try {
-      const res = await sendFirebasePhoneOtp(clean10, 'recaptcha-container');
+      const res = await sendFirebasePhoneOtp(clean10);
 
       if (!res.success) {
-        if (res.isBillingRequired) {
-          setError(
-            res.error ||
-              'Firebase Phone Auth requires the project to be upgraded to the Blaze plan (pay-as-you-go) in Firebase Console, or test phone numbers configured under Authentication > Sign-in method.'
-          );
-        } else {
-          setError(res.error || 'Failed to send OTP to mobile number. Please try again.');
-        }
+        setError(res.error || 'Failed to send OTP to mobile number. Please try again.');
       } else {
         const phone = res.formattedPhone || formatToE164Phone(clean10);
         setSentToPhone(phone);
         setOtpSent(true);
         setShowSecondField(true);
-        setOtpCooldown(60);
-
-        if (res.provider === 'fast2sms') {
-          setInfoMessage(
-            res.message || `OTP sent via Fast2SMS to ${phone}. Enter the 6-digit code below.`
-          );
-          setOtpCode('');
-        } else {
-          setInfoMessage(res.message || `OTP sent to ${phone}. Enter the 6-digit code below.`);
-          setOtpCode('');
-        }
+        setOtpCooldown(30);
+        setInfoMessage(res.message || `OTP sent to ${phone}. Enter the 6-digit code below.`);
+        setOtpCode('');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to send OTP.';
@@ -410,7 +254,173 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
   };
 
-  // --- 2b. PASSWORD SIGN IN (MOBILE NUMBER) ---
+  // --- 3. VERIFY PHONE OTP & DETECT IF NEW OR EXISTING USER ---
+  const handleVerifyPhoneOtp = async () => {
+    resetMessages();
+    const phone = sentToPhone || formatToE164Phone(identifier);
+    const cleanOtp = otpCode.replace(/\D/g, '');
+    const clean10 = phone.replace(/\D/g, '').slice(-10);
+
+    if (!cleanOtp || cleanOtp.length < 6) {
+      setError('Please enter the complete 6-digit verification code.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // 1. Verify OTP with server-authoritative backend
+      const result = await verifyFirebaseOtpAndBridgeToSupabase(cleanOtp, undefined, phone);
+
+      if (!result.success) {
+        setError(result.error || 'The OTP code is invalid or has expired. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Check if this mobile number already exists on the server (checks both Supabase & Firebase)
+      let existingProfile: any = null;
+      try {
+        const resolveRes = await fetch(apiUrl('/api/auth/resolve-phone-user'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: clean10 })
+        });
+        if (resolveRes.ok) {
+          const rData = await resolveRes.json().catch(() => null);
+          if (rData?.exists && rData?.profile) {
+            existingProfile = rData.profile;
+          }
+        }
+      } catch (checkErr) {
+        console.debug('[User check notice]:', checkErr);
+      }
+
+      // If user profile has an actual name saved (not empty / generic placeholder) -> Existing user!
+      const hasSavedName =
+        existingProfile?.full_name &&
+        !existingProfile.full_name.toLowerCase().startsWith('customer') &&
+        !existingProfile.full_name.toLowerCase().startsWith('giriraj') &&
+        !existingProfile.full_name.toLowerCase().startsWith('p9') &&
+        !existingProfile.full_name.toLowerCase().startsWith('phone_');
+
+      if (hasSavedName) {
+        // EXISTING USER FOUND -> Sign in immediately!
+        saveTermsAgreed(true);
+        const finalName = existingProfile.full_name;
+        const finalEmail = existingProfile.email || '';
+        onAuthSuccess(`+91${clean10}`, finalName, finalEmail, result.user);
+        navigate(getPostAuthRedirect(), { replace: true });
+      } else {
+        // NEW USER (not found in server) -> Go to next page to ask name, email (optional), password (optional)
+        setOnboardingPhone(clean10);
+        setOnboardingName(result.profile?.name && !result.profile.name.toLowerCase().startsWith('giriraj') ? result.profile.name : '');
+        setOnboardingEmail(result.profile?.email && !result.profile.email.includes('@girirajpower.internal') ? result.profile.email : '');
+        setAuthStep('onboarding_phone');
+        resetMessages();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to verify OTP.';
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- 4. SAVE NEW USER PROFILE (PHONE ONBOARDING NEXT PAGE) ---
+  const handleSavePhoneOnboarding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetMessages();
+
+    const cleanName = onboardingName.trim();
+    if (!cleanName) {
+      setError('Please enter your full name.');
+      return;
+    }
+
+    const clean10 = onboardingPhone.replace(/\D/g, '').slice(-10);
+    const formattedPhone = `+91${clean10}`;
+    const cleanEmail = onboardingEmail.trim().toLowerCase();
+
+    setIsLoading(true);
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || `uid_${clean10}`;
+
+      // 1. If user provided optional password, save it in Supabase Auth
+      if (onboardingPassword && onboardingPassword.length >= 6) {
+        try {
+          await supabase.auth.updateUser({ password: onboardingPassword });
+        } catch (pwErr) {
+          console.warn('[Optional password save]:', pwErr);
+        }
+      }
+
+      // 2. Save profile in Supabase
+      const finalizedProfile: UserProfile = {
+        id: currentUserId,
+        phone: formattedPhone,
+        phoneVerified: true,
+        name: cleanName,
+        email: cleanEmail || undefined,
+        emailVerified: Boolean(cleanEmail)
+      };
+
+      saveUserProfile(finalizedProfile, `uid_${currentUserId}`);
+      saveUserProfile(finalizedProfile, `phone_${clean10}`);
+
+      try {
+        await supabase.from('user_profiles').upsert(
+          {
+            user_id: currentUserId,
+            phone: formattedPhone,
+            full_name: cleanName,
+            email: cleanEmail || null,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: 'user_id' }
+        );
+      } catch (sbErr) {
+        console.warn('[Supabase user_profiles upsert]:', sbErr);
+      }
+
+      // 3. Synchronize to backend server (updates Supabase and Firebase Firestore)
+      fetch(apiUrl('/api/user-profile'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: currentUserId,
+          phone: formattedPhone,
+          full_name: cleanName,
+          email: cleanEmail || null
+        })
+      }).catch(() => {});
+
+      // 4. Cross-share with Firebase on backend server
+      fetch(apiUrl('/api/auth/sync-user-to-firebase'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUserId,
+          profile: {
+            phone: formattedPhone,
+            full_name: cleanName,
+            email: cleanEmail || undefined
+          }
+        })
+      }).catch(() => {});
+
+      saveTermsAgreed(true);
+      onAuthSuccess(formattedPhone, cleanName, cleanEmail || undefined, authData?.user);
+      navigate(getPostAuthRedirect(), { replace: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save profile.';
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- 5. PASSWORD SIGN IN (MOBILE NUMBER) ---
   const handlePhonePasswordLogin = async (clean10: string) => {
     if (!password) {
       setError('Please enter your account password.');
@@ -431,11 +441,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
 
       if (resolveRes && resolveRes.ok) {
         const resolveData = await resolveRes.json().catch(() => null);
-        if (!resolveData?.exists) {
-          setError('No account found with this mobile number. Please create an account first.');
-          setIsLoading(false);
-          return;
-        }
         if (resolveData?.profile?.email && !resolveData.profile.email.includes('@girirajpower.internal')) {
           targetEmail = resolveData.profile.email;
         }
@@ -447,7 +452,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         password: password
       });
 
-      // If sign in with resolved email or p-canonical failed, try secondary canonical variants
       if (signInErr) {
         const candidates = [`p${clean10}@girirajpower.internal`, `phone_${clean10}@girirajpower.internal`];
         for (const candidateEmail of candidates) {
@@ -466,13 +470,9 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       }
 
       if (signInErr) {
-        setError(signInErr.message || 'Incorrect password for this mobile number.');
+        setError('Incorrect password or account not found. Please sign in with SMS OTP instead.');
       } else if (data?.user) {
-        const resolvedName =
-          userFullName ||
-          data.user.user_metadata?.full_name ||
-          data.user.user_metadata?.name ||
-          'Customer';
+        const resolvedName = userFullName || data.user.user_metadata?.full_name || 'Customer';
         const formattedPhone = `+91${clean10}`;
         const finalEmail = targetEmail.includes('@girirajpower.internal') ? undefined : targetEmail;
 
@@ -488,73 +488,15 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
   };
 
-  // --- 3. VERIFY PHONE OTP VIA FIREBASE & BRIDGE TO SAME SUPABASE ACCOUNT ---
-  const handleVerifyPhoneOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    resetMessages();
-    const phone = sentToPhone || formatToE164Phone(identifier);
-    const cleanOtp = otpCode.replace(/\D/g, '');
-
-    if (!cleanOtp || cleanOtp.length < 6) {
-      setError('Please enter the complete 6-digit verification code received on your mobile.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const result = await verifyFirebaseOtpAndBridgeToSupabase(cleanOtp, undefined, phone);
-
-      if (!result.success) {
-        setError(result.error || 'The OTP code is invalid or has expired. Please try again.');
-      } else {
-        const profile = result.profile;
-        const rawName = profile?.name || '';
-        const userFullName =
-          rawName && !rawName.toLowerCase().startsWith('giriraj member') && !rawName.toLowerCase().startsWith('giriraj power')
-            ? rawName
-            : 'Customer';
-        const finalPhone = profile?.phone || phone;
-        const finalEmail = profile?.email || '';
-
-        saveTermsAgreed(true);
-        navigate(getPostAuthRedirect(), { replace: true });
-        onAuthSuccess(finalPhone, userFullName, finalEmail, result.user);
-
-        if (finalEmail) {
-          sendLoginNotificationEmail({
-            email: finalEmail,
-            name: userFullName,
-            userId: result.user?.id || '',
-            loginMethod: 'Mobile Number & Firebase Phone OTP',
-            force: false,
-          }).catch((e) => console.debug('[Security Alert Note]:', e));
-        }
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to verify OTP.';
-      setError(msg);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // --- 4. PASSWORD SIGN IN (EMAIL) ---
-  const handlePasswordLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    resetMessages();
-
-    const cleanEmail = identifier.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-
+  // --- 6. PASSWORD SIGN IN (EMAIL) ---
+  const handleEmailSignIn = async (cleanEmail: string) => {
     if (!password) {
       setError('Please enter your password.');
       return;
     }
 
     setIsLoading(true);
+    resetMessages();
     try {
       const { data, error: loginError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
@@ -562,25 +504,55 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       });
 
       if (loginError) {
-        setError(loginError.message || 'Invalid email or password.');
+        // If login failed due to invalid credentials, check if user exists on server
+        let userExistsOnServer = false;
+        try {
+          const res = await fetch(apiUrl('/api/auth/resolve-google-user'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cleanEmail })
+          });
+          if (res.ok) {
+            const d = await res.json().catch(() => null);
+            if (d?.exists && d?.profile?.full_name) {
+              userExistsOnServer = true;
+            }
+          }
+        } catch {}
+
+        if (userExistsOnServer) {
+          setError('Incorrect password for this email. Please check your password or reset it.');
+        } else {
+          // NEW USER via EMAIL (not found in server) -> Go to next page to ask name, mobile number, and save
+          setOnboardingEmailAddr(cleanEmail);
+          setOnboardingEmailPw(password);
+          setAuthStep('onboarding_email');
+          resetMessages();
+        }
       } else if (data.user) {
+        // Existing user logged in successfully!
         const userFullName =
           data.user.user_metadata?.full_name ||
           data.user.user_metadata?.name ||
           cleanEmail.split('@')[0] ||
-          'SmartRun Customer';
+          'Customer';
         const finalPhone = data.user.phone || data.user.user_metadata?.phone || '';
+
+        // Cross-share with Firebase in background
+        fetch(apiUrl('/api/user-profile'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: data.user.id,
+            email: cleanEmail,
+            full_name: userFullName,
+            phone: finalPhone || null
+          })
+        }).catch(() => {});
 
         saveTermsAgreed(true);
         navigate(getPostAuthRedirect(), { replace: true });
         onAuthSuccess(finalPhone, userFullName, cleanEmail, data.user);
-        sendLoginNotificationEmail({
-          email: cleanEmail,
-          name: userFullName,
-          userId: data.user.id,
-          loginMethod: 'Email & Password',
-          force: true
-        }).catch((e) => console.debug('[Security Alert Trigger Note]:', e));
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Invalid email or password.';
@@ -590,7 +562,119 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
   };
 
-  // --- 5. HYBRID PRIMARY SUBMIT HANDLER ---
+  // --- 7. SAVE NEW USER PROFILE (EMAIL ONBOARDING NEXT PAGE) ---
+  const handleSaveEmailOnboarding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetMessages();
+
+    const cleanName = onboardingEmailName.trim();
+    if (!cleanName) {
+      setError('Please enter your full name.');
+      return;
+    }
+
+    const clean10 = onboardingEmailPhone.replace(/\D/g, '').slice(-10);
+    if (!clean10 || clean10.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    if (!onboardingEmailPw || onboardingEmailPw.length < 6) {
+      setError('Please enter a password with at least 6 characters.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const formattedPhone = `+91${clean10}`;
+      const cleanEmail = onboardingEmailAddr.trim().toLowerCase();
+
+      // 1. Sign up user in Supabase
+      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: onboardingEmailPw,
+        options: {
+          data: {
+            full_name: cleanName,
+            phone: formattedPhone
+          }
+        }
+      });
+
+      if (signUpErr && !signUpErr.message.includes('already registered')) {
+        setError(signUpErr.message || 'Failed to create account.');
+        setIsLoading(false);
+        return;
+      }
+
+      const userId = signUpData?.user?.id || `uid_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+      // 2. Save profile in Supabase
+      const finalizedProfile: UserProfile = {
+        id: userId,
+        phone: formattedPhone,
+        phoneVerified: true,
+        name: cleanName,
+        email: cleanEmail,
+        emailVerified: true
+      };
+
+      saveUserProfile(finalizedProfile, `uid_${userId}`);
+      saveUserProfile(finalizedProfile, `phone_${clean10}`);
+
+      try {
+        await supabase.from('user_profiles').upsert(
+          {
+            user_id: userId,
+            phone: formattedPhone,
+            full_name: cleanName,
+            email: cleanEmail,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: 'user_id' }
+        );
+      } catch (sbErr) {
+        console.warn('[Supabase user_profiles upsert]:', sbErr);
+      }
+
+      // 3. Synchronize to backend server (updates Supabase and Firebase Firestore)
+      fetch(apiUrl('/api/user-profile'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          phone: formattedPhone,
+          full_name: cleanName,
+          email: cleanEmail
+        })
+      }).catch(() => {});
+
+      // 4. Cross-share with Firebase on backend server
+      fetch(apiUrl('/api/auth/sync-user-to-firebase'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userId,
+          profile: {
+            phone: formattedPhone,
+            full_name: cleanName,
+            email: cleanEmail
+          }
+        })
+      }).catch(() => {});
+
+      saveTermsAgreed(true);
+      onAuthSuccess(formattedPhone, cleanName, cleanEmail, signUpData?.user);
+      navigate(getPostAuthRedirect(), { replace: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save account.';
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- 8. PRIMARY FORM SUBMIT DISPATCHER ---
   const handlePrimarySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     resetMessages();
@@ -600,366 +684,38 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       return;
     }
 
-    // If identifier was autofilled with 11 digits starting with 0, clean the leading zero
-    let cleanId = identifier.trim();
-    if (!cleanId.includes('@')) {
-      const digits = cleanId.replace(/[^0-9]/g, '');
-      if (digits.length === 11 && digits.startsWith('0')) {
-        cleanId = digits.slice(1);
-        setIdentifier(cleanId);
-      }
-    }
-
+    let cleanId = cleanAutofillPhone(identifier.trim());
     const isPhone = isPhoneInput(cleanId);
 
     if (isPhone) {
-      // Mobile Number Flow
       const clean10 = cleanId.replace(/\D/g, '').slice(-10);
       if (phoneUsePassword) {
         await handlePhonePasswordLogin(clean10);
       } else if (!otpSent || !showSecondField) {
         await handleSendPhoneOtp();
       } else {
-        await handleVerifyPhoneOtp(e);
+        await handleVerifyPhoneOtp();
       }
     } else {
-      // Email Flow
-      const cleanEmail = identifier.trim().toLowerCase();
+      const cleanEmail = cleanId.toLowerCase();
       if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-        setError('Please enter a valid email address or 10-digit mobile number.');
+        setError('Please enter a valid mobile number or email address.');
         return;
       }
-
       if (!showSecondField) {
-        // Reveal password input line
         setShowSecondField(true);
-        return;
-      }
-
-      // Password input is visible -> submit login
-      if (!password) {
-        setError('Please enter your password.');
-        return;
-      }
-
-      await handlePasswordLogin(e);
-    }
-  };
-
-  // --- 6. PASSWORD SIGN UP ---
-  const handlePasswordSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    resetMessages();
-
-    if (!termsAgreed) {
-      setError('Please agree to the Terms of service and Privacy policy to continue.');
-      return;
-    }
-
-    const finalFullName = signupName.trim();
-    if (!finalFullName) {
-      setError('Please enter your full name.');
-      return;
-    }
-
-    const cleanPhone = signupPhone.replace(/\D/g, '').slice(-10);
-    if (!cleanPhone || cleanPhone.length !== 10) {
-      setError('Please enter a valid 10-digit mobile number.');
-      return;
-    }
-    const formattedPhone = `+91${cleanPhone}`;
-
-    const cleanEmail = email.trim().toLowerCase();
-    if (cleanEmail && (!cleanEmail.includes('@') || !cleanEmail.includes('.'))) {
-      setError('Please enter a valid email address, or leave it blank.');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-
-    setIsLoading(true);
-
-    // Rule: Check if account already exists with this mobile number
-    try {
-      const checkRes = await fetch(apiUrl('/api/auth/resolve-phone-user'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: cleanPhone })
-      }).catch(() => null);
-
-      if (checkRes && checkRes.ok) {
-        const checkData = await checkRes.json().catch(() => null);
-        if (checkData?.exists && checkData?.profile) {
-          setError('An account with this mobile number already exists. Please sign in instead.');
-          setIsLoading(false);
-          return;
-        }
-      }
-    } catch {
-      // Continue if network check fails
-    }
-
-    const canonicalAuthEmail = cleanEmail || `p${cleanPhone}@girirajpower.internal`;
-
-    try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: canonicalAuthEmail,
-        password: password,
-        options: {
-          emailRedirectTo: window.location.origin,
-          data: {
-            full_name: finalFullName,
-            phone: formattedPhone,
-            contact_number: formattedPhone,
-            ...(cleanEmail ? { email: cleanEmail } : {})
-          }
-        },
-      });
-
-      if (signUpError) {
-        setError(signUpError.message || 'Failed to create account.');
-      } else if (data.session && data.user) {
-        // Upsert user_profiles immediately with full details
-        try {
-          await supabase.from('user_profiles').upsert(
-            {
-              user_id: data.user.id,
-              full_name: finalFullName,
-              email: cleanEmail || null,
-              phone: formattedPhone,
-              updated_at: new Date().toISOString()
-            },
-            { onConflict: 'user_id' }
-          );
-        } catch {}
-
-        // Push to server-side profile store
-        fetch(apiUrl('/api/user-profile'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: data.user.id,
-            full_name: finalFullName,
-            email: cleanEmail || null,
-            phone: formattedPhone
-          })
-        }).catch(() => {});
-
-        saveTermsAgreed(true);
-        navigate(getPostAuthRedirect(), { replace: true });
-        onAuthSuccess(formattedPhone, finalFullName, cleanEmail || undefined, data.user);
-        if (cleanEmail) {
-          sendLoginNotificationEmail({
-            email: cleanEmail,
-            name: finalFullName,
-            userId: data.user.id,
-            loginMethod: 'New Account Creation & Password Sign-in',
-            force: true
-          }).catch((e) => console.debug('[Security Alert Trigger Note]:', e));
-        }
       } else {
-        if (data.user) {
-          try {
-            await supabase.from('user_profiles').upsert(
-              {
-                user_id: data.user.id,
-                full_name: finalFullName,
-                email: cleanEmail || null,
-                phone: formattedPhone,
-                updated_at: new Date().toISOString()
-              },
-              { onConflict: 'user_id' }
-            );
-          } catch {}
-        }
-        if (cleanEmail) {
-          setInfoMessage(`Account created! We have sent a confirmation link to ${cleanEmail}. You can also sign in with your mobile number.`);
-        } else {
-          setInfoMessage('Account created successfully! Please sign in with your mobile number.');
-        }
-        setMode('signin');
-        setIdentifier(cleanPhone);
+        await handleEmailSignIn(cleanEmail);
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create account.';
-      setError(msg);
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  // --- 6b. SEND OTP FOR SIGNUP VERIFICATION ---
-  const handleSendSignupPhoneOtp = async () => {
-    resetMessages();
-    const finalFullName = signupName.trim();
-    if (!finalFullName) {
-      setError('Please enter your full name first.');
-      return;
-    }
-
-    const cleanPhone = signupPhone.replace(/\D/g, '').slice(-10);
-    if (!cleanPhone || cleanPhone.length !== 10) {
-      setError('Please enter a valid 10-digit mobile number.');
-      return;
-    }
-
-    setIsLoading(true);
-
-    // Rule: Check if account already exists with this mobile number
-    try {
-      const checkRes = await fetch(apiUrl('/api/auth/resolve-phone-user'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: cleanPhone })
-      }).catch(() => null);
-
-      if (checkRes && checkRes.ok) {
-        const checkData = await checkRes.json().catch(() => null);
-        if (checkData?.exists && checkData?.profile) {
-          setError('An account with this mobile number already exists. Please sign in instead.');
-          setIsLoading(false);
-          return;
-        }
-      }
-    } catch {
-      // Continue
-    }
-
-    try {
-      const res = await sendFirebasePhoneOtp(cleanPhone, 'recaptcha-container');
-      if (!res.success) {
-        setError(res.error || 'Failed to send OTP to mobile number. Please try again.');
-      } else {
-        const phone = res.formattedPhone || formatToE164Phone(cleanPhone);
-        setSignupOtpSent(true);
-        setSignupOtpCooldown(60);
-        setInfoMessage(`Verification OTP sent to ${phone}. Enter the 6-digit code below to create your account.`);
-        setSignupOtpCode('');
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to send OTP.';
-      setError(msg);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // --- 6c. VERIFY OTP & CREATE ACCOUNT ---
-  const handleVerifySignupPhoneOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    resetMessages();
-
-    if (!termsAgreed) {
-      setError('Please agree to the Terms of service and Privacy policy to continue.');
-      return;
-    }
-
-    const finalFullName = signupName.trim();
-    if (!finalFullName) {
-      setError('Please enter your full name.');
-      return;
-    }
-
-    const cleanPhone = signupPhone.replace(/\D/g, '').slice(-10);
-    if (!cleanPhone || cleanPhone.length !== 10) {
-      setError('Please enter a valid 10-digit mobile number.');
-      return;
-    }
-    const formattedPhone = `+91${cleanPhone}`;
-
-    const cleanEmail = email.trim().toLowerCase();
-    if (cleanEmail && (!cleanEmail.includes('@') || !cleanEmail.includes('.'))) {
-      setError('Please enter a valid email address, or leave it blank.');
-      return;
-    }
-
-    const cleanOtp = signupOtpCode.replace(/\D/g, '');
-    if (!cleanOtp || cleanOtp.length < 6) {
-      setError('Please enter the complete 6-digit verification code received on your mobile.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const result = await verifyFirebaseOtpAndBridgeToSupabase(cleanOtp, finalFullName, formattedPhone);
-
-      if (!result.success) {
-        setError(result.error || 'The OTP code is invalid or has expired. Please try again.');
-        setIsLoading(false);
-        return;
-      }
-
-      const targetUserId = result.user?.id;
-      if (targetUserId) {
-        try {
-          await supabase.from('user_profiles').upsert(
-            {
-              user_id: targetUserId,
-              full_name: finalFullName,
-              email: cleanEmail || null,
-              phone: formattedPhone,
-              updated_at: new Date().toISOString()
-            },
-            { onConflict: 'user_id' }
-          );
-        } catch {}
-
-        fetch(apiUrl('/api/user-profile'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: targetUserId,
-            full_name: finalFullName,
-            email: cleanEmail || null,
-            phone: formattedPhone
-          })
-        }).catch(() => {});
-      }
-
-      // If user also set an optional password, update it in Supabase Auth
-      if (password && password.length >= 6) {
-        try {
-          await supabase.auth.updateUser({ password });
-        } catch (pwErr) {
-          console.warn('[Optional Password Set Notice]:', pwErr);
-        }
-      }
-
-      saveTermsAgreed(true);
-      navigate(getPostAuthRedirect(), { replace: true });
-      onAuthSuccess(formattedPhone, finalFullName, cleanEmail || undefined, result.user);
-
-      if (cleanEmail) {
-        sendLoginNotificationEmail({
-          email: cleanEmail,
-          name: finalFullName,
-          userId: targetUserId || '',
-          loginMethod: 'New Account Creation via Verified Mobile OTP',
-          force: true
-        }).catch((e) => console.debug('[Security Alert Trigger Note]:', e));
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to verify OTP and create account.';
-      setError(msg);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // --- 7. FORGOT PASSWORD ---
+  // --- 9. FORGOT PASSWORD HANDLER ---
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     resetMessages();
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = forgotEmail.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
       setError('Please enter your account email.');
       return;
@@ -989,90 +745,43 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
   };
 
-  // --- 8. MAGIC LINK (1-CLICK PASSWORDLESS) ---
-  const handleSendMagicLink = async () => {
-    resetMessages();
-
-    if (!termsAgreed) {
-      setError('Please agree to the Terms of service and Privacy policy to continue.');
-      return;
-    }
-
-    const cleanEmail = (identifier || email).trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setError('Please enter a valid email address above to receive a magic link.');
-      return;
-    }
-
-    if (magicLinkCooldown > 0) return;
-
-    setIsMagicLoading(true);
-    try {
-      const isApp = isAndroidAppEnvironment();
-      const redirectTo = isApp
-        ? 'https://www.smartrun.in/login?target=app&source=android_app'
-        : (typeof window !== 'undefined' ? `${window.location.origin}/login?client=web` : undefined);
-
-      const { error: magicError } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
-        options: {
-          emailRedirectTo: redirectTo,
-        },
-      });
-
-      if (magicError) {
-        setError(magicError.message || 'Failed to send magic link.');
-      } else {
-        setMagicLinkCooldown(60);
-        setInfoMessage(`Magic link sent to ${cleanEmail}! Check your inbox.`);
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to send magic link.';
-      setError(msg);
-    } finally {
-      setIsMagicLoading(false);
-    }
-  };
-
-  const isAnyLoading = isLoading || isMagicLoading || isGoogleLoading;
+  const isAnyLoading = isLoading || isGoogleLoading;
   const isPhone = isPhoneInput(identifier);
 
   return (
     <div className="min-h-screen bg-white flex flex-col justify-center items-center px-4 py-8 sm:py-12">
       <SEOHead
-        title={
-          mode === 'signup'
-            ? 'Create Account & Register | SmartRun'
-            : mode === 'forgot'
-            ? 'Reset Password | SmartRun'
-            : 'Sign In / Register | SmartRun Express Electricals'
-        }
-        description="Sign in to your SmartRun account with mobile OTP or email to track express delivery orders, manage addresses, and access wholesale pricing."
+        title="Sign In / Register | SmartRun Express Electricals"
+        description="Sign in to your SmartRun account with mobile OTP, email, or Google to track express delivery orders, manage addresses, and access wholesale pricing."
         keywords="smartrun login, smartrun signup, electrical depot account, mobile otp login"
       />
-      {/* Main Centered Login Container (Borderless Full-Page Look) */}
+
+      {/* Main Centered Login Container */}
       <div className="w-full max-w-md bg-white border-0 shadow-none p-4 sm:p-6 space-y-5">
-        {/* Top Back Navigation Arrow Button (returns to storefront on website only; hidden on native app so users log in first) */}
+        {/* Top Back Navigation Arrow Button */}
         {!isNativeApp && (
           <div className="w-full flex items-center justify-between -mb-2">
             <button
               type="button"
               onClick={() => {
-                if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+                if (authStep !== 'primary') {
+                  setAuthStep('primary');
+                  resetMessages();
+                } else if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
                   navigate(-1);
                 } else {
                   navigate('/');
                 }
               }}
               className="p-2 -ml-2 text-slate-700 hover:text-black hover:bg-slate-100 rounded-full transition-colors cursor-pointer flex items-center gap-1.5 active:scale-95 text-xs font-bold"
-              title="Back to store"
+              title="Back"
             >
               <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
-              <span>Store</span>
+              <span>{authStep !== 'primary' ? 'Back' : 'Store'}</span>
             </button>
           </div>
         )}
-        
+
         {/* Brand Logo & Name Header */}
         <div className="flex flex-col items-center justify-center text-center space-y-2">
           <div>
@@ -1096,20 +805,24 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           </div>
         </div>
 
-        {/* Native Mobile App Onboarding Banner */}
-        {isNativeApp && (
-          <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-3 text-center shadow-2xs">
-            <p className="text-xs font-semibold text-amber-950 leading-relaxed">
-              Welcome to SmartRun App! Please sign in to explore products, wholesale prices &amp; enjoy 60-min express delivery in Kolkata.
-            </p>
-          </div>
-        )}
-
-        {/* Clean Login Heading */}
+        {/* Clean Heading */}
         <div className="text-center pt-1 pb-1">
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-            {mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create Account' : 'Reset Password'}
+            {authStep === 'primary' && 'Sign in'}
+            {authStep === 'onboarding_phone' && 'Complete Your Profile'}
+            {authStep === 'onboarding_email' && 'Complete Your Profile'}
+            {authStep === 'forgot' && 'Reset Password'}
           </h1>
+          {authStep === 'onboarding_phone' && (
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              Mobile number +91 {onboardingPhone} verified. Fill details to finish.
+            </p>
+          )}
+          {authStep === 'onboarding_email' && (
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              New to SmartRun? Fill in your details to create your account.
+            </p>
+          )}
         </div>
 
         {/* Feedback Messages */}
@@ -1121,67 +834,18 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         )}
 
         {error && (
-          error.includes('Fast2SMS Error 414') || error.includes('blacklisted') || error.includes('34.34.254.4') ? (
-            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs space-y-2.5 animate-in fade-in leading-relaxed shadow-sm">
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-bold text-amber-950 text-sm">Fast2SMS Error 414: IP Whitelist Required</h4>
-                  <p className="text-amber-800 text-xs mt-0.5">
-                    Fast2SMS blocked OTP dispatch because cloud server IP <code className="font-mono font-bold bg-amber-200/60 px-1 py-0.5 rounded text-amber-950">34.34.254.4</code> is blocked by Fast2SMS Dev API IP security filter.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 flex items-center justify-between gap-2">
-                <div>
-                  <span className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider block">Server Public Egress IP</span>
-                  <code className="text-xs font-mono font-bold text-slate-800">34.34.254.4</code>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCopyIp}
-                  className="px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-semibold text-[11px] flex items-center gap-1.5 transition-colors border border-amber-300/60"
-                >
-                  {copiedIp ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-amber-700" />}
-                  <span>{copiedIp ? 'Copied IP' : 'Copy IP'}</span>
-                </button>
-              </div>
-
-              <div className="text-[11px] text-amber-900 space-y-1 pl-1">
-                <p className="font-bold text-amber-950">Steps to fix in Fast2SMS (30 seconds):</p>
-                <ol className="list-decimal list-inside space-y-0.5 text-amber-800">
-                  <li>Log in to Fast2SMS Dashboard &rarr; <strong>Dev API</strong> &rarr; <strong>SECURITY</strong> tab.</li>
-                  <li>Turn <strong>OFF / Disable</strong> the <strong>IP Whitelist</strong> option (or add <code className="bg-amber-100 px-1 rounded font-mono font-semibold">34.34.254.4</code>).</li>
-                  <li>Return here and tap <strong>Get OTP</strong> again.</li>
-                </ol>
-              </div>
-
-              <div className="pt-1 border-t border-amber-200/80 flex items-center justify-between">
-                <a
-                  href="https://www.fast2sms.com/dashboard/dev-api"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-900 hover:text-amber-950 underline"
-                >
-                  <span>Open Fast2SMS Dev API Dashboard</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-            </div>
-          ) : (
-            <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold animate-in fade-in leading-relaxed">
-              {error}
-            </div>
-          )
+          <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold animate-in fade-in leading-relaxed">
+            {error}
+          </div>
         )}
 
-        {/* Authentication Forms */}
-        <div className="space-y-4">
-          
-          {/* 1. SIGN IN MODE (HYBRID EMAIL & MOBILE OTP) */}
-          {mode === 'signin' && (
+        {/* =========================================================================
+            VIEW 1: PRIMARY LOGIN FORM (HYBRID MOBILE OTP / EMAIL / PASSWORD)
+           ========================================================================= */}
+        {authStep === 'primary' && (
+          <div className="space-y-3.5">
             <form onSubmit={handlePrimarySubmit} className="space-y-4">
+              {/* Field 1: Mobile Number or Email */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
                   MOBILE NUMBER / EMAIL
@@ -1199,7 +863,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                     value={identifier}
                     onChange={(e) => {
                       let val = e.target.value;
-                      // When autofill adds 0 at the start of an 11-digit number, don't count the first zero
                       if (!val.includes('@')) {
                         const digits = val.replace(/[^0-9]/g, '');
                         if (digits.length === 11 && digits.startsWith('0')) {
@@ -1212,17 +875,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                         setOtpSent(false);
                         setShowSecondField(false);
                       }
-                    }}
-                    onPaste={(e) => {
-                      const pasted = e.clipboardData.getData('text');
-                      if (pasted && !pasted.includes('@')) {
-                        const digits = pasted.replace(/[^0-9]/g, '');
-                        if (digits.length === 11 && digits.startsWith('0')) {
-                          e.preventDefault();
-                          const cleaned = digits.slice(1);
-                          setIdentifier(cleaned);
-                          resetMessages();
-                        }
+                      if (!isPhoneInput(val) && val.includes('@')) {
+                        setShowSecondField(true);
                       }
                     }}
                     className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
@@ -1249,14 +903,14 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 </div>
               )}
 
-              {/* Refined Second Input: Appears according to user email or phone */}
+              {/* Second Field: SMS OTP or Password */}
               <div className={showSecondField ? 'space-y-1 block animate-in fade-in duration-200' : 'hidden'}>
                 <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  {isPhone && !phoneUsePassword ? 'SMS OTP Code' : 'Password'}
+                  {isPhone && !phoneUsePassword ? 'SMS OTP CODE' : 'PASSWORD'}
                 </label>
 
                 {isPhone && !phoneUsePassword ? (
-                  /* Mobile OTP Fill Functions */
+                  /* Mobile OTP Input */
                   <div>
                     <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
                       <KeyRound className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
@@ -1273,15 +927,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                           const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
                           setOtpCode(digits);
                           if (error) setError(null);
-                        }}
-                        onPaste={(e) => {
-                          e.preventDefault();
-                          const pasted = e.clipboardData.getData('text');
-                          const digits = pasted.replace(/[^0-9]/g, '').slice(0, 6);
-                          if (digits) {
-                            setOtpCode(digits);
-                            if (error) setError(null);
-                          }
                         }}
                         className="w-full bg-transparent py-2 text-sm font-semibold tracking-widest text-slate-900 placeholder:text-slate-400 focus:outline-none"
                         required={showSecondField && isPhone && !phoneUsePassword}
@@ -1358,7 +1003,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                       <button
                         type="button"
                         onClick={() => {
-                          setMode('forgot');
+                          setForgotEmail(identifier.includes('@') ? identifier : '');
+                          setAuthStep('forgot');
                           resetMessages();
                         }}
                         className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
@@ -1370,10 +1016,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 )}
               </div>
 
-              {/* Invisible Firebase Phone Auth reCAPTCHA mount */}
-              <div id="recaptcha-container" className="my-1" />
-
-              {/* Primary Action Button */}
+              {/* Primary Action Button (Sign In / Get OTP / Verify OTP) */}
               <button
                 type="submit"
                 disabled={isAnyLoading}
@@ -1382,7 +1025,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     {isPhone && !phoneUsePassword
-                      ? (otpSent ? 'Verifying OTP...' : 'Checking & Sending OTP...')
+                      ? (otpSent ? 'Verifying OTP...' : 'Sending OTP...')
                       : 'Signing In...'}
                   </span>
                 ) : isPhone && !phoneUsePassword ? (
@@ -1394,7 +1037,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   ) : (
                     <>
                       <LogIn className="w-4 h-4" />
-                      <span>Verify OTP & Sign In</span>
+                      <span>Verify OTP &amp; Continue</span>
                     </>
                   )
                 ) : (
@@ -1404,539 +1047,329 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   </>
                 )}
               </button>
-
-              {/* No account found quick CTA card */}
-              {error && error.toLowerCase().includes('no account found') && isPhone && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-2 animate-in fade-in duration-200">
-                  <p className="text-xs text-amber-950 font-semibold">
-                    No account found for this mobile number. Please create an account to get started.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const clean10 = identifier.replace(/[^0-9]/g, '').slice(-10);
-                      setSignupPhone(clean10);
-                      setMode('signup');
-                      resetMessages();
-                    }}
-                    className="w-full py-2.5 px-3 rounded-xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    <span>Create Account with +91 {identifier.replace(/[^0-9]/g, '').slice(-10)}</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Terms of Service & Privacy Policy Agreement (Inside Form) */}
-              <div className="pt-2 text-center">
-                <p className="text-xs text-slate-500 inline-flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    id="terms-agreed-tick"
-                    role="checkbox"
-                    aria-checked={termsAgreed}
-                    aria-label="Agree to terms of service and privacy policy"
-                    onClick={handleToggleTerms}
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
-                      termsAgreed
-                        ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
-                        : 'border-slate-300 bg-white hover:border-slate-400'
-                    }`}
-                  >
-                    {termsAgreed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                  </button>
-                  <span className="leading-tight">
-                    <span onClick={handleToggleTerms} className="cursor-pointer select-none">
-                      You agree to our{' '}
-                    </span>
-                    <Link
-                      to="/terms"
-                      className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
-                    >
-                      Terms of service
-                    </Link>
-                    {' '}and{' '}
-                    <Link
-                      to="/privacy"
-                      className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
-                    >
-                      Privacy policy
-                    </Link>
-                  </span>
-                </p>
-              </div>
             </form>
-          )}
 
-          {/* 2. SIGN UP MODE */}
-          {mode === 'signup' && (
-            <form
-              onSubmit={signupMethod === 'password' ? handlePasswordSignUp : handleVerifySignupPhoneOtp}
-              className="space-y-4"
-            >
-              {/* Field 1: FULL NAME */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  FULL NAME <span className="text-red-500 font-black">*</span>
-                </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                  <User className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={signupName}
-                    onChange={(e) => setSignupName(e.target.value)}
-                    className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Field 2: MOBILE NUMBER (MANDATORY WITH RED STAR) */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  MOBILE NUMBER <span className="text-red-500 font-black">*</span>
-                </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                  <Phone className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                  <span className="text-sm font-semibold text-slate-600 mr-2">+91</span>
-                  <input
-                    type="tel"
-                    placeholder="10-digit mobile number"
-                    value={signupPhone}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      setSignupPhone(val);
-                      if (signupOtpSent) {
-                        setSignupOtpSent(false);
-                        setSignupOtpCode('');
-                      }
-                    }}
-                    className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                    required
-                    maxLength={10}
-                  />
-                </div>
-              </div>
-
-              {/* Field 3: EMAIL ADDRESS (OPTIONAL) */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  EMAIL ADDRESS (OPTIONAL)
-                </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                  <Mail className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                  <input
-                    type="email"
-                    placeholder="your@email.com (optional)"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Method Switcher: Password or Sms Otp (Minimal Pill Shape Design) */}
-              <div className="pt-1">
-                <div className="flex rounded-full bg-slate-100 p-1 border border-slate-200/80">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSignupMethod('password');
-                      resetMessages();
-                    }}
-                    className={`flex-1 py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                      signupMethod === 'password'
-                        ? 'bg-white text-slate-950 shadow-xs'
-                        : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    <Lock className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Password</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSignupMethod('otp');
-                      resetMessages();
-                    }}
-                    className={`flex-1 py-1.5 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                      signupMethod === 'otp'
-                        ? 'bg-white text-slate-950 shadow-xs'
-                        : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    <Phone className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Sms Otp</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* METHOD A: PASSWORD SIGNUP (ONLY CREATE & CONFIRM PASSWORD LINES) */}
-              {signupMethod === 'password' && (
-                <div className="space-y-4 animate-in fade-in duration-200">
-                  {/* Field 4: CREATE PASSWORD */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                      CREATE PASSWORD <span className="text-red-500 font-black">*</span>
-                    </label>
-                    <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                      <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                        required={signupMethod === 'password'}
-                        minLength={6}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0"
-                        tabIndex={-1}
-                      >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Field 5: CONFIRM PASSWORD */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                      CONFIRM PASSWORD <span className="text-red-500 font-black">*</span>
-                    </label>
-                    <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                      <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        placeholder="••••••••"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                        required={signupMethod === 'password'}
-                        minLength={6}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0"
-                        tabIndex={-1}
-                      >
-                        {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isAnyLoading}
-                    className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-2"
-                  >
-                    {isLoading ? (
-                      'Signing up...'
-                    ) : (
-                      <>
-                        <UserPlus className="w-4 h-4" />
-                        <span>Sign up</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* METHOD B: SMS OTP SIGNUP (SHOWS OTP FILLING BOX AT SAME PLACE) */}
-              {signupMethod === 'otp' && (
-                <div className="space-y-4 animate-in fade-in duration-200">
-                  {/* OTP FILLING BOX */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase">
-                        SMS OTP CODE <span className="text-red-500 font-black">*</span>
-                      </label>
-                      {signupOtpSent && (
-                        <button
-                          type="button"
-                          onClick={handleSendSignupPhoneOtp}
-                          disabled={signupOtpCooldown > 0 || isLoading}
-                          className="text-xs font-bold text-amber-700 hover:text-amber-800 disabled:text-slate-400 cursor-pointer"
-                        >
-                          {signupOtpCooldown > 0 ? `Resend (${signupOtpCooldown}s)` : 'Resend OTP'}
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                      <KeyRound className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        pattern="[0-9]*"
-                        maxLength={6}
-                        placeholder="Enter 6-digit OTP"
-                        value={signupOtpCode}
-                        onChange={(e) => {
-                          const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
-                          setSignupOtpCode(digits);
-                          if (error) setError(null);
-                        }}
-                        className="w-full bg-transparent py-2 text-sm font-semibold tracking-widest text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                        required={signupMethod === 'otp'}
-                      />
-                      {!signupOtpSent ? (
-                        <button
-                          type="button"
-                          onClick={handleSendSignupPhoneOtp}
-                          disabled={isAnyLoading || !signupPhone || signupPhone.replace(/\D/g, '').length !== 10}
-                          className="px-3.5 py-1.5 rounded-full bg-amber-400 hover:bg-yellow-400 text-slate-950 font-bold text-xs shrink-0 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-xs active:scale-95"
-                        >
-                          {isLoading ? 'Sending...' : 'Send OTP'}
-                        </button>
-                      ) : (
-                        signupOtpCode.length > 0 && (
-                          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full shrink-0 select-none">
-                            {signupOtpCode.length}/6
-                          </span>
-                        )
-                      )}
-                    </div>
-                    {signupOtpSent && (
-                      <div className="flex justify-between items-center pt-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSignupOtpSent(false);
-                            setSignupOtpCode('');
-                            resetMessages();
-                          }}
-                          className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-                        >
-                          Change mobile number
-                        </button>
-                        <span className="text-[11px] text-slate-500 font-medium">
-                          Sent to +91 {signupPhone.slice(-10)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Primary Action Button */}
-                  {!signupOtpSent ? (
-                    <button
-                      type="button"
-                      onClick={handleSendSignupPhoneOtp}
-                      disabled={isAnyLoading || !signupPhone || signupPhone.replace(/\D/g, '').length !== 10}
-                      className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-2"
-                    >
-                      {isLoading ? (
-                        'Sending OTP...'
-                      ) : (
-                        <>
-                          <Phone className="w-4 h-4" />
-                          <span>Confirm otp</span>
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      disabled={isAnyLoading || signupOtpCode.length < 6}
-                      className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-2"
-                    >
-                      {isLoading ? (
-                        'Verifying OTP...'
-                      ) : (
-                        <>
-                          <Phone className="w-4 h-4" />
-                          <span>Confirm otp</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Terms of Service & Privacy Policy Agreement (Inside Form) */}
-              <div className="pt-2 text-center">
-                <p className="text-xs text-slate-500 inline-flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    id="terms-agreed-tick-signup"
-                    role="checkbox"
-                    aria-checked={termsAgreed}
-                    aria-label="Agree to terms of service and privacy policy"
-                    onClick={handleToggleTerms}
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
-                      termsAgreed
-                        ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
-                        : 'border-slate-300 bg-white hover:border-slate-400'
-                    }`}
-                  >
-                    {termsAgreed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                  </button>
-                  <span className="leading-tight">
-                    <span onClick={handleToggleTerms} className="cursor-pointer select-none">
-                      You agree to our{' '}
-                    </span>
-                    <Link
-                      to="/terms"
-                      className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
-                    >
-                      Terms of service
-                    </Link>
-                    {' '}and{' '}
-                    <Link
-                      to="/privacy"
-                      className="text-slate-700 hover:text-slate-900 underline underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-colors font-medium"
-                    >
-                      Privacy policy
-                    </Link>
-                  </span>
-                </p>
-              </div>
-            </form>
-          )}
-
-          {/* 3. FORGOT PASSWORD MODE */}
-          {mode === 'forgot' && (
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-              <div className="text-center pb-1">
-                <p className="text-xs text-slate-500">Enter your email and we will send a password reset link.</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  ACCOUNT EMAIL
-                </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                  <Mail className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                  <input
-                    type="email"
-                    placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                    required
-                  />
-                </div>
-              </div>
-
+            {/* CONTINUE WITH GOOGLE BUTTON (DIRECTLY BELOW SIGN IN BUTTON WITHOUT ANY TEXT IN BETWEEN) */}
+            <div>
               <button
-                type="submit"
+                type="button"
+                onClick={handleGoogleSignIn}
                 disabled={isAnyLoading}
-                className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-2"
+                className="w-full py-2.5 px-4 rounded-2xl border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2.5 bg-white cursor-pointer active:scale-[0.99] disabled:opacity-50 shadow-2xs"
               >
-                {isLoading ? (
-                  'Sending Reset Link...'
+                {isGoogleLoading ? (
+                  <span className="flex items-center gap-2 text-xs text-slate-600">Connecting Google...</span>
                 ) : (
                   <>
-                    <KeyRound className="w-4 h-4" />
-                    <span>Send Password Reset Link</span>
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                    </svg>
+                    <span>Continue with Google</span>
                   </>
                 )}
               </button>
-            </form>
-          )}
+            </div>
 
-          {/* Divider */}
-          <div className="relative flex items-center justify-center py-2">
-            <div className="border-t border-slate-200 w-full" />
-            <span className="bg-white px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider absolute">
-              or continue with
-            </span>
+            {/* TERMS OF SERVICE & PRIVACY POLICY AGREEMENT (BELOW GOOGLE BUTTON, DEFAULT YES, INCREASED TEXT SIZE) */}
+            <div className="pt-2 text-center">
+              <div className="inline-flex items-center justify-center gap-2.5 text-sm font-medium text-slate-700">
+                <button
+                  type="button"
+                  id="terms-agreed-tick"
+                  role="checkbox"
+                  aria-checked={termsAgreed}
+                  aria-label="Agree to terms of service and privacy policy"
+                  onClick={handleToggleTerms}
+                  className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                    termsAgreed
+                      ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                      : 'border-slate-300 bg-white hover:border-slate-400'
+                  }`}
+                >
+                  {termsAgreed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                </button>
+                <span className="leading-snug select-none text-left">
+                  <span onClick={handleToggleTerms} className="cursor-pointer">
+                    You agree to our{' '}
+                  </span>
+                  <Link
+                    to="/terms"
+                    className="text-slate-900 font-semibold underline underline-offset-2 decoration-slate-400 hover:decoration-slate-800 transition-colors"
+                  >
+                    Terms of service
+                  </Link>
+                  {' '}and{' '}
+                  <Link
+                    to="/privacy"
+                    className="text-slate-900 font-semibold underline underline-offset-2 decoration-slate-400 hover:decoration-slate-800 transition-colors"
+                  >
+                    Privacy policy
+                  </Link>
+                </span>
+              </div>
+            </div>
           </div>
+        )}
 
-          {/* OR CONTINUE WITH SECTION: Magic Link & Google */}
-          <div className="space-y-2.5">
-            {/* Magic Link with email logo */}
-            <button
-              type="button"
-              onClick={handleSendMagicLink}
-              disabled={isAnyLoading || magicLinkCooldown > 0}
-              className="w-full py-2.5 px-4 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 bg-white cursor-pointer active:scale-[0.99] disabled:opacity-50 shadow-2xs"
-            >
-              <Mail className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                {isMagicLoading
-                  ? 'Sending Magic link...'
-                  : magicLinkCooldown > 0
-                  ? `Resend Magic link (${magicLinkCooldown}s)`
-                  : 'Magic link'}
+        {/* =========================================================================
+            VIEW 2: ONBOARDING FOR NEW USER VIA MOBILE NUMBER
+            Asks Name, Email (Optional), Password (Optional), and Save Button
+           ========================================================================= */}
+        {authStep === 'onboarding_phone' && (
+          <form onSubmit={handleSavePhoneOnboarding} className="space-y-4 animate-in fade-in duration-200">
+            {/* Verified Phone Badge */}
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs">
+              <span className="font-bold text-emerald-900 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>+91 {onboardingPhone}</span>
               </span>
-            </button>
+              <span className="font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full text-[11px]">
+                Verified ✓
+              </span>
+            </div>
 
-            {/* Google Sign-In Button */}
+            {/* Field: Full Name (Required) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                FULL NAME <span className="text-red-500 font-black">*</span>
+              </label>
+              <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                <User className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                <input
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={onboardingName}
+                  onChange={(e) => setOnboardingName(e.target.value)}
+                  className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                  required
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Field: Email Address (Optional) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                EMAIL ADDRESS <span className="text-slate-400 font-normal">(OPTIONAL)</span>
+              </label>
+              <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                <Mail className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                <input
+                  type="email"
+                  placeholder="your@email.com (optional)"
+                  value={onboardingEmail}
+                  onChange={(e) => setOnboardingEmail(e.target.value)}
+                  className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Field: Password (Optional) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                PASSWORD <span className="text-slate-400 font-normal">(OPTIONAL)</span>
+              </label>
+              <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                <input
+                  type={showOnboardingPassword ? 'text' : 'password'}
+                  placeholder="Create a password (optional)"
+                  value={onboardingPassword}
+                  onChange={(e) => setOnboardingPassword(e.target.value)}
+                  minLength={6}
+                  className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowOnboardingPassword(!showOnboardingPassword)}
+                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0"
+                  tabIndex={-1}
+                >
+                  {showOnboardingPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Save Button */}
             <button
-              type="button"
-              onClick={handleGoogleSignIn}
+              type="submit"
               disabled={isAnyLoading}
-              className="w-full py-2.5 px-4 rounded-2xl border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2.5 bg-white cursor-pointer active:scale-[0.99] disabled:opacity-50 shadow-2xs"
+              className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-4"
             >
-              {isGoogleLoading ? (
-                <span className="flex items-center gap-2 text-xs text-slate-600">Connecting Google...</span>
+              {isLoading ? (
+                <span>Saving Profile...</span>
               ) : (
                 <>
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                  </svg>
-                  <span>Continue with Google</span>
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  <span>Save and Continue</span>
                 </>
               )}
             </button>
-          </div>
-
-        </div>
-
-        {/* Create Account / Login Switcher (Bottom Position) */}
-        {mode === 'signin' && (
-          <div className="pt-3 text-center border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => {
-                setMode('signup');
-                resetMessages();
-              }}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-            >
-              Don't have an account?{' '}
-              <span className="font-bold text-amber-700 hover:text-amber-800">Create one</span>
-            </button>
-          </div>
+          </form>
         )}
 
-        {mode === 'signup' && (
-          <div className="pt-3 text-center border-t border-slate-100">
+        {/* =========================================================================
+            VIEW 3: ONBOARDING FOR NEW USER VIA EMAIL & PASSWORD
+            Asks Name, Mobile Number, and Save Button
+           ========================================================================= */}
+        {authStep === 'onboarding_email' && (
+          <form onSubmit={handleSaveEmailOnboarding} className="space-y-4 animate-in fade-in duration-200">
+            {/* Email Badge */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                <Mail className="w-4 h-4 text-slate-600" />
+                <span>{onboardingEmailAddr}</span>
+              </span>
+              <span className="font-semibold text-slate-500 text-[11px]">
+                New Account
+              </span>
+            </div>
+
+            {/* Field: Full Name (Required) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                FULL NAME <span className="text-red-500 font-black">*</span>
+              </label>
+              <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                <User className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                <input
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={onboardingEmailName}
+                  onChange={(e) => setOnboardingEmailName(e.target.value)}
+                  className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                  required
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Field: Mobile Number (Required) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                MOBILE NUMBER <span className="text-red-500 font-black">*</span>
+              </label>
+              <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                <Phone className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                <span className="text-sm font-semibold text-slate-600 mr-2">+91</span>
+                <input
+                  type="tel"
+                  placeholder="10-digit mobile number"
+                  value={onboardingEmailPhone}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setOnboardingEmailPhone(digits);
+                  }}
+                  maxLength={10}
+                  className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Field: Password */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                PASSWORD <span className="text-red-500 font-black">*</span>
+              </label>
+              <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                <input
+                  type={showOnboardingEmailPw ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={onboardingEmailPw}
+                  onChange={(e) => setOnboardingEmailPw(e.target.value)}
+                  minLength={6}
+                  className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowOnboardingEmailPw(!showOnboardingEmailPw)}
+                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0"
+                  tabIndex={-1}
+                >
+                  {showOnboardingEmailPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Save Button */}
             <button
-              type="button"
-              onClick={() => {
-                setMode('signin');
-                resetMessages();
-              }}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              type="submit"
+              disabled={isAnyLoading}
+              className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-4"
             >
-              Already have an account?{' '}
-              <span className="font-bold text-amber-700 hover:text-amber-800">Login</span>
+              {isLoading ? (
+                <span>Creating Account...</span>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  <span>Save and Continue</span>
+                </>
+              )}
             </button>
-          </div>
+          </form>
         )}
 
-        {mode === 'forgot' && (
-          <div className="pt-3 text-center border-t border-slate-100">
+        {/* =========================================================================
+            VIEW 4: FORGOT PASSWORD
+           ========================================================================= */}
+        {authStep === 'forgot' && (
+          <form onSubmit={handleForgotPassword} className="space-y-4 animate-in fade-in duration-200">
+            <div className="text-center pb-1">
+              <p className="text-xs text-slate-500">Enter your email and we will send a password reset link.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
+                ACCOUNT EMAIL
+              </label>
+              <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
+                <Mail className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                <input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                  required
+                  autoFocus
+                />
+              </div>
+            </div>
+
             <button
-              type="button"
-              onClick={() => {
-                setMode('signin');
-                resetMessages();
-              }}
-              className="text-xs font-bold text-amber-700 hover:text-amber-800 cursor-pointer"
+              type="submit"
+              disabled={isAnyLoading}
+              className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-2"
             >
-              Remember password? Back to Login
+              {isLoading ? (
+                'Sending Reset Link...'
+              ) : (
+                <>
+                  <KeyRound className="w-4 h-4" />
+                  <span>Send Password Reset Link</span>
+                </>
+              )}
             </button>
-          </div>
+
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthStep('primary');
+                  resetMessages();
+                }}
+                className="text-xs font-bold text-amber-700 hover:text-amber-800 cursor-pointer"
+              >
+                Back to Sign in
+              </button>
+            </div>
+          </form>
         )}
 
       </div>

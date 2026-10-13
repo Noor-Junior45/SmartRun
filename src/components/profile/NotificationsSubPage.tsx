@@ -13,6 +13,7 @@ interface NotificationsSubPageProps {
   onToggleEmailAlerts: (next: boolean) => void;
   onBack: () => void;
   onContactSupport?: () => void;
+  userProfile?: any;
 }
 
 export const NotificationsSubPage = ({
@@ -24,10 +25,8 @@ export const NotificationsSubPage = ({
   onToggleWhatsappAlerts,
   onToggleSmsAlerts,
   onToggleEmailAlerts,
-  onBack,
-  onContactSupport
+  onBack
 }: NotificationsSubPageProps) => {
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       <div className="bg-white border-b border-slate-200 px-4 py-3.5 flex items-center gap-3 shadow-2xs">
@@ -41,8 +40,14 @@ export const NotificationsSubPage = ({
         <h1 className="text-lg font-black text-slate-900">Setting</h1>
       </div>
 
-      <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-4">
+      <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-5">
+        {/* COMMUNICATION NOTIFICATIONS */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-5">
+          <div className="pb-2 border-b border-slate-100">
+            <h2 className="text-sm sm:text-base font-bold text-slate-900">Communication Alerts</h2>
+            <p className="text-xs text-slate-500 font-normal">Real-time alerts for dispatch, OTPs and bills</p>
+          </div>
+
           {/* Mobile Push Notifications */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1 pr-2">
@@ -52,7 +57,6 @@ export const NotificationsSubPage = ({
               </p>
             </div>
 
-            {/* Reference-Styled Toggle Button */}
             <button
               id="toggle-mobile-notifications"
               type="button"
@@ -89,7 +93,6 @@ export const NotificationsSubPage = ({
               </p>
             </div>
 
-            {/* Reference-Styled Toggle Button */}
             <button
               id="toggle-whatsapp-tracking"
               type="button"
@@ -120,7 +123,6 @@ export const NotificationsSubPage = ({
               </p>
             </div>
 
-            {/* Reference-Styled Toggle Button */}
             <button
               id="toggle-sms-updates"
               type="button"
@@ -151,7 +153,6 @@ export const NotificationsSubPage = ({
               </p>
             </div>
 
-            {/* Reference-Styled Toggle Button */}
             <button
               id="toggle-email-updates"
               type="button"
@@ -177,4 +178,3 @@ export const NotificationsSubPage = ({
     </div>
   );
 };
-

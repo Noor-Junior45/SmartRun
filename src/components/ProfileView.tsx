@@ -386,6 +386,7 @@ export const ProfileView = ({
         onToggleEmailAlerts={setEmailAlerts}
         onBack={handleSubPageBack}
         onContactSupport={() => setSubPage('help')}
+        userProfile={userProfile}
       />
     );
   }

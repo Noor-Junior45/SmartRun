@@ -7,6 +7,7 @@ let googleMapsScriptLoadingPromise: Promise<boolean> | null = null;
 let googleMapsAuthFailed = false;
 let googleBillingVerified: boolean | null = null;
 let billingStatusCheckPromise: Promise<boolean> | null = null;
+let fetchedGoogleMapsApiKey: string | null = null;
 
 // Suppress Google Maps alert popup if auth/billing failure occurs
 if (typeof window !== 'undefined') {
@@ -42,6 +43,9 @@ async function isGoogleMapsBillingActive(): Promise<boolean> {
         const data = await res.json();
         if (data.billingEnabled === true) {
           googleBillingVerified = true;
+          if (data.apiKey) {
+            fetchedGoogleMapsApiKey = data.apiKey;
+          }
           return true;
         } else {
           googleBillingVerified = false;
@@ -129,12 +133,26 @@ export class GoogleMapsProvider implements IMapProvider {
   readonly name = 'google' as const;
 
   private getApiKey(): string | null {
-    const customProvidedKey = 'AIzaSyB9lRr20cz1sxfsfvWO3t-Qrcn5XB9iRz0';
-    const key = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
-    if (key && key !== 'AIzaSyAl3I8BhuJ2MwVWzoB5Ov3_-FHJuY6FBeA' && key !== 'YOUR_API_KEY' && !key.includes('placeholder')) {
+    if (fetchedGoogleMapsApiKey) {
+      return fetchedGoogleMapsApiKey;
+    }
+    const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : (process.env as any || {});
+    const key = (
+      env.VITE_GOOGLE_MAPS_API_KEY ||
+      env.GOOGLE_MAPS_API_KEY ||
+      env.OGLE_MAPS_API_KEY ||
+      ''
+    ).trim();
+    if (
+      key &&
+      key !== 'YOUR_API_KEY' &&
+      !key.includes('placeholder') &&
+      !key.includes('demo') &&
+      key.length > 10
+    ) {
       return key;
     }
-    return customProvidedKey;
+    return null;
   }
 
   isAvailable(): boolean {

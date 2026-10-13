@@ -80,16 +80,21 @@ import { showToast } from './utils/toast';
 import { AndroidAppBridgePrompt } from './components/AndroidAppBridgePrompt';
 import { sanitizeCustomerName } from './services/firebaseAuthService';
 import { isNativePhoneApp } from './utils/platformDetection';
+import { pingRenderKeepAlive } from './lib/apiBase';
 
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Hide native splash screen once React component mounts
+  // Hide native splash screen and warm up Render backend server
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       SplashScreen.hide().catch(() => {});
     }
+    // Ping backend to wake up / keep Render active
+    pingRenderKeepAlive();
+    const keepAliveTimer = setInterval(pingRenderKeepAlive, 9 * 60 * 1000);
+    return () => clearInterval(keepAliveTimer);
   }, []);
 
   // Silent Background Version Check & Cache Invalidation (no popups, no blinking reloads)

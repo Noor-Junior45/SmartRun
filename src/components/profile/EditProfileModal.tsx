@@ -7,8 +7,8 @@ import {
   linkEmailToUser
 } from '../../services/supabaseService';
 import {
-  sendFast2SmsPhoneOtp,
-  verifyFast2SmsPhoneOtp
+  sendFirebasePhoneOtp,
+  verifyPhoneOtpOnly
 } from '../../services/firebaseAuthService';
 import { showToast } from '../../utils/toast';
 
@@ -39,7 +39,7 @@ export const EditProfileModal = ({
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
-  // Inline Fast2SMS Mobile OTP flow for changing mobile number
+  // Inline Mobile OTP flow for changing mobile number
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
   const digitInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [isPhoneOtpSent, setIsPhoneOtpSent] = useState(false);
@@ -100,7 +100,7 @@ export const EditProfileModal = ({
   const hasMissingName = !editName.trim();
   const hasMissingPhone = !editPhone.trim();
 
-  // Send Fast2SMS OTP directly to the new mobile number
+  // Send OTP directly to the new mobile number
   const handleSendPhoneOtp = async () => {
     if (targetPhoneClean.length !== 10) {
       const msg = 'Please enter a valid 10-digit mobile number first.';
@@ -112,21 +112,25 @@ export const EditProfileModal = ({
     setIsSendingPhoneOtp(true);
     setPhoneOtpError('');
     try {
-      const res = await sendFast2SmsPhoneOtp(targetPhoneClean);
+      const res = await sendFirebasePhoneOtp(targetPhoneClean);
       if (!res.success) {
-        setPhoneOtpError(res.error || 'Failed to send OTP to your new mobile number.');
-        showToast(res.error || 'Failed to send OTP via SMS.', 'error');
+        let errorText = res.error || 'Failed to send OTP to your new mobile number.';
+        if (res.diagnostic?.resolution) {
+          errorText += `\nFix: ${res.diagnostic.resolution}`;
+        }
+        setPhoneOtpError(errorText);
+        showToast(res.error || 'Failed to send OTP.', 'error');
       } else {
         setIsPhoneOtpSent(true);
         setPhoneOtpTimer(60);
-        showToast(`Verification code sent via SMS to +91 ${targetPhoneClean}`, 'info');
+        showToast(`Verification code sent to +91 ${targetPhoneClean}`, 'info');
         // Auto-focus the first digit box
         setTimeout(() => {
           digitInputRefs.current[0]?.focus();
         }, 100);
       }
     } catch (err: any) {
-      setPhoneOtpError(err?.message || 'Error sending SMS verification code.');
+      setPhoneOtpError(err?.message || 'Error sending verification code.');
     } finally {
       setIsSendingPhoneOtp(false);
     }
@@ -202,7 +206,7 @@ export const EditProfileModal = ({
     }
   };
 
-  // Verify the 6-digit Fast2SMS OTP
+  // Verify the 6-digit OTP
   const triggerVerifyPhoneOtp = async (codeToVerify: string) => {
     const token = codeToVerify.trim();
     if (token.length !== 6) {
@@ -214,7 +218,7 @@ export const EditProfileModal = ({
     setPhoneOtpError('');
 
     try {
-      const res = await verifyFast2SmsPhoneOtp(targetPhoneClean, token);
+      const res = await verifyPhoneOtpOnly(token, targetPhoneClean);
       if (!res.success) {
         setPhoneOtpError(res.error || 'Invalid or expired OTP code.');
         showToast(res.error || 'Invalid OTP code.', 'error');

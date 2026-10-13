@@ -1323,6 +1323,7 @@ export async function syncUserProfileToSupabase(
     }).catch(() => {});
   } catch {}
 
+
   let upsertSuccess = false;
   let lastError: string | undefined;
 

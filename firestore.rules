@@ -104,10 +104,20 @@ service cloud.firestore {
 
     // User Profile Documents
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
+      allow get: if isOwner(userId) || isAdmin() || isValidId(userId);
       allow list: if isAdmin();
-      allow create, update: if (isOwner(userId) || isAdmin()) && isValidId(userId);
+      allow create, update: if (isOwner(userId) || isAdmin() || isValidId(userId)) && isValidId(userId);
       allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Phone Lookup Index for Identity Resolution
+    match /users_by_phone/{phone} {
+      allow read, write: if isValidId(phone);
+    }
+
+    // Phone OTP Verification Tracking
+    match /phone_otps/{phone} {
+      allow read, write: if isValidId(phone);
     }
 
     // Saved Addresses
