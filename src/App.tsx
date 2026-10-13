@@ -364,6 +364,11 @@ export default function App() {
       setIsAuthLoading(false);
     }
 
+    // Safety watchdog: Guarantee loading screen never hangs more than 1.5 seconds under slow network/offline conditions
+    const loadingWatchdogTimer = setTimeout(() => {
+      setIsAuthLoading(false);
+    }, 1500);
+
     // Initial session check
     getInitialAuthSession().then(({ session, user }) => {
       if (isLoggingOutRef.current || isUserLoggingOut()) return;
@@ -666,6 +671,7 @@ export default function App() {
       .subscribe();
 
     return () => {
+      clearTimeout(loadingWatchdogTimer);
       unsubAuth();
       supabase.removeChannel(prodChannel);
       document.removeEventListener('visibilitychange', syncProfileOnFocus);
@@ -1477,8 +1483,8 @@ export default function App() {
   if (isNativeApp && isAuthLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white text-center">
-        <div className="w-20 h-20 rounded-3xl bg-white p-2 shadow-2xl mb-4 animate-pulse flex items-center justify-center">
-          <img src="/SmartRun.png" alt="SmartRun" className="w-full h-full object-contain rounded-2xl" />
+        <div className="mb-4 animate-pulse flex items-center justify-center">
+          <img src="/SmartRun.png" alt="SmartRun" className="w-20 h-20 object-contain" />
         </div>
         <h1 className="text-2xl font-black font-baloo tracking-tight text-white mb-1">SmartRun</h1>
         <p className="text-xs text-slate-400 font-medium tracking-wide">Kolkata&apos;s 60-Min Express Electrical Hub</p>
