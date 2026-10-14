@@ -4,8 +4,8 @@ import { Capacitor } from '@capacitor/core';
  * Universal API Base URL resolution for Native Apps (Capacitor Android & iOS) and Web Deployments.
  *
  * In native mobile builds (Android & iOS WebView) and external frontend deployments (Vercel),
- * relative fetch('/api/...') calls need to resolve to the active Render backend server (https://smartrun.onrender.com
- * or https://www.smartrun.in), while preserving standard local relative paths during local development.
+ * relative fetch('/api/...') calls resolve to the active Render backend server (https://www.smartrun.in
+ * or https://www.girirajpower.in), while preserving standard local relative paths during local development.
  */
 export const API_BASE_URL: string = (() => {
   // 1. Prioritize explicit environment variables if set (e.g. Render backend URL in Vercel)
@@ -45,6 +45,9 @@ export const API_BASE_URL: string = (() => {
     hostname === '10.0.2.2';
 
   if (isCapacitorNative) {
+    if (origin.includes('girirajpower') || hostname.includes('girirajpower')) {
+      return 'https://www.girirajpower.in';
+    }
     return 'https://www.smartrun.in';
   }
 
@@ -67,13 +70,14 @@ export function apiUrl(path: string): string {
 
 /**
  * Client-Side Warm-Up Helper
- * Sends a lightweight keep-alive ping to Render to prevent sleeping or wake up cold starts.
+ * Sends a lightweight keep-alive ping to Render across all custom domains to prevent sleeping or wake up cold starts.
  */
 export function pingRenderKeepAlive(): void {
   try {
     const urls = [
       apiUrl('/api/health'),
-      'https://www.smartrun.in/api/health'
+      'https://www.smartrun.in/api/health',
+      'https://www.girirajpower.in/api/health'
     ];
     for (const u of Array.from(new Set(urls))) {
       fetch(u, {

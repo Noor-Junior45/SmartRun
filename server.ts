@@ -1597,6 +1597,8 @@ async function startServer() {
       !origin ||
       origin === "https://www.smartrun.in" ||
       origin === "https://smartrun.in" ||
+      origin === "https://www.girirajpower.in" ||
+      origin === "https://girirajpower.in" ||
       origin === "https://localhost" ||
       origin === "http://localhost" ||
       origin.startsWith("http://localhost:") ||
@@ -7678,7 +7680,8 @@ Knowledge Base & Service Details:
       (process.env.RENDER_EXTERNAL_URL || "").trim().replace(/\/+$/, ""),
       "https://www.smartrun.in",
       "https://smartrun.in",
-      "https://smartrun.onrender.com"
+      "https://www.girirajpower.in",
+      "https://girirajpower.in"
     ].filter((u) => u && !u.includes("localhost") && !u.includes("0.0.0.0"));
 
     const uniqueTargets = Array.from(new Set(renderTargets));
