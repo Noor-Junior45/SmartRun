@@ -229,5 +229,26 @@ body::-webkit-scrollbar {
   font-family: inherit !important;
 }
 
+/* =========================================================================
+   ACCESSIBILITY & LIGHTHOUSE OPTIMIZATIONS
+   ========================================================================= */
+
+/* Color Contrast: Ensure all struck-through prices and secondary product metadata meet WCAG AA (>= 4.5:1 on white) */
+.line-through.text-slate-400,
+.line-through.text-slate-500,
+span.text-xs.line-through,
+.text-xs.text-slate-400 {
+  color: #52657a !important; /* Passes 4.5:1 contrast requirement against white background */
+}
+
+/* Touch Targets: Ensure all interactive buttons, thumbnails, and links meet the 24px-48px accessible tap area */
+button.transition-all,
+button[aria-label^="View product image"],
+button[aria-label^="Next product image"],
+button[aria-label^="Previous product image"] {
+  min-width: 24px;
+  min-height: 24px;
+}
+
 
 

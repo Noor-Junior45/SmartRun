@@ -317,8 +317,9 @@ export const Header = ({
               {/* Saved Address House Name Only / Location Selector */}
               <button
                 onClick={onOpenLocationModal}
-                className="flex items-center gap-1.5 text-xs font-normal text-slate-700 hover:text-black transition-colors text-left cursor-pointer group leading-none mt-1 focus:outline-none max-w-[200px] sm:max-w-[320px] truncate"
+                className="flex items-center gap-1.5 text-xs font-normal text-slate-700 hover:text-black transition-colors text-left cursor-pointer group leading-none mt-1 py-1 min-h-[28px] focus:outline-none max-w-[200px] sm:max-w-[320px] truncate"
                 title="View full address or change location"
+                aria-label={`Current delivery address: ${locationInfo.houseNameOnly}. Click to change address`}
               >
                 {activeAddress?.tag === 'home' && (
                   <Home className="w-3.5 h-3.5 text-pink-600 shrink-0" />
@@ -410,7 +411,7 @@ export const Header = ({
               id="header-product-back-btn"
               type="button"
               onClick={handleProductBack}
-              className="p-1.5 sm:p-2 -ml-1 text-slate-800 hover:text-black hover:bg-slate-100 active:bg-slate-200 rounded-full transition-colors cursor-pointer flex items-center justify-center shrink-0 active:scale-90"
+              className="p-1.5 sm:p-2 -ml-1 min-w-[36px] min-h-[36px] text-slate-800 hover:text-black hover:bg-slate-100 active:bg-slate-200 rounded-full transition-colors cursor-pointer flex items-center justify-center shrink-0 active:scale-90"
               title={isConstructionDetailPage ? 'Back to Construction Store' : 'Back to Electrical Store'}
               aria-label="Back"
             >
@@ -455,7 +456,7 @@ export const Header = ({
                   id="header-clear-search-btn"
                   type="button"
                   onClick={handleClearSearch}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-200/90 hover:bg-slate-300 active:bg-slate-400 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer z-10"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 min-w-[28px] min-h-[28px] w-7 h-7 flex items-center justify-center rounded-full bg-slate-200/90 hover:bg-slate-300 active:bg-slate-400 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer z-10"
                   title="Clear search"
                   aria-label="Clear search"
                 >
@@ -549,7 +550,7 @@ export const Header = ({
 
           {/* Right Side: All Filters Button & Sort / Relevance Button */}
           {isTechniciansPage ? (
-            <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               {/* Technician Specialist Filters Button (Sector, License, Experience, Emergency, Equipment - Side Menu on Laptop / Full Page on Mobile) */}
               <button
                 id="top-navbar-technician-filters-btn"
@@ -558,7 +559,7 @@ export const Header = ({
                   hapticSelection();
                   window.dispatchEvent(new CustomEvent('open-technician-filters'));
                 }}
-                className="p-1.5 sm:p-2 flex items-center justify-center text-slate-700 hover:text-indigo-600 border-0 bg-transparent transition-colors active:scale-95 cursor-pointer relative"
+                className="p-1.5 sm:p-2 min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-700 hover:text-indigo-600 border-0 bg-transparent transition-colors active:scale-95 cursor-pointer relative"
                 title="All Specialist Filters (Sector, License, Experience, Tools, Area)"
                 aria-label="All Specialist Filters"
               >
@@ -573,7 +574,7 @@ export const Header = ({
                   hapticSelection();
                   window.dispatchEvent(new CustomEvent('open-technician-sort'));
                 }}
-                className="p-1.5 sm:p-2 flex items-center justify-center text-slate-700 hover:text-blue-600 border-0 bg-transparent transition-colors active:scale-95 cursor-pointer"
+                className="p-1.5 sm:p-2 min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-700 hover:text-blue-600 border-0 bg-transparent transition-colors active:scale-95 cursor-pointer"
                 title="Price & Quick Sort (Low to High, High to Low, Top Rated, Nearest)"
                 aria-label="Price and Quick Sort"
               >
@@ -581,13 +582,13 @@ export const Header = ({
               </button>
             </div>
           ) : showFilterBtn ? (
-            <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               {/* All Filters Button (Borderless, icon only, no circular/oval background) */}
               <button
                 id="top-navbar-all-filters-btn"
                 type="button"
                 onClick={handleFilterClick}
-                className="p-1.5 sm:p-2 flex items-center justify-center text-slate-700 hover:text-amber-600 border-0 bg-transparent transition-colors active:scale-95 cursor-pointer"
+                className="p-1.5 sm:p-2 min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-700 hover:text-amber-600 border-0 bg-transparent transition-colors active:scale-95 cursor-pointer"
                 title="All Filters"
                 aria-label="All Filters"
               >
@@ -599,7 +600,7 @@ export const Header = ({
                 id="top-navbar-relevance-sort-btn"
                 type="button"
                 onClick={handleSortClick}
-                className="p-1.5 sm:p-2 flex items-center justify-center text-slate-700 hover:text-blue-600 border-0 bg-transparent transition-colors active:scale-95 cursor-pointer"
+                className="p-1.5 sm:p-2 min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-700 hover:text-blue-600 border-0 bg-transparent transition-colors active:scale-95 cursor-pointer"
                 title="Sort & Relevance"
                 aria-label="Sort and Relevance"
               >

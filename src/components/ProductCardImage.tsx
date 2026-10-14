@@ -93,6 +93,7 @@ export const ProductCardImage = ({
         alt={`${alt} preview ${currentIndex + 1}`}
         className={`max-h-full max-w-full object-contain transition-all duration-300 drop-shadow-2xs ${className}`}
         loading="lazy"
+        decoding="async"
         onError={(e) => {
           // Fallback if image fails to load
           const target = e.target as HTMLImageElement;
@@ -116,22 +117,22 @@ export const ProductCardImage = ({
             type="button"
             onClick={handlePrev}
             aria-label="Previous product image"
-            className="absolute left-1 top-1/2 -translate-y-1/2 z-20 w-6 h-6 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-md cursor-pointer border border-slate-200 active:scale-90"
+            className="absolute left-1 top-1/2 -translate-y-1/2 z-20 w-7 h-7 min-w-[28px] min-h-[28px] rounded-full bg-white/95 hover:bg-white text-slate-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-md cursor-pointer border border-slate-200 active:scale-90"
           >
-            <ChevronLeft className="w-3.5 h-3.5 stroke-[2.5]" />
+            <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
           </button>
 
           <button
             type="button"
             onClick={handleNext}
             aria-label="Next product image"
-            className="absolute right-1 top-1/2 -translate-y-1/2 z-20 w-6 h-6 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-md cursor-pointer border border-slate-200 active:scale-90"
+            className="absolute right-1 top-1/2 -translate-y-1/2 z-20 w-7 h-7 min-w-[28px] min-h-[28px] rounded-full bg-white/95 hover:bg-white text-slate-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-md cursor-pointer border border-slate-200 active:scale-90"
           >
-            <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+            <ChevronRight className="w-4 h-4 stroke-[2.5]" />
           </button>
 
-          {/* Interactive Pagination Dots at the bottom of the card image */}
-          <div className="absolute bottom-1.5 left-0 right-0 z-20 flex items-center justify-center gap-1 px-2 pointer-events-auto">
+          {/* Interactive Pagination Dots at the bottom of the card image (Minimum 24px Accessible Tap Target) */}
+          <div className="absolute bottom-1.5 left-0 right-0 z-20 flex items-center justify-center gap-0.5 px-2 pointer-events-auto">
             {allImages.map((_, idx) => (
               <button
                 key={idx}
@@ -139,12 +140,16 @@ export const ProductCardImage = ({
                 onClick={(e) => handleDotClick(e, idx)}
                 onMouseEnter={() => setCurrentIndex(idx)}
                 aria-label={`View product image ${idx + 1}`}
-                className={`transition-all duration-300 rounded-full cursor-pointer ${
-                  currentIndex === idx
-                    ? 'w-4 h-1 bg-amber-500 shadow-xs'
-                    : 'w-1.5 h-1 bg-slate-300 hover:bg-slate-400 opacity-70 hover:opacity-100'
-                }`}
-              />
+                className="min-w-[24px] min-h-[24px] p-1 flex items-center justify-center cursor-pointer group/dot focus:outline-none transition-transform active:scale-95"
+              >
+                <span
+                  className={`block transition-all duration-300 rounded-full ${
+                    currentIndex === idx
+                      ? 'w-4 h-1.5 bg-amber-500 shadow-xs'
+                      : 'w-1.5 h-1.5 bg-slate-400 group-hover/dot:bg-slate-600 opacity-80 group-hover/dot:opacity-100'
+                  }`}
+                />
+              </button>
             ))}
           </div>
         </>

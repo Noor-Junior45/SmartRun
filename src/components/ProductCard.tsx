@@ -270,7 +270,7 @@ export const ProductCard = ({
                 ₹{product.price.toLocaleString('en-IN')}
               </span>
               {product.originalPrice > product.price && (
-                <span className="text-xs text-slate-400 line-through">
+                <span className="text-xs text-[#52657a] font-semibold line-through">
                   ₹{product.originalPrice.toLocaleString('en-IN')}
                 </span>
               )}

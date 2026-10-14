@@ -7675,35 +7675,24 @@ Knowledge Base & Service Details:
       backfillAllUsersToFirebaseFirestore().catch(() => {});
     }, 4000);
 
-    // 2. Render 24/7 Keep-Alive Self-Ping: Pings every 8 minutes to prevent Render free-tier idle sleep
-    const renderTargets = [
-      (process.env.RENDER_EXTERNAL_URL || "").trim().replace(/\/+$/, ""),
-      "https://www.smartrun.in",
-      "https://smartrun.in",
-      "https://www.girirajpower.in",
-      "https://girirajpower.in"
-    ].filter((u) => u && !u.includes("localhost") && !u.includes("0.0.0.0"));
-
-    const uniqueTargets = Array.from(new Set(renderTargets));
-
-    const dispatchKeepAlive = async () => {
-      for (const target of uniqueTargets) {
+    // 2. Render Keep-Alive: Only activate if explicitly hosted on Render with RENDER_EXTERNAL_URL set
+    const renderExternalUrl = (process.env.RENDER_EXTERNAL_URL || "").trim().replace(/\/+$/, "");
+    if (renderExternalUrl && !renderExternalUrl.includes("localhost") && !renderExternalUrl.includes("0.0.0.0")) {
+      const dispatchKeepAlive = async () => {
         try {
-          const pingTarget = `${target}/api/health`;
+          const pingTarget = `${renderExternalUrl}/api/health`;
           await fetch(pingTarget, {
             headers: { "X-Render-Keep-Alive": "smartrun-server" },
             signal: AbortSignal.timeout(10000)
           });
-          console.log(`[Render Keep-Alive] Self-ping active: ${pingTarget}`);
-        } catch (pingErr: any) {
-          console.debug(`[Render Keep-Alive] Self-ping notice (${target}):`, pingErr?.message || pingErr);
+        } catch {
+          // Silently ignore ping errors when offline or during DNS migrations
         }
-      }
-    };
+      };
 
-    // Immediate warm-up ping 5 seconds after boot, then recurring every 8 minutes
-    setTimeout(dispatchKeepAlive, 5000);
-    setInterval(dispatchKeepAlive, 8 * 60 * 1000);
+      setTimeout(dispatchKeepAlive, 5000);
+      setInterval(dispatchKeepAlive, 8 * 60 * 1000);
+    }
   });
 
   serverInstance.on("error", (err: any) => {
