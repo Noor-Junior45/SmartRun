@@ -475,6 +475,20 @@ export default function App() {
         setupUserSubscriptions(user.id);
         syncStoredPushTokenToSupabase(effectiveUserId || user.id);
       } else {
+        if (!isLoggingOutRef.current && !isUserLoggingOut()) {
+          const saved = getSavedUserProfile();
+          if (saved?.id) {
+            const savedUid = saved.id;
+            activeUserIdRef.current = savedUid;
+            const scope = `uid_${savedUid}`;
+            setActiveUserScope(scope);
+            setUserProfile(saved);
+            if (saved.phone) setUserPhone(cleanPhoneAutofill(saved.phone));
+            if (saved.name) setUserName(saved.name);
+            setupUserSubscriptions(savedUid);
+            return;
+          }
+        }
         activeUserIdRef.current = null;
         setActiveUserScope(null);
         setUserProfile(null);
@@ -497,7 +511,7 @@ export default function App() {
     });
 
     const unsubAuth = onAuthStateChange((event, session, user) => {
-      if (event === 'SIGNED_OUT' || !user) {
+      if (isLoggingOutRef.current || isUserLoggingOut()) {
         activeUserIdRef.current = null;
         setActiveUserScope(null);
         setUserProfile(null);
@@ -509,8 +523,32 @@ export default function App() {
         setupUserSubscriptions();
         return;
       }
-      if (isLoggingOutRef.current || isUserLoggingOut()) {
+      if (event === 'SIGNED_OUT' || !user) {
+        if (!isLoggingOutRef.current && !isUserLoggingOut()) {
+          const saved = getSavedUserProfile();
+          if (saved?.id) {
+            activeUserIdRef.current = saved.id;
+            if (!userProfile) {
+              setUserProfile(saved);
+              if (saved.phone) setUserPhone(cleanPhoneAutofill(saved.phone));
+              if (saved.name) setUserName(saved.name);
+            }
+            return;
+          }
+          if (activeUserIdRef.current) {
+            console.info('[Auth Listener] Preserving active in-memory user session during event:', event);
+            return;
+          }
+        }
         activeUserIdRef.current = null;
+        setActiveUserScope(null);
+        setUserProfile(null);
+        setUserPhone(null);
+        setUserName('');
+        setOrders([]);
+        setSavedAddresses([]);
+        setCartItems(getLocalCartItems());
+        setupUserSubscriptions();
         return;
       }
       if (user) {
@@ -630,6 +668,10 @@ export default function App() {
           }).catch((err) => console.debug('[Security Alert Background Trigger]:', err));
         }
       } else {
+        if (!isLoggingOutRef.current && !isUserLoggingOut()) {
+          const saved = getSavedUserProfile();
+          if (saved?.id || activeUserIdRef.current) return;
+        }
         activeUserIdRef.current = null;
         setActiveUserScope(null);
         setUserProfile(null);

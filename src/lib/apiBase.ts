@@ -45,12 +45,12 @@ export const API_BASE_URL: string = (() => {
     hostname === '10.0.2.2';
 
   if (isCapacitorNative) {
-    return 'https://smartrun.onrender.com';
+    return 'https://www.smartrun.in';
   }
 
   // 3. If deployed on Vercel (*.vercel.app), route API traffic to Render live backend
   if (hostname.endsWith('.vercel.app') || hostname === 'smartrun.vercel.app') {
-    return 'https://smartrun.onrender.com';
+    return 'https://www.smartrun.in';
   }
 
   return '';
@@ -71,10 +71,28 @@ export function apiUrl(path: string): string {
  */
 export function pingRenderKeepAlive(): void {
   try {
-    const url = apiUrl('/api/health');
-    fetch(url, {
-      method: 'GET',
-      headers: { 'X-Keep-Alive': 'smartrun-frontend' }
-    }).catch(() => {});
+    const urls = [
+      apiUrl('/api/health'),
+      'https://www.smartrun.in/api/health'
+    ];
+    for (const u of Array.from(new Set(urls))) {
+      fetch(u, {
+        method: 'GET',
+        headers: { 'X-Keep-Alive': 'smartrun-frontend' }
+      }).catch(() => {});
+    }
   } catch {}
+}
+
+/**
+ * Continuous Keep-Alive Loop:
+ * Keeps Render active and warm all the time by dispatching lightweight pings every 8 minutes.
+ */
+export function startRenderKeepAlive(): () => void {
+  pingRenderKeepAlive();
+  const intervalId = setInterval(() => {
+    pingRenderKeepAlive();
+  }, 8 * 60 * 1000);
+
+  return () => clearInterval(intervalId);
 }

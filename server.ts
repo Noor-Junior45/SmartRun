@@ -1585,9 +1585,9 @@ const OrderCheckoutSchema = z.object({
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
-  // Set trust proxy to trust Cloud Run and reverse proxy headers (X-Forwarded-For)
+  // Set trust proxy to trust Cloud Run, Render, and reverse proxy headers (X-Forwarded-For)
   app.set("trust proxy", 1);
 
   // Universal Secure CORS Middleware: Validates trusted origins before granting credentials
@@ -1642,16 +1642,21 @@ async function startServer() {
     }) as any
   );
 
-  app.use(express.json({ limit: "2mb" }));
+  // Health check endpoint (exempt from rate limiter for keep-alive pings)
+  app.get("/api/health", (req, res) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      status: "ok",
+      app: "SmartRun Kolkata Express",
+      uptime: process.uptime(),
+      timestamp: Date.now(),
+      render: Boolean(process.env.RENDER || process.env.RENDER_EXTERNAL_URL)
+    });
+  });
 
   // 2. Global Rate Limiter across /api routes (100 requests per 15 minutes)
   app.use("/api", apiLimiter);
-
-  // Health check endpoint
-  app.get("/api/health", (req, res) => {
-    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.json({ status: "ok", app: "SmartRun Kolkata Express" });
-  });
 
   // Digital Asset Links for Android App Links, Credential Sharing, and Google Play Store App Verification
   app.get("/.well-known/assetlinks.json", (req, res) => {
@@ -1822,10 +1827,11 @@ async function startServer() {
   } | null = null;
 
   // Google Maps Platform Health & Billing Status Check
-  app.get("/api/maps/google/status", async (_req, res) => {
+  app.get("/api/maps/google/status", async (req, res) => {
     const now = Date.now();
-    // Cache for 5 minutes to avoid redundant remote API pings
-    if (cachedGoogleMapsStatus && now - cachedGoogleMapsStatus.checkedAt < 5 * 60 * 1000) {
+    const isForceRefresh = req.query.fresh === "true" || req.query.refresh === "true";
+    // Cache for 5 minutes to avoid redundant remote API pings unless force refreshed
+    if (!isForceRefresh && cachedGoogleMapsStatus && now - cachedGoogleMapsStatus.checkedAt < 5 * 60 * 1000) {
       return res.json({ success: true, ...cachedGoogleMapsStatus });
     }
 
@@ -6465,7 +6471,7 @@ Knowledge Base & Service Details:
         const { data: profiles, error: pErr } = await sb
           .from("user_profiles")
           .select("*")
-          .or(`phone.eq.${formattedE164},phone.eq.${cleanPhone},phone.ilike.%${cleanPhone}%,email.eq.${canonicalPhoneEmail},email.eq.${canonicalPEmail}`)
+          .or(`phone.eq.${formattedE164},phone.eq.${cleanPhone},phone.ilike.%${cleanPhone}%,email.eq.${canonicalPhoneEmail},email.eq.${canonicalPEmail},user_id.eq.uid_${cleanPhone}`)
           .order("updated_at", { ascending: false })
           .limit(5);
 
@@ -6487,8 +6493,8 @@ Knowledge Base & Service Details:
           }
 
           resolvedProfile = {
-            user_id: bestRow.user_id || resolvedProfile?.user_id || null,
-            full_name: cleanFullName,
+            user_id: bestRow.user_id || resolvedProfile?.user_id || `uid_${cleanPhone}`,
+            full_name: cleanFullName || resolvedProfile?.full_name || null,
             email: (bestRow.email && !bestRow.email.includes("@girirajpower.internal")) ? bestRow.email : (resolvedProfile?.email || null),
             phone: formattedE164,
             avatar_url: bestRow.avatar_url || resolvedProfile?.avatar_url || null,
@@ -6502,12 +6508,43 @@ Knowledge Base & Service Details:
         console.debug("[Resolve Phone User] user_profiles query notice:", e);
       }
 
+      // Check Supabase Auth admin records for existing user by phone or canonical email
+      if ((!resolvedProfile || !resolvedProfile.user_id) && sb?.auth?.admin) {
+        try {
+          const canonicalPEmail = `p${cleanPhone}@girirajpower.internal`;
+          const canonicalPhoneEmail = `phone_${cleanPhone}@girirajpower.internal`;
+          const { data: listRes } = await sb.auth.admin.listUsers();
+          const authUser = listRes?.users?.find((u: any) =>
+            u.email === canonicalPEmail ||
+            u.email === canonicalPhoneEmail ||
+            (u.phone && u.phone.includes(cleanPhone)) ||
+            (u.user_metadata?.phone && String(u.user_metadata.phone).includes(cleanPhone)) ||
+            (u.user_metadata?.contact_number && String(u.user_metadata.contact_number).includes(cleanPhone))
+          );
+          if (authUser) {
+            const uMeta = authUser.user_metadata || {};
+            const cleanAuthName = uMeta.full_name || uMeta.name || null;
+            const authEmail = (uMeta.real_email || (authUser.email && !authUser.email.includes("@girirajpower.internal") ? authUser.email : null));
+            resolvedProfile = {
+              user_id: uMeta.master_user_id || uMeta.linked_user_id || authUser.id,
+              full_name: cleanAuthName || resolvedProfile?.full_name || null,
+              email: authEmail || resolvedProfile?.email || null,
+              phone: formattedE164,
+              avatar_url: uMeta.avatar_url || uMeta.picture || resolvedProfile?.avatar_url || null,
+              dob: uMeta.dob || resolvedProfile?.dob || null
+            };
+          }
+        } catch (authLookErr) {
+          console.debug("[Resolve Phone User] Auth list users lookup notice:", authLookErr);
+        }
+      }
+
       if (!resolvedProfile || !resolvedProfile.email || !resolvedProfile.full_name) {
         try {
           const { data: orderRows, error: oErr } = await sb
             .from("orders")
             .select("user_id, customer_name, recipient_name, customer_email, recipient_email, address, address_line1, city, pincode, updated_at")
-            .or(`phone.eq.${cleanPhone},phone.eq.${formattedE164},recipient_phone.eq.${cleanPhone},recipient_phone.eq.${formattedE164}`)
+            .or(`phone.eq.${cleanPhone},phone.eq.${formattedE164},phone.ilike.%${cleanPhone}%,recipient_phone.eq.${cleanPhone},recipient_phone.eq.${formattedE164},recipient_phone.ilike.%${cleanPhone}%`)
             .order("updated_at", { ascending: false })
             .limit(5);
 
@@ -6536,7 +6573,7 @@ Knowledge Base & Service Details:
             }
 
             resolvedProfile = {
-              user_id: resolvedProfile?.user_id || oBest.user_id || null,
+              user_id: resolvedProfile?.user_id || oBest.user_id || `uid_${cleanPhone}`,
               full_name: resolvedProfile?.full_name || cleanOrderName,
               email: resolvedProfile?.email || cleanOrderEmail,
               phone: formattedE164,
@@ -7192,6 +7229,108 @@ Knowledge Base & Service Details:
   });
 
   /**
+   * Phone Login Session Provisioning & Account Unification Endpoint
+   * POST /api/auth/phone-login-session
+   * Provisions or syncs deterministic Supabase Auth credentials for phone users using the service role admin,
+   * setting master_user_id metadata so the phone user automatically signs into their existing account,
+   * keeping orders, profile, and addresses unified while creating a real auto-refreshing Supabase session.
+   */
+  app.post("/api/auth/phone-login-session", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { phone, fullName, preResolvedUserId } = req.body || {};
+      const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+      if (!cleanPhone || cleanPhone.length !== 10) {
+        return res.status(400).json({ success: false, error: "Invalid 10-digit mobile number." });
+      }
+
+      const formattedE164 = `+91${cleanPhone}`;
+      const canonicalEmail = `p${cleanPhone}@girirajpower.internal`;
+      const deterministicPassword = `GirirajPower@${cleanPhone}#2026`;
+      const sb = getServerSupabase();
+
+      // Resolve existing account across user_profiles and historic orders
+      const existing = await resolvePhoneUser(cleanPhone);
+      const effectiveUserId = preResolvedUserId || existing?.user_id || `uid_${cleanPhone}`;
+      const resolvedName = existing?.full_name || existing?.name || fullName || "Customer";
+      const resolvedEmail = existing?.email && !existing.email.includes("@girirajpower.internal") ? existing.email : "";
+
+      if (sb?.auth?.admin) {
+        try {
+          // Attempt to create canonical user with confirmed email
+          const { data: createData, error: createErr } = await sb.auth.admin.createUser({
+            email: canonicalEmail,
+            password: deterministicPassword,
+            email_confirm: true,
+            user_metadata: {
+              phone: formattedE164,
+              contact_number: formattedE164,
+              full_name: resolvedName,
+              master_user_id: effectiveUserId,
+              linked_user_id: effectiveUserId,
+              ...(resolvedEmail ? { real_email: resolvedEmail } : {})
+            }
+          });
+
+          // If user already exists in Supabase Auth, update their password and metadata
+          if (createErr) {
+            const { data: listRes } = await sb.auth.admin.listUsers();
+            const existingAuthUser = listRes?.users?.find(
+              (u: any) => u.email === canonicalEmail || (u.phone && u.phone.includes(cleanPhone))
+            );
+            if (existingAuthUser) {
+              await sb.auth.admin.updateUserById(existingAuthUser.id, {
+                password: deterministicPassword,
+                email_confirm: true,
+                user_metadata: {
+                  ...(existingAuthUser.user_metadata || {}),
+                  phone: formattedE164,
+                  contact_number: formattedE164,
+                  full_name: resolvedName,
+                  master_user_id: effectiveUserId,
+                  linked_user_id: effectiveUserId,
+                  ...(resolvedEmail ? { real_email: resolvedEmail } : {})
+                }
+              });
+            }
+          }
+        } catch (adminErr) {
+          console.warn("[Phone Login Session Admin Notice]:", adminErr);
+        }
+
+        // Ensure user_profiles table is populated with effective master user ID
+        try {
+          await sb.from("user_profiles").upsert(
+            {
+              user_id: effectiveUserId,
+              phone: formattedE164,
+              full_name: resolvedName,
+              email: resolvedEmail || null,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: "user_id" }
+          );
+        } catch {}
+      }
+
+      return res.json({
+        success: true,
+        email: canonicalEmail,
+        password: deterministicPassword,
+        effectiveUserId,
+        resolvedName,
+        resolvedEmail,
+        profile: existing || null
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to provision phone login session."
+      });
+    }
+  });
+
+  /**
    * Google User Account Resolution & Linking Endpoint
    * POST /api/auth/resolve-google-user
    * Matches Google email against user_profiles and historic orders to retrieve existing user identity,
@@ -7459,6 +7598,21 @@ Knowledge Base & Service Details:
         hmr: false,
         ws: false,
       },
+      plugins: [
+        {
+          name: "silence-vite-dev-hmr",
+          transform(code, id) {
+            if (id.includes("client.mjs") || id.includes("@vite/client")) {
+              let replaced = code
+                .replace(/reject\(new Error\("WebSocket closed without opened\."\)\)/g, "resolve()")
+                .replace(/new WebSocket\(/g, "/* mocked ws */ (() => ({ readyState: 1, OPEN: 1, CLOSED: 3, close(){}, send(){}, addEventListener(e, cb){ if (e === 'open' && typeof cb === 'function') setTimeout(cb, 0); }, removeEventListener(){} }))(")
+                .replace(/console\.debug\(`\[vite\] connecting\.\.\.`\);/g, "/* silenced */")
+                .replace(/console\.error\(`\[vite\] failed to connect to websocket/g, "/* silenced */ (() => {})(`");
+              return { code: replaced };
+            }
+          }
+        }
+      ],
       appType: "spa",
     });
     app.use(vite.middlewares);
@@ -7519,21 +7673,34 @@ Knowledge Base & Service Details:
       backfillAllUsersToFirebaseFirestore().catch(() => {});
     }, 4000);
 
-    // 2. Render 24/7 Keep-Alive Self-Ping: Pings every 9 minutes to prevent Render free-tier idle sleep
-    const RENDER_EXTERNAL_URL = (process.env.RENDER_EXTERNAL_URL || "https://smartrun.onrender.com").trim().replace(/\/+$/, '');
-    if (RENDER_EXTERNAL_URL && !RENDER_EXTERNAL_URL.includes("localhost") && !RENDER_EXTERNAL_URL.includes("0.0.0.0")) {
-      setInterval(async () => {
+    // 2. Render 24/7 Keep-Alive Self-Ping: Pings every 8 minutes to prevent Render free-tier idle sleep
+    const renderTargets = [
+      (process.env.RENDER_EXTERNAL_URL || "").trim().replace(/\/+$/, ""),
+      "https://www.smartrun.in",
+      "https://smartrun.in",
+      "https://smartrun.onrender.com"
+    ].filter((u) => u && !u.includes("localhost") && !u.includes("0.0.0.0"));
+
+    const uniqueTargets = Array.from(new Set(renderTargets));
+
+    const dispatchKeepAlive = async () => {
+      for (const target of uniqueTargets) {
         try {
-          const pingTarget = `${RENDER_EXTERNAL_URL}/api/health`;
+          const pingTarget = `${target}/api/health`;
           await fetch(pingTarget, {
-            headers: { "X-Render-Keep-Alive": "smartrun-server" }
+            headers: { "X-Render-Keep-Alive": "smartrun-server" },
+            signal: AbortSignal.timeout(10000)
           });
-          console.log(`[Render Keep-Alive] Self-ping dispatched to ${pingTarget}`);
+          console.log(`[Render Keep-Alive] Self-ping active: ${pingTarget}`);
         } catch (pingErr: any) {
-          console.debug("[Render Keep-Alive] Self-ping notice:", pingErr?.message || pingErr);
+          console.debug(`[Render Keep-Alive] Self-ping notice (${target}):`, pingErr?.message || pingErr);
         }
-      }, 9 * 60 * 1000); // 9 minutes interval (Render idle threshold is 15 minutes)
-    }
+      }
+    };
+
+    // Immediate warm-up ping 5 seconds after boot, then recurring every 8 minutes
+    setTimeout(dispatchKeepAlive, 5000);
+    setInterval(dispatchKeepAlive, 8 * 60 * 1000);
   });
 
   serverInstance.on("error", (err: any) => {

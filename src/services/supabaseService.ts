@@ -195,12 +195,28 @@ export const ACTIVE_SAVED_ADDRESS_KEY = 'giriraj_active_saved_address';
 export const SAVED_UPI_STORAGE_KEY = 'giriraj_user_saved_upi';
 export const ORDERS_STORAGE_KEY = 'giriraj_orders_v2';
 
-// In-memory active user scope to prevent cross-account data leakage
+export const ACTIVE_USER_SCOPE_KEY = 'smartrun_active_user_scope';
+export const USER_PROFILE_STORAGE_KEY = 'smartrun_user_profile';
+
+// Active user scope initialized from durable storage
 let activeUserScope: string | null = null;
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    activeUserScope = localStorage.getItem(ACTIVE_USER_SCOPE_KEY);
+  }
+} catch {}
 
 export function setActiveUserScope(scope: string | null): void {
   activeUserScope = scope;
   if (typeof window !== 'undefined') {
+    try {
+      if (scope) {
+        localStorage.setItem(ACTIVE_USER_SCOPE_KEY, scope);
+      } else if (isLoggingOut) {
+        localStorage.removeItem(ACTIVE_USER_SCOPE_KEY);
+        localStorage.removeItem(USER_PROFILE_STORAGE_KEY);
+      }
+    } catch {}
     notifyUpiListeners(getStoredUpiIds(scope || undefined));
   }
 }
@@ -1158,9 +1174,31 @@ export function onAuthStateChange(
     const user = session?.user || null;
 
     if (event === 'SIGNED_OUT' || (!session && !user && event !== 'INITIAL_SESSION')) {
-      clearUserProfile();
-      setActiveUserScope(null);
-      callback(event, null, null);
+      if (isLoggingOut) {
+        clearUserProfile();
+        setActiveUserScope(null);
+        callback('SIGNED_OUT', null, null);
+        return;
+      }
+      // If the user did not explicitly sign out, NEVER log them out!
+      // Preserve active profile across token expiration, app backgrounding, and network dropouts.
+      const savedProf = getSavedUserProfile();
+      if (savedProf?.id || activeUserScope) {
+        console.info('[Supabase Auth Listener] Preserving active profile during token renewal/refresh event:', event);
+        // Attempt background silent session renewal if possible
+        if (savedProf?.phone) {
+          const clean10 = savedProf.phone.replace(/\D/g, '').slice(-10);
+          if (clean10.length === 10) {
+            const canonicalEmail = `p${clean10}@girirajpower.internal`;
+            const deterministicPassword = `GirirajPower@${clean10}#2026`;
+            supabase.auth.signInWithPassword({
+              email: canonicalEmail,
+              password: deterministicPassword
+            }).catch(() => {});
+          }
+        }
+        return;
+      }
       return;
     }
 
@@ -1170,12 +1208,14 @@ export function onAuthStateChange(
 
       // Extract profile details strictly for this authenticated user
       const userMeta = user.user_metadata || {};
+      const effectiveUserId = userMeta.master_user_id || userMeta.linked_user_id || user.id;
       const localProf = scope ? getSavedUserProfile(scope) : null;
       // VERIFY: Does localProf actually belong to THIS user?
       const localBelongsToUser =
         Boolean(localProf) &&
-        ((localProf?.id && localProf.id === user.id) ||
-         (localProf?.email && user.email && localProf.email.toLowerCase() === user.email.toLowerCase()));
+        ((localProf?.id && (localProf.id === user.id || localProf.id === effectiveUserId)) ||
+         (localProf?.email && user.email && localProf.email.toLowerCase() === user.email.toLowerCase()) ||
+         (localProf?.phone && (user.phone || userMeta.phone) && cleanPhoneAutofill(localProf.phone) === cleanPhoneAutofill(user.phone || userMeta.phone)));
       const validLocalProf = localBelongsToUser ? localProf : null;
 
       const ADMIN_EMAILS = ['gauravgiri123344@gmail.com', 'mdhassan1738@gmail.com'];
@@ -1633,34 +1673,68 @@ export async function fetchUserProfileFromSupabase(userId: string): Promise<User
  * Get saved user profile from in-memory session or current Supabase session
  */
 export function getSavedUserProfile(userScopeOverride?: string): UserProfile | null {
-  const scope = userScopeOverride || activeUserScope;
-  if (!scope) {
-    return null;
-  }
+  const scope =
+    userScopeOverride ||
+    activeUserScope ||
+    (typeof window !== 'undefined' ? safeGetItem(ACTIVE_USER_SCOPE_KEY) : null);
 
-  // 1. Check in-memory runtime store (no persistent cache dependency)
-  if (inMemoryProfiles.has(scope)) {
-    return inMemoryProfiles.get(scope)!;
-  }
-
-  const raw = safeGetItem(`giriraj_profile_${scope}`);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const prof: UserProfile = JSON.parse(raw);
-    if (!prof.phone && !prof.email && (!prof.name || prof.name === 'Customer')) {
-      return null;
+  if (scope) {
+    // 1. Check in-memory runtime store
+    if (inMemoryProfiles.has(scope)) {
+      return inMemoryProfiles.get(scope)!;
     }
-    if (prof.email && prof.email.includes('@girirajpower.internal')) {
-      prof.email = '';
+
+    const raw = safeGetItem(`giriraj_profile_${scope}`);
+    if (raw) {
+      try {
+        const prof: UserProfile = JSON.parse(raw);
+        if (prof && (prof.id || prof.phone || prof.email || prof.name)) {
+          if (prof.email && prof.email.includes('@girirajpower.internal')) {
+            prof.email = '';
+          }
+          inMemoryProfiles.set(scope, prof);
+          return prof;
+        }
+      } catch {}
     }
-    inMemoryProfiles.set(scope, prof);
-    return prof;
-  } catch {
-    return null;
   }
+
+  // 2. Fallback check on durable active user profile storage
+  const fallbackRaw = typeof window !== 'undefined' ? safeGetItem(USER_PROFILE_STORAGE_KEY) : null;
+  if (fallbackRaw) {
+    try {
+      const prof: UserProfile = JSON.parse(fallbackRaw);
+      if (prof && (prof.id || prof.phone || prof.email || prof.name)) {
+        if (prof.email && prof.email.includes('@girirajpower.internal')) {
+          prof.email = '';
+        }
+        return prof;
+      }
+    } catch {}
+  }
+
+  // 3. Fallback scan: check any existing giriraj_profile_* keys in localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('giriraj_profile_')) {
+          const val = safeGetItem(key);
+          if (val) {
+            const prof: UserProfile = JSON.parse(val);
+            if (prof && (prof.id || prof.phone || prof.email)) {
+              if (prof.email && prof.email.includes('@girirajpower.internal')) {
+                prof.email = '';
+              }
+              return prof;
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
 /**
@@ -1731,7 +1805,9 @@ export async function saveUserProfile(
   if (scope) {
     inMemoryProfiles.set(scope, updated);
     safeSetItem(`giriraj_profile_${scope}`, JSON.stringify(updated));
+    safeSetItem(ACTIVE_USER_SCOPE_KEY, scope);
   }
+  safeSetItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(updated));
 
   const cleanPhone = updated.phone ? updated.phone.replace(/\D/g, '').slice(-10) : '';
   if (cleanPhone) {

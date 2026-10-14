@@ -530,7 +530,34 @@ export async function bridgeVerifiedPhoneToSupabase(
   let supabaseSession: any = null;
 
   try {
-    // Step 1: Attempt sign-in with the canonical internal credentials
+    // Step 1: Request server-side session provisioning to ensure credentials exist and match master_user_id
+    try {
+      const sessionProvRes = await fetch(apiUrl('/api/auth/phone-login-session'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: clean10,
+          fullName: preResolvedName || preferredName || 'Customer',
+          preResolvedUserId: preResolvedUserId || undefined
+        })
+      });
+      if (sessionProvRes.ok) {
+        const provData = await sessionProvRes.json().catch(() => null);
+        if (provData?.effectiveUserId && !preResolvedUserId) {
+          preResolvedUserId = provData.effectiveUserId;
+        }
+        if (provData?.resolvedName && (!preResolvedName || preResolvedName === 'Customer')) {
+          preResolvedName = provData.resolvedName;
+        }
+        if (provData?.resolvedEmail && !preResolvedEmail) {
+          preResolvedEmail = provData.resolvedEmail;
+        }
+      }
+    } catch (provErr) {
+      console.debug('[Phone Bridge] Server session provisioning notice:', provErr);
+    }
+
+    // Step 2: Sign-in with the canonical credentials
     const signInRes = await supabase.auth.signInWithPassword({
       email: canonicalEmail,
       password: deterministicPassword
@@ -540,7 +567,7 @@ export async function bridgeVerifiedPhoneToSupabase(
       supabaseSession = signInRes.data.session;
       supabaseUser = signInRes.data.user;
     } else {
-      // Step 2: First-time phone user -> Sign up automatically in Supabase
+      // Step 2b: Fallback to signup if first-time user
       const defaultName = sanitizeCustomerName(preResolvedName) || sanitizeCustomerName(preferredName) || 'Customer';
       const signUpRes = await supabase.auth.signUp({
         email: canonicalEmail,
@@ -550,7 +577,9 @@ export async function bridgeVerifiedPhoneToSupabase(
             phone: formattedE164,
             contact_number: formattedE164,
             full_name: defaultName,
-            ...(preResolvedEmail ? { email: preResolvedEmail } : {})
+            master_user_id: preResolvedUserId || `uid_${clean10}`,
+            linked_user_id: preResolvedUserId || `uid_${clean10}`,
+            ...(preResolvedEmail ? { email: preResolvedEmail, real_email: preResolvedEmail } : {})
           }
         }
       });
@@ -570,26 +599,32 @@ export async function bridgeVerifiedPhoneToSupabase(
         } else {
           supabaseUser = signUpRes.data.user;
         }
-      } else if (preResolvedUserId || signUpRes.error?.message?.toLowerCase().includes('already registered')) {
-        // User already has an account in Supabase (e.g. created with password or email),
-        // but because phone OTP was verified successfully, create authenticated bridge identity
-        console.info('[Phone Bridge] Existing registered user verified via SMS OTP:', preResolvedUserId || clean10);
-        supabaseUser = {
-          id: preResolvedUserId || `uid_${clean10}`,
-          email: preResolvedEmail || canonicalEmail,
-          phone: formattedE164,
-          user_metadata: {
-            full_name: sanitizeCustomerName(preResolvedName) || sanitizeCustomerName(preferredName) || 'Customer',
-            phone: formattedE164,
-            master_user_id: preResolvedUserId || `uid_${clean10}`
-          }
-        };
       } else {
-        throw new Error(signUpRes.error?.message || 'Could not establish Supabase session.');
+        // If already registered or error, attempt final sign-in retry
+        const finalRetry = await supabase.auth.signInWithPassword({
+          email: canonicalEmail,
+          password: deterministicPassword
+        });
+        if (finalRetry.data?.session) {
+          supabaseSession = finalRetry.data.session;
+          supabaseUser = finalRetry.data.user;
+        } else {
+          console.info('[Phone Bridge] Operating with verified phone identity:', preResolvedUserId || clean10);
+          supabaseUser = {
+            id: preResolvedUserId || `uid_${clean10}`,
+            email: preResolvedEmail || canonicalEmail,
+            phone: formattedE164,
+            user_metadata: {
+              full_name: sanitizeCustomerName(preResolvedName) || sanitizeCustomerName(preferredName) || 'Customer',
+              phone: formattedE164,
+              master_user_id: preResolvedUserId || `uid_${clean10}`
+            }
+          };
+        }
       }
     }
 
-    // Set session in Supabase client to trigger onAuthStateChange
+    // Set session in Supabase client to trigger onAuthStateChange and persist across tabs
     if (supabaseSession) {
       await supabase.auth.setSession({
         access_token: supabaseSession.access_token,
@@ -597,7 +632,7 @@ export async function bridgeVerifiedPhoneToSupabase(
       });
     }
 
-    const effectiveUserId = preResolvedUserId || supabaseUser?.id || `uid_${clean10}`;
+    const effectiveUserId = preResolvedUserId || supabaseUser?.user_metadata?.master_user_id || supabaseUser?.id || `uid_${clean10}`;
     const scope = `uid_${effectiveUserId}`;
     setActiveUserScope(scope);
 

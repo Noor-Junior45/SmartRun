@@ -295,23 +295,28 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         console.debug('[User check notice]:', checkErr);
       }
 
-      // If user profile has an actual name saved (not empty / generic placeholder) -> Existing user!
-      const hasSavedName =
-        existingProfile?.full_name &&
-        !existingProfile.full_name.toLowerCase().startsWith('customer') &&
-        !existingProfile.full_name.toLowerCase().startsWith('giriraj') &&
-        !existingProfile.full_name.toLowerCase().startsWith('p9') &&
-        !existingProfile.full_name.toLowerCase().startsWith('phone_');
+      // Check if user already exists on the server or in auth
+      const isExistingUser = Boolean(
+        existingProfile?.user_id ||
+        existingProfile?.full_name ||
+        existingProfile?.email ||
+        result.user?.user_metadata?.master_user_id ||
+        result.user?.id ||
+        result.session ||
+        (result.profile?.name && !result.profile.name.toLowerCase().startsWith('giriraj'))
+      );
 
-      if (hasSavedName) {
-        // EXISTING USER FOUND -> Sign in immediately!
+      if (isExistingUser || existingProfile || result.user) {
+        // Sign in immediately with unified existing account identity!
         saveTermsAgreed(true);
-        const finalName = existingProfile.full_name;
-        const finalEmail = existingProfile.email || '';
+        const finalName = existingProfile?.full_name || result.profile?.name || 'Customer';
+        const finalEmail = (existingProfile?.email && !existingProfile.email.includes('@girirajpower.internal'))
+          ? existingProfile.email
+          : (result.profile?.email && !result.profile.email.includes('@girirajpower.internal') ? result.profile.email : '');
         onAuthSuccess(`+91${clean10}`, finalName, finalEmail, result.user);
         navigate(getPostAuthRedirect(), { replace: true });
       } else {
-        // NEW USER (not found in server) -> Go to next page to ask name, email (optional), password (optional)
+        // First-time new user -> Go to onboarding step to enter their name
         setOnboardingPhone(clean10);
         setOnboardingName(result.profile?.name && !result.profile.name.toLowerCase().startsWith('giriraj') ? result.profile.name : '');
         setOnboardingEmail(result.profile?.email && !result.profile.email.includes('@girirajpower.internal') ? result.profile.email : '');
@@ -344,7 +349,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     setIsLoading(true);
     try {
       const { data: authData } = await supabase.auth.getUser();
-      const currentUserId = authData?.user?.id || `uid_${clean10}`;
+      const userMeta = authData?.user?.user_metadata || {};
+      const currentUserId = userMeta.master_user_id || userMeta.linked_user_id || authData?.user?.id || `uid_${clean10}`;
 
       // 1. If user provided optional password, save it in Supabase Auth
       if (onboardingPassword && onboardingPassword.length >= 6) {
