@@ -1,38 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import L from 'leaflet';
-import { Navigation } from 'lucide-react';
+import { Navigation, Store, Home, AlertCircle } from 'lucide-react';
+import { getGoogleMapsStatus, GoogleMapsStatus } from '../../services/maps/googleMapsConfig';
 
-// Safety Patch for Leaflet: Prevent Uncaught TypeError: Cannot read properties of undefined (reading '_leaflet_pos')
-// This happens when React StrictMode unmounts/remounts or during animation callbacks on detached DOM nodes
-if (typeof window !== 'undefined' && L && L.DomUtil) {
-  try {
-    const origGetPosition = L.DomUtil.getPosition;
-    L.DomUtil.getPosition = function (el: any) {
-      if (!el) {
-        return new L.Point(0, 0);
-      }
-      if (origGetPosition) {
-        return origGetPosition.call(L.DomUtil, el);
-      }
-      return el._leaflet_pos || new L.Point(0, 0);
-    };
-  } catch {
-    // Ignore
-  }
-}
-
-// West Bengal State Geoboundaries:
-// Restricts zooming out and panning strictly to West Bengal territory (not other states)
-// South: ~21.3° N (Digha / Bay of Bengal / Sundarbans)
-// North: ~27.35° N (Darjeeling / Kalimpong / Siliguri)
-// West: ~85.70° E (Purulia / Jharkhand border)
-// East: ~89.90° E (Alipurduar / Cooch Behar border)
-const BENGAL_BOUNDS = L.latLngBounds(
-  [21.3, 85.7], // Southwest corner of West Bengal
-  [27.35, 89.9] // Northeast corner of West Bengal
-);
-const MIN_BENGAL_ZOOM = 7;
-const MAX_ZOOM = 18;
+const ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
 
 interface LiveOrderRealMapProps {
   warehouse: {
@@ -62,34 +34,29 @@ interface LiveOrderRealMapProps {
   riderBikeNumber?: string | null;
 }
 
-export const LiveOrderRealMap = ({
+/**
+ * Inner component to manage the dynamic route polyline and camera bounds fitting via Google Maps API
+ */
+const DeliveryRouteOverlay = ({
   warehouse,
   destination,
-  distanceKm,
-  isOutForDelivery,
-  isPartnerAssigned,
   riderLocation,
-  deliveryPartnerName,
-  riderAvatarUrl,
-  riderBikeNumber
-}: LiveOrderRealMapProps) => {
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const warehouseMarkerRef = useRef<L.Marker | null>(null);
-  const destMarkerRef = useRef<L.Marker | null>(null);
-  const riderMarkerRef = useRef<L.Marker | null>(null);
-  const routeLineRef = useRef<L.Polyline | null>(null);
-  const routeGlowRef = useRef<L.Polyline | null>(null);
-  const riderIconRef = useRef<L.DivIcon | null>(null);
-  const [currentZoom, setCurrentZoom] = useState<number>(13);
-  const [roadDistanceKm, setRoadDistanceKm] = useState<number | null>(null);
+  onRoadDistanceCalculated
+}: {
+  warehouse: { lat: number; lng: number };
+  destination: { lat: number; lng: number };
+  riderLocation?: { lat: number; lng: number } | null;
+  onRoadDistanceCalculated: (km: number) => void;
+}) => {
+  const map = useMap();
+  const routePolylineRef = useRef<google.maps.Polyline | null>(null);
+  const glowPolylineRef = useRef<google.maps.Polyline | null>(null);
 
-  // Helper to fetch real street-by-street road directions from OSRM
   const fetchRoadRoute = useCallback(async (
     start: { lat: number; lng: number },
     end: { lat: number; lng: number },
     via?: { lat: number; lng: number } | null
-  ): Promise<{ path: [number, number][]; distanceKm: number } | null> => {
+  ): Promise<{ path: { lat: number; lng: number }[]; distanceKm: number } | null> => {
     try {
       let url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
       if (via && typeof via.lat === 'number' && typeof via.lng === 'number' && !isNaN(via.lat) && !isNaN(via.lng)) {
@@ -102,19 +69,129 @@ export const LiveOrderRealMap = ({
       if (!res.ok) return null;
       const data = await res.json();
       if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates?.length) {
-        const path: [number, number][] = data.routes[0].geometry.coordinates.map(
-          (pt: [number, number]) => [pt[1], pt[0]] as [number, number]
+        const path = data.routes[0].geometry.coordinates.map(
+          (pt: [number, number]) => ({ lat: pt[1], lng: pt[0] })
         );
         const distKm = Math.round((data.routes[0].distance / 1000) * 10) / 10;
         return { path, distanceKm: distKm };
       }
     } catch {
-      // Ignore network errors or timeouts gracefully
+      // Gracefully fall back
     }
     return null;
   }, []);
 
-  // Delivery Rider Pin generator (uses avatar if present, else crisp bike icon)
+  useEffect(() => {
+    if (!map) return;
+    let isMounted = true;
+
+    if (!glowPolylineRef.current) {
+      glowPolylineRef.current = new google.maps.Polyline({
+        map,
+        strokeColor: '#3b82f6',
+        strokeOpacity: 0.35,
+        strokeWeight: 8,
+        zIndex: 1
+      });
+    }
+
+    if (!routePolylineRef.current) {
+      routePolylineRef.current = new google.maps.Polyline({
+        map,
+        strokeColor: '#2563eb',
+        strokeOpacity: 0.95,
+        strokeWeight: 4,
+        zIndex: 2
+      });
+    }
+
+    const hasRealRider =
+      riderLocation &&
+      typeof riderLocation.lat === 'number' &&
+      typeof riderLocation.lng === 'number' &&
+      !isNaN(riderLocation.lat) &&
+      !isNaN(riderLocation.lng);
+
+    const defaultCoords: { lat: number; lng: number }[] = [{ lat: warehouse.lat, lng: warehouse.lng }];
+    if (hasRealRider) {
+      defaultCoords.push({ lat: riderLocation.lat, lng: riderLocation.lng });
+    }
+    defaultCoords.push({ lat: destination.lat, lng: destination.lng });
+
+    glowPolylineRef.current.setPath(defaultCoords);
+    routePolylineRef.current.setPath(defaultCoords);
+
+    const bounds = new google.maps.LatLngBounds();
+    defaultCoords.forEach((pt) => bounds.extend(pt));
+    map.fitBounds(bounds, { top: 60, right: 40, bottom: 60, left: 40 });
+
+    fetchRoadRoute(warehouse, destination, hasRealRider ? riderLocation : null).then((result) => {
+      if (!isMounted || !result || !result.path.length) return;
+
+      if (glowPolylineRef.current && routePolylineRef.current) {
+        glowPolylineRef.current.setPath(result.path);
+        routePolylineRef.current.setPath(result.path);
+      }
+
+      if (result.distanceKm > 0) {
+        onRoadDistanceCalculated(result.distanceKm);
+      }
+
+      const roadBounds = new google.maps.LatLngBounds();
+      result.path.forEach((pt) => roadBounds.extend(pt));
+      map.fitBounds(roadBounds, { top: 60, right: 40, bottom: 60, left: 40 });
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [map, warehouse.lat, warehouse.lng, destination.lat, destination.lng, riderLocation?.lat, riderLocation?.lng, fetchRoadRoute, onRoadDistanceCalculated]);
+
+  useEffect(() => {
+    return () => {
+      if (glowPolylineRef.current) {
+        glowPolylineRef.current.setMap(null);
+        glowPolylineRef.current = null;
+      }
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+        routePolylineRef.current = null;
+      }
+    };
+  }, []);
+
+  return null;
+};
+
+const MapInstanceSync = ({ onMap }: { onMap: (map: google.maps.Map | null) => void }) => {
+  const map = useMap();
+  useEffect(() => {
+    onMap(map);
+  }, [map, onMap]);
+  return null;
+};
+
+/**
+ * Resilient OpenStreetMap delivery renderer used when Google Maps billing is not active
+ */
+const ResilientOpenStreetMap = ({
+  warehouse,
+  destination,
+  distanceKm,
+  riderLocation,
+  deliveryPartnerName,
+  riderAvatarUrl,
+  riderBikeNumber,
+  onRecenterReady
+}: LiveOrderRealMapProps & { onRecenterReady: (recenterFn: () => void) => void }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const warehouseMarkerRef = useRef<L.Marker | null>(null);
+  const destMarkerRef = useRef<L.Marker | null>(null);
+  const riderMarkerRef = useRef<L.Marker | null>(null);
+  const glowLineRef = useRef<L.Polyline | null>(null);
+  const coreLineRef = useRef<L.Polyline | null>(null);
+
   const createRiderIcon = useCallback((avatar?: string | null, bikeNo?: string | null) => {
     const cleanAvatar = avatar && avatar.trim() ? avatar.trim() : null;
     const cleanBikeNo = bikeNo && bikeNo.trim() ? bikeNo.trim() : null;
@@ -155,50 +232,37 @@ export const LiveOrderRealMap = ({
     });
   }, []);
 
-  // Initialize Leaflet Map once
   useEffect(() => {
-    const container = mapContainerRef.current;
+    const container = containerRef.current;
     if (!container) return;
 
-    // Clean up any stale container references
     if ((container as any)._leaflet_id) {
       delete (container as any)._leaflet_id;
       container.innerHTML = '';
     }
 
-    // Initialize Map with non-animating bounds restricted strictly to West Bengal
     const map = L.map(container, {
       center: [(warehouse.lat + destination.lat) / 2, (warehouse.lng + destination.lng) / 2],
       zoom: 13,
-      minZoom: MIN_BENGAL_ZOOM, // Can only zoom out till Bengal state level (never out to all of India or world)
-      maxZoom: MAX_ZOOM,
-      maxBounds: BENGAL_BOUNDS, // Hard locks panning to West Bengal territory only
-      maxBoundsViscosity: 1.0,  // 1.0 = solid barrier, map springs back and will not pan into other states
+      minZoom: 8,
+      maxZoom: 19,
       zoomControl: false,
-      attributionControl: false,
-      scrollWheelZoom: false
+      attributionControl: false
     });
+    mapInstanceRef.current = map;
 
-    // CartoDB Voyager Tile Layer (Clean Uber / Apple Maps aesthetic, crisp street labels, free, zero keys)
-    const tileLayer = L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      {
-        subdomains: 'abcd',
-        minZoom: MIN_BENGAL_ZOOM,
-        maxZoom: MAX_ZOOM,
-        bounds: BENGAL_BOUNDS,
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
-      }
-    ).addTo(map);
+    // Pure OpenStreetMap tiles (standard, zero Carto)
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
 
-    // Store Pin (Pointed Google Maps style Pin touching the exact ground coordinate - No circles)
     const warehouseIcon = L.divIcon({
       className: 'bg-transparent border-none',
       html: `
         <div style="position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;">
           <svg width="34" height="44" viewBox="0 0 34 44" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter:drop-shadow(0 3px 5px rgba(0,0,0,0.35));">
             <path d="M17 0C7.61 0 0 7.61 0 17c0 11.55 14.88 25.4 15.51 25.99a2.02 2.02 0 0 0 2.98 0C19.12 42.4 34 28.55 34 17 34 7.61 26.39 0 17 0z" fill="#d97706" stroke="#ffffff" stroke-width="2"/>
-            <!-- Store / Shop front icon -->
             <g transform="translate(6, 6)" stroke="#ffffff" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="m2 7 3.5-3.5a1.5 1.5 0 0 1 1.06-.44h8.88c.4 0 .78.16 1.06.44L20 7" />
               <path d="M4 11v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8" />
@@ -210,7 +274,7 @@ export const LiveOrderRealMap = ({
               <path d="M16 7c0 1.1.9 2 2 2s2-.9 2-2" />
             </g>
           </svg>
-          <span style="margin-top:2px;font-size:10px;font-weight:900;background:#1e293b;color:#ffffff;padding:2px 7px;border-radius:4px;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,0.25);letter-spacing:0.02em;">
+          <span style="margin-top:2px;font-size:10px;font-weight:900;background:#1e293b;color:#ffffff;padding:2px 7px;border-radius:4px;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,0.25);">
             Store
           </span>
         </div>
@@ -219,295 +283,277 @@ export const LiveOrderRealMap = ({
       iconAnchor: [35, 43]
     });
 
-    // Customer Delivery Destination Pin (Red Pointed Teardrop Pin pointing directly to the house - No circles)
-    const destinationIcon = L.divIcon({
+    const destIcon = L.divIcon({
       className: 'bg-transparent border-none',
       html: `
         <div style="position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;">
           <svg width="34" height="44" viewBox="0 0 34 44" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter:drop-shadow(0 3px 5px rgba(0,0,0,0.35));">
-            <path d="M17 0C7.61 0 0 7.61 0 17c0 11.55 14.88 25.4 15.51 25.99a2.02 2.02 0 0 0 2.98 0C19.12 42.4 34 28.55 34 17 34 7.61 26.39 0 17 0z" fill="#ea4335" stroke="#ffffff" stroke-width="2"/>
-            <!-- House icon pointing to customer house -->
-            <g transform="translate(6, 6)" fill="#ffffff" stroke="#ffffff" stroke-width="0.5">
-              <path d="M11 2.2L2.5 9.2a.8.8 0 0 0-.2.6v9.4c0 .44.36.8.8.8h4.8v-5.6h6.2v5.6h4.8c.44 0 .8-.36.8-.8V9.8c0-.23-.1-.45-.27-.6L11 2.2z" />
+            <path d="M17 0C7.61 0 0 7.61 0 17c0 11.55 14.88 25.4 15.51 25.99a2.02 2.02 0 0 0 2.98 0C19.12 42.4 34 28.55 34 17 34 7.61 26.39 0 17 0z" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+            <g transform="translate(6, 6)" stroke="#ffffff" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
             </g>
           </svg>
-          <span style="margin-top:2px;font-size:10px;font-weight:900;background:#ea4335;color:#ffffff;padding:2px 7px;border-radius:4px;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,0.25);letter-spacing:0.02em;">
-            Home
+          <span style="margin-top:2px;font-size:10px;font-weight:900;background:#1e3a8a;color:#ffffff;padding:2px 7px;border-radius:4px;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,0.25);">
+            Destination
           </span>
         </div>
       `,
-      iconSize: [70, 68],
-      iconAnchor: [35, 43]
+      iconSize: [85, 68],
+      iconAnchor: [42, 43]
     });
 
-    // Markers
-    const warehouseMarker = L.marker([warehouse.lat, warehouse.lng], { icon: warehouseIcon }).addTo(map);
-    warehouseMarker.bindPopup(`<b>${warehouse.name}</b><br/>${warehouse.area}`);
-    warehouseMarkerRef.current = warehouseMarker;
+    warehouseMarkerRef.current = L.marker([warehouse.lat, warehouse.lng], { icon: warehouseIcon }).addTo(map);
+    destMarkerRef.current = L.marker([destination.lat, destination.lng], { icon: destIcon }).addTo(map);
 
-    const destMarker = L.marker([destination.lat, destination.lng], { icon: destinationIcon }).addTo(map);
-    destMarker.bindPopup(`<b>Delivery Destination</b><br/>${destination.name}`);
-    destMarkerRef.current = destMarker;
+    glowLineRef.current = L.polyline([[warehouse.lat, warehouse.lng], [destination.lat, destination.lng]], {
+      color: '#3b82f6',
+      weight: 8,
+      opacity: 0.35,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(map);
 
-    const riderIcon = createRiderIcon(riderAvatarUrl, riderBikeNumber);
-    riderIconRef.current = riderIcon;
-
-    // Route coordinates: connect Warehouse -> Rider (if live GPS reported by backend) -> Destination
-    const routeCoords: [number, number][] = [[warehouse.lat, warehouse.lng]];
-
-    // Only render Rider marker if real coordinates are provided by backend
-    if (
-      riderLocation &&
-      typeof riderLocation.lat === 'number' &&
-      typeof riderLocation.lng === 'number' &&
-      !isNaN(riderLocation.lat) &&
-      !isNaN(riderLocation.lng)
-    ) {
-      const riderMarker = L.marker([riderLocation.lat, riderLocation.lng], { icon: riderIcon }).addTo(map);
-      riderMarker.bindPopup(
-        `<b>${deliveryPartnerName || 'Delivery Partner'}</b><br/>Live GPS: ${riderLocation.lat.toFixed(4)}, ${riderLocation.lng.toFixed(4)}`
-      );
-      riderMarkerRef.current = riderMarker;
-      routeCoords.push([riderLocation.lat, riderLocation.lng]);
-    }
-
-    routeCoords.push([destination.lat, destination.lng]);
-
-    // Google Maps Navigation Polyline: Outer dark blue casing & inner vivid navigation blue
-    const glow = L.polyline(routeCoords, {
-      color: '#1d4ed8',
-      weight: 6.5,
+    coreLineRef.current = L.polyline([[warehouse.lat, warehouse.lng], [destination.lat, destination.lng]], {
+      color: '#2563eb',
+      weight: 4,
       opacity: 0.95,
       lineCap: 'round',
       lineJoin: 'round'
     }).addTo(map);
-    routeGlowRef.current = glow;
 
-    const routeLine = L.polyline(routeCoords, {
-      color: '#3b82f6',
-      weight: 4.5,
-      opacity: 1,
-      lineCap: 'round',
-      lineJoin: 'round'
-    }).addTo(map);
-    routeLineRef.current = routeLine;
+    const initialBounds = L.latLngBounds([[warehouse.lat, warehouse.lng], [destination.lat, destination.lng]]);
+    map.fitBounds(initialBounds, { padding: [40, 40], maxZoom: 16 });
 
-    // Fetch real street road directions (Google Maps road path)
-    let isMounted = true;
-    fetchRoadRoute(warehouse, destination, riderLocation).then((res) => {
-      if (!isMounted) return;
-      try {
-        if (res && res.path && res.path.length > 1 && mapInstanceRef.current) {
-          routeGlowRef.current?.setLatLngs(res.path);
-          routeLineRef.current?.setLatLngs(res.path);
-          if (res.distanceKm > 0) {
-            setRoadDistanceKm(res.distanceKm);
-          }
-          const roadBounds = L.latLngBounds(res.path);
-          if (roadBounds.isValid()) {
-            mapInstanceRef.current.fitBounds(roadBounds, { padding: [35, 35], maxZoom: 16, animate: false });
-          }
-        }
-      } catch {
-        // ignore unmounted race condition
-      }
-    });
-
-    // Fit bounds tightly framing store and user location without zooming out to all of Kolkata
-    const bounds = L.latLngBounds([
-      [warehouse.lat, warehouse.lng],
-      [destination.lat, destination.lng]
-    ]);
-    map.fitBounds(bounds, { padding: [35, 35], maxZoom: 16, animate: false });
-    setCurrentZoom(map.getZoom());
-
-    // Track zoom level changes to strictly enforce West Bengal boundaries
-    map.on('zoomend', () => {
-      setCurrentZoom(map.getZoom());
-    });
-
-    mapInstanceRef.current = map;
-
-    // Invalidate size once container settles
-    const timer = setTimeout(() => {
+    onRecenterReady(() => {
       if (mapInstanceRef.current) {
-        try {
-          mapInstanceRef.current.invalidateSize({ animate: false });
-          mapInstanceRef.current.fitBounds(bounds, { padding: [35, 35], maxZoom: 16, animate: false });
-        } catch {
-          // ignore
-        }
+        const b = L.latLngBounds([[warehouse.lat, warehouse.lng], [destination.lat, destination.lng]]);
+        if (riderLocation) b.extend([riderLocation.lat, riderLocation.lng]);
+        mapInstanceRef.current.fitBounds(b, { padding: [40, 40], maxZoom: 16 });
       }
-    }, 120);
-
-    let resizeObserver: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined' && container) {
-      resizeObserver = new ResizeObserver(() => {
-        if (mapInstanceRef.current) {
-          try {
-            mapInstanceRef.current.invalidateSize({ animate: false });
-          } catch {
-            // ignore
-          }
-        }
-      });
-      resizeObserver.observe(container);
-    }
+    });
 
     return () => {
-      isMounted = false;
-      clearTimeout(timer);
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
-      if (mapInstanceRef.current) {
-        try {
-          mapInstanceRef.current.stop();
-          mapInstanceRef.current.off();
-          tileLayer.remove();
-          warehouseMarker.remove();
-          destMarker.remove();
-          if (riderMarkerRef.current) {
-            riderMarkerRef.current.remove();
-          }
-          glow.remove();
-          routeLine.remove();
-          mapInstanceRef.current.remove();
-        } catch {
-          // Safe disposal
-        }
-        mapInstanceRef.current = null;
-      }
-      if (container) {
-        delete (container as any)._leaflet_id;
-        container.innerHTML = '';
-      }
+      map.remove();
+      mapInstanceRef.current = null;
     };
-  }, []); // Run once on mount
+  }, []);
 
-  // Update positions smoothly when coordinates, backend rider location, or order status change
+  // Sync markers and rider location
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
-    let isMounted = true;
 
-    try {
-      warehouseMarkerRef.current?.setLatLng([warehouse.lat, warehouse.lng]);
-      destMarkerRef.current?.setLatLng([destination.lat, destination.lng]);
-
-      const routeCoords: [number, number][] = [[warehouse.lat, warehouse.lng]];
-
-      // Real Rider Location from backend
-      const hasRealRiderLocation =
-        riderLocation &&
-        typeof riderLocation.lat === 'number' &&
-        typeof riderLocation.lng === 'number' &&
-        !isNaN(riderLocation.lat) &&
-        !isNaN(riderLocation.lng);
-
-      if (hasRealRiderLocation) {
-        const dynamicIcon = createRiderIcon(riderAvatarUrl, riderBikeNumber);
-        riderIconRef.current = dynamicIcon;
-
-        if (riderMarkerRef.current) {
-          riderMarkerRef.current.setIcon(dynamicIcon);
-          riderMarkerRef.current.setLatLng([riderLocation.lat, riderLocation.lng]);
-          riderMarkerRef.current.setPopupContent(
-            `<b>${deliveryPartnerName || 'Delivery Partner'}</b><br/>${riderBikeNumber ? `Bike: ${riderBikeNumber}<br/>` : ''}Live GPS: ${riderLocation.lat.toFixed(4)}, ${riderLocation.lng.toFixed(4)}`
-          );
-        } else {
-          const newRiderMarker = L.marker([riderLocation.lat, riderLocation.lng], {
-            icon: dynamicIcon
-          }).addTo(map);
-          newRiderMarker.bindPopup(
-            `<b>${deliveryPartnerName || 'Delivery Partner'}</b><br/>${riderBikeNumber ? `Bike: ${riderBikeNumber}<br/>` : ''}Live GPS: ${riderLocation.lat.toFixed(4)}, ${riderLocation.lng.toFixed(4)}`
-          );
-          riderMarkerRef.current = newRiderMarker;
-        }
-        routeCoords.push([riderLocation.lat, riderLocation.lng]);
+    if (riderLocation && typeof riderLocation.lat === 'number' && typeof riderLocation.lng === 'number') {
+      const icon = createRiderIcon(riderAvatarUrl, riderBikeNumber);
+      if (riderMarkerRef.current) {
+        riderMarkerRef.current.setIcon(icon);
+        riderMarkerRef.current.setLatLng([riderLocation.lat, riderLocation.lng]);
       } else {
-        // No rider GPS reported by backend yet -> remove rider pin from map
-        if (riderMarkerRef.current) {
-          riderMarkerRef.current.remove();
-          riderMarkerRef.current = null;
-        }
+        riderMarkerRef.current = L.marker([riderLocation.lat, riderLocation.lng], { icon }).addTo(map);
       }
-
-      routeCoords.push([destination.lat, destination.lng]);
-
-      routeGlowRef.current?.setLatLngs(routeCoords);
-      routeLineRef.current?.setLatLngs(routeCoords);
-
-      const bounds = L.latLngBounds([
-        [warehouse.lat, warehouse.lng],
-        [destination.lat, destination.lng]
-      ]);
-      if (hasRealRiderLocation) {
-        bounds.extend([riderLocation.lat, riderLocation.lng]);
-      }
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [35, 35], maxZoom: 16, animate: false });
-      }
-
-      // Fetch real street road directions dynamically
-      fetchRoadRoute(warehouse, destination, hasRealRiderLocation ? riderLocation : null).then((res) => {
-        if (!isMounted) return;
-        try {
-          if (res && res.path && res.path.length > 1 && mapInstanceRef.current) {
-            routeGlowRef.current?.setLatLngs(res.path);
-            routeLineRef.current?.setLatLngs(res.path);
-            if (res.distanceKm > 0) {
-              setRoadDistanceKm(res.distanceKm);
-            }
-            const roadBounds = L.latLngBounds(res.path);
-            if (roadBounds.isValid()) {
-              mapInstanceRef.current.fitBounds(roadBounds, { padding: [35, 35], maxZoom: 16, animate: false });
-            }
-          }
-        } catch {
-          // ignore unmounted error
-        }
-      });
-    } catch {
-      // Safe update
+    } else if (riderMarkerRef.current) {
+      riderMarkerRef.current.remove();
+      riderMarkerRef.current = null;
     }
+  }, [riderLocation?.lat, riderLocation?.lng, riderAvatarUrl, riderBikeNumber, createRiderIcon]);
 
+  return <div ref={containerRef} className="w-full h-full z-0" />;
+};
+
+/**
+ * Live Order Delivery Map component using Google Maps Platform & @vis.gl/react-google-maps
+ * with seamless OpenStreetMap fallback when Cloud Billing is not linked.
+ */
+export const LiveOrderRealMap = ({
+  warehouse,
+  destination,
+  distanceKm,
+  riderLocation,
+  deliveryPartnerName,
+  riderAvatarUrl,
+  riderBikeNumber,
+  isOutForDelivery,
+  isPartnerAssigned
+}: LiveOrderRealMapProps) => {
+  const [mapsStatus, setMapsStatus] = useState<GoogleMapsStatus | null>(null);
+  const [mapAuthFailed, setMapAuthFailed] = useState(false);
+  const [roadDistanceKm, setRoadDistanceKm] = useState<number | null>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  const recenterOsmRef = useRef<(() => void) | null>(null);
+
+  // Catch any Google Maps authentication / billing errors globally (e.g. BillingNotEnabledMapError)
+  useEffect(() => {
+    const prevHandler = (window as any).gm_authFailure;
+    (window as any).gm_authFailure = () => {
+      console.warn('[LiveOrderRealMap] Google Maps authentication/billing failure detected. Switching to resilient OpenStreetMap.');
+      setMapAuthFailed(true);
+      if (typeof prevHandler === 'function') {
+        try { prevHandler(); } catch {}
+      }
+    };
+    return () => {
+      (window as any).gm_authFailure = prevHandler;
+    };
+  }, []);
+
+  // Check Google Maps billing status before initializing
+  useEffect(() => {
+    let isMounted = true;
+    getGoogleMapsStatus().then((status) => {
+      if (isMounted) {
+        setMapsStatus(status);
+      }
+    });
     return () => {
       isMounted = false;
     };
-  }, [
-    warehouse.lat,
-    warehouse.lng,
-    destination.lat,
-    destination.lng,
-    riderLocation?.lat,
-    riderLocation?.lng,
-    deliveryPartnerName,
-    riderAvatarUrl,
-    riderBikeNumber,
-    isOutForDelivery,
-    isPartnerAssigned,
-    fetchRoadRoute
-  ]);
+  }, []);
+
+  const hasRealRiderLocation =
+    riderLocation &&
+    typeof riderLocation.lat === 'number' &&
+    typeof riderLocation.lng === 'number' &&
+    !isNaN(riderLocation.lat) &&
+    !isNaN(riderLocation.lng);
 
   const handleRecenter = () => {
-    if (mapInstanceRef.current) {
-      try {
-        const bounds = L.latLngBounds([
-          [warehouse.lat, warehouse.lng],
-          [destination.lat, destination.lng]
-        ]);
-        mapInstanceRef.current.fitBounds(bounds, { padding: [35, 35], maxZoom: 16, animate: false });
-      } catch {
-        // ignore
+    if (mapInstance) {
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend({ lat: warehouse.lat, lng: warehouse.lng });
+      bounds.extend({ lat: destination.lat, lng: destination.lng });
+      if (hasRealRiderLocation) {
+        bounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng });
       }
+      mapInstance.fitBounds(bounds, { top: 60, right: 40, bottom: 60, left: 40 });
+    } else if (recenterOsmRef.current) {
+      recenterOsmRef.current();
     }
   };
 
+  const centerLat = (warehouse.lat + destination.lat) / 2;
+  const centerLng = (warehouse.lng + destination.lng) / 2;
+
+  const isGoogleMapsReady = Boolean(mapsStatus?.billingEnabled && mapsStatus?.apiKey && !mapAuthFailed);
+
   return (
     <div className="relative w-full aspect-square max-h-[480px] overflow-hidden bg-slate-100 select-none border-none rounded-none">
-      {/* Real Map Canvas Container */}
-      <div ref={mapContainerRef} className="w-full h-full z-0" />
+      {mapsStatus === null ? (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-500 gap-2">
+          <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-semibold text-slate-600">Initializing Live Delivery Map...</span>
+        </div>
+      ) : isGoogleMapsReady ? (
+        <APIProvider apiKey={mapsStatus.apiKey!} libraries={['places', 'geometry', 'marker', 'routes']}>
+          <Map
+            id="live-order-tracking-map"
+            mapId="DEMO_MAP_ID"
+            defaultCenter={{ lat: centerLat, lng: centerLng }}
+            defaultZoom={13}
+            minZoom={7}
+            maxZoom={20}
+            gestureHandling="greedy"
+            disableDefaultUI={true}
+            internalUsageAttributionIds={[ATTRIBUTION_ID]}
+            className="w-full h-full"
+          >
+            <MapInstanceSync onMap={setMapInstance} />
+            {/* Store / Warehouse Marker */}
+            <AdvancedMarker
+              position={{ lat: warehouse.lat, lng: warehouse.lng }}
+              title="SmartRun Warehouse Depot"
+            >
+              <div className="relative flex flex-col items-center cursor-pointer select-none">
+                <svg width="34" height="44" viewBox="0 0 34 44" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-md">
+                  <path d="M17 0C7.61 0 0 7.61 0 17c0 11.55 14.88 25.4 15.51 25.99a2.02 2.02 0 0 0 2.98 0C19.12 42.4 34 28.55 34 17 34 7.61 26.39 0 17 0z" fill="#d97706" stroke="#ffffff" strokeWidth="2"/>
+                </svg>
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 text-white">
+                  <Store className="w-4 h-4 text-white" />
+                </div>
+                <span className="mt-0.5 text-[10px] font-black bg-slate-900 text-white px-2 py-0.5 rounded-sm whitespace-nowrap shadow-sm">
+                  Store
+                </span>
+              </div>
+            </AdvancedMarker>
+
+            {/* Destination Marker */}
+            <AdvancedMarker
+              position={{ lat: destination.lat, lng: destination.lng }}
+              title={destination.name || 'Delivery Destination'}
+            >
+              <div className="relative flex flex-col items-center cursor-pointer select-none">
+                <svg width="34" height="44" viewBox="0 0 34 44" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-md">
+                  <path d="M17 0C7.61 0 0 7.61 0 17c0 11.55 14.88 25.4 15.51 25.99a2.02 2.02 0 0 0 2.98 0C19.12 42.4 34 28.55 34 17 34 7.61 26.39 0 17 0z" fill="#2563eb" stroke="#ffffff" strokeWidth="2"/>
+                </svg>
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 text-white">
+                  <Home className="w-4 h-4 text-white" />
+                </div>
+                <span className="mt-0.5 text-[10px] font-black bg-blue-900 text-white px-2 py-0.5 rounded-sm whitespace-nowrap shadow-sm">
+                  Destination
+                </span>
+              </div>
+            </AdvancedMarker>
+
+            {/* Live Delivery Rider Marker */}
+            {hasRealRiderLocation && (
+              <AdvancedMarker
+                position={{ lat: riderLocation.lat, lng: riderLocation.lng }}
+                title={deliveryPartnerName || 'Delivery Partner'}
+              >
+                <div className="relative flex flex-col items-center cursor-pointer select-none">
+                  <div className="relative w-11 h-11 flex items-center justify-center">
+                    <svg width="44" height="44" viewBox="0 0 34 44" fill="none" xmlns="http://www.w3.org/2000/svg" className="absolute top-0 left-0 drop-shadow-md">
+                      <path d="M17 0C7.61 0 0 7.61 0 17c0 11.55 14.88 25.4 15.51 25.99a2.02 2.02 0 0 0 2.98 0C19.12 42.4 34 28.55 34 17 34 7.61 26.39 0 17 0z" fill="#059669" stroke="#ffffff" strokeWidth="2"/>
+                    </svg>
+                    {riderAvatarUrl ? (
+                      <div className="relative z-10 w-6 h-6 rounded-full overflow-hidden border border-white bg-white -mt-1.5 shadow-xs">
+                        <img src={riderAvatarUrl} alt="Rider" className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="relative z-10 -mt-1.5">
+                        <circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-center gap-0.5 -mt-0.5">
+                    <span className="text-[9px] font-extrabold bg-emerald-700 text-white px-1.5 py-0.5 rounded-sm whitespace-nowrap shadow-xs">
+                      Rider
+                    </span>
+                    {riderBikeNumber && (
+                      <span className="text-[8px] font-extrabold font-mono bg-white text-slate-900 px-1 py-0.5 rounded-xs whitespace-nowrap border border-slate-300 shadow-xs">
+                        {riderBikeNumber}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </AdvancedMarker>
+            )}
+
+            {/* Dynamic Road Route Polyline and Bounds Fitter */}
+            <DeliveryRouteOverlay
+              warehouse={warehouse}
+              destination={destination}
+              riderLocation={riderLocation}
+              onRoadDistanceCalculated={(km) => setRoadDistanceKm(km)}
+            />
+          </Map>
+        </APIProvider>
+      ) : (
+        <ResilientOpenStreetMap
+          warehouse={warehouse}
+          destination={destination}
+          distanceKm={distanceKm}
+          riderLocation={riderLocation}
+          deliveryPartnerName={deliveryPartnerName}
+          riderAvatarUrl={riderAvatarUrl}
+          riderBikeNumber={riderBikeNumber}
+          isOutForDelivery={isOutForDelivery}
+          isPartnerAssigned={isPartnerAssigned}
+          onRecenterReady={(fn) => {
+            recenterOsmRef.current = fn;
+          }}
+        />
+      )}
 
       {/* Top Floating Badge: Distance and Backend GPS status */}
       <div className="absolute top-3 left-3 z-10 pointer-events-none flex items-center gap-2">
@@ -515,19 +561,30 @@ export const LiveOrderRealMap = ({
           <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
           <span className="text-blue-700 font-bold">{roadDistanceKm || distanceKm} km road path</span>
         </div>
-        {riderLocation && (
-          <div className="bg-blue-600 text-white backdrop-blur-md px-2.5 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 text-xs font-bold border border-blue-500">
+        {hasRealRiderLocation && (
+          <div className="bg-emerald-600 text-white backdrop-blur-md px-2.5 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 text-xs font-bold border border-emerald-500">
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
             <span>Live GPS</span>
           </div>
         )}
       </div>
 
-      {/* Bengal State Boundary Notice when fully zoomed out */}
-      {currentZoom <= MIN_BENGAL_ZOOM && (
-        <div className="absolute top-3 right-3 z-10 pointer-events-none animate-fade-in">
-          <div className="bg-slate-900/90 text-white backdrop-blur-md px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-sm border border-slate-700/80">
-            West Bengal Boundary
+      {/* Cloud Billing notice if key is active without billing */}
+      {mapsStatus && !mapsStatus.billingEnabled && (
+        <div className="absolute top-12 left-3 right-3 z-10 pointer-events-auto">
+          <div className="bg-amber-500/95 text-white backdrop-blur-md px-3 py-1.5 rounded-xl text-[11px] font-semibold shadow-xs flex items-center justify-between gap-2 border border-amber-600/60">
+            <div className="flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>Google Cloud billing not active on API key. Express tracking running on OpenStreetMap.</span>
+            </div>
+            <a
+              href="https://console.cloud.google.com/project/_/billing/enable"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline text-[10px] font-bold text-amber-100 hover:text-white shrink-0"
+            >
+              Link Billing
+            </a>
           </div>
         </div>
       )}
@@ -537,7 +594,7 @@ export const LiveOrderRealMap = ({
         <button
           onClick={handleRecenter}
           aria-label="Recenter route"
-          className="w-9 h-9 rounded-xl bg-white/95 backdrop-blur-md shadow-sm hover:bg-white text-slate-700 flex items-center justify-center transition-colors cursor-pointer border border-slate-200/60"
+          className="w-9 h-9 rounded-xl bg-white/95 backdrop-blur-md shadow-sm hover:bg-white text-slate-700 flex items-center justify-center transition-colors cursor-pointer border border-slate-200/60 active:scale-95"
           title="Recenter Route"
         >
           <Navigation className="w-4.5 h-4.5 text-blue-600" />

@@ -250,5 +250,83 @@ button[aria-label^="Previous product image"] {
   min-height: 24px;
 }
 
+/* =========================================================================
+   GOOGLE PLACES AUTOCOMPLETE (.pac-container) MODERN OVERRIDES
+   ========================================================================= */
+
+.pac-container {
+  border-radius: 14px !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  margin-top: 8px !important;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important;
+  overflow: hidden !important;
+  z-index: 999999 !important;
+  padding: 4px 0 !important;
+}
+
+.pac-item {
+  padding: 10px 16px !important;
+  cursor: pointer !important;
+  font-size: 13px !important;
+  color: #334155 !important;
+  border-top: 1px solid rgba(241, 245, 249, 0.85) !important;
+  transition: background-color 0.15s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  line-height: 1.4 !important;
+}
+
+.pac-item:first-child {
+  border-top: none !important;
+}
+
+.pac-item:hover,
+.pac-item-selected {
+  background-color: rgba(241, 245, 249, 0.95) !important;
+}
+
+.pac-item-query {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  padding-right: 6px !important;
+}
+
+.pac-icon {
+  margin-top: 0 !important;
+  margin-right: 10px !important;
+}
+
+.pac-matched {
+  font-weight: 800 !important;
+  color: #0284c7 !important;
+}
+
+/* Interactive Map Marker Bounce & Drop Animation */
+@keyframes pin-drop-bounce {
+  0% {
+    transform: translateY(-24px) scale(0.95);
+    opacity: 0.8;
+  }
+  60% {
+    transform: translateY(2px) scale(1.02);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(-4px) scale(0.99);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-pin-drop {
+  animation: pin-drop-bounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
 
 

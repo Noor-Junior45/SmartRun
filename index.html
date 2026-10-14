@@ -17,7 +17,9 @@
             str.includes('WebSocket closed') ||
             str.includes('WebSocket is closed') ||
             str.includes('failed to connect to websocket') ||
-            str.includes('vite:ws')
+            str.includes('vite:ws') ||
+            str.includes('BillingNotEnabledMapError') ||
+            str.includes('billing-not-enabled-map-error')
           );
         };
         console.warn = function(...args) {
@@ -25,7 +27,10 @@
           origWarn.apply(console, args);
         };
         console.error = function(...args) {
-          if (args.some(isBenignViteMsg)) return;
+          if (args.some(isBenignViteMsg)) {
+            window.dispatchEvent(new CustomEvent('google_maps_billing_failure'));
+            return;
+          }
           origError.apply(console, args);
         };
         console.debug = function(...args) {
@@ -37,6 +42,12 @@
           origInfo.apply(console, args);
         };
       })();
+
+      // Suppress Google Maps alert modal and notify application components
+      window.gm_authFailure = function() {
+        console.warn('[GoogleMaps] Authentication or Billing notice triggered. Switching to resilient delivery map.');
+        window.dispatchEvent(new CustomEvent('google_maps_billing_failure'));
+      };
 
       // Neutralize Vite's internal HMR WebSocket in preview iframe where HMR is disabled
       if (typeof window !== 'undefined' && window.WebSocket) {
@@ -90,7 +101,9 @@
           (
             String(event.message || '').includes('WebSocket closed') ||
             String(event.message || '').includes('failed to connect to websocket') ||
-            String(event.filename || '').includes('@vite/client')
+            String(event.filename || '').includes('@vite/client') ||
+            String(event.message || '').includes('BillingNotEnabledMapError') ||
+            String(event.message || '').includes('billing-not-enabled-map-error')
           )
         ) {
           event.preventDefault();

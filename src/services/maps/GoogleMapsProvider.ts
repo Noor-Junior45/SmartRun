@@ -1,83 +1,18 @@
-import L from 'leaflet';
 import { IMapProvider, IMapInstance, MapCoordinates, MapInitOptions, MapSearchResult, ReverseGeocodeResult } from './types';
 import { API_BASE_URL } from '../../lib/apiBase';
 import { generateSecureToken } from '../../utils/cryptoHelper';
+import { getSynchronousGoogleMapsKey, resolveGoogleMapsApiKey, getGoogleMapsStatus } from './googleMapsConfig';
 
 let googleMapsScriptLoadingPromise: Promise<boolean> | null = null;
-let googleMapsAuthFailed = false;
-let googleBillingVerified: boolean | null = null;
-let billingStatusCheckPromise: Promise<boolean> | null = null;
-let fetchedGoogleMapsApiKey: string | null = null;
 
-// Suppress Google Maps alert popup if auth/billing failure occurs
-if (typeof window !== 'undefined') {
-  (window as any).gm_authFailure = () => {
-    console.warn('[GoogleMaps] Authentication or Billing notice triggered. Switching to clean resilient renderer.');
-    googleMapsAuthFailed = true;
-    googleBillingVerified = false;
-    window.dispatchEvent(new CustomEvent('google_maps_auth_failure'));
-  };
-}
+// Global usage attribution identifier for Google Maps Platform in AI Studio
+const USAGE_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
 
 /**
- * Pre-verifies whether Google Maps Platform billing is enabled on the current key.
- * This prevents the browser from loading maps.googleapis.com with an unbilled key,
- * which eliminates the fatal 'BillingNotEnabledMapError' console error and watermark.
+ * Loads the official Google Maps JavaScript API SDK asynchronously
  */
-async function isGoogleMapsBillingActive(): Promise<boolean> {
-  if (googleBillingVerified !== null) {
-    return googleBillingVerified;
-  }
-
-  if (billingStatusCheckPromise) {
-    return billingStatusCheckPromise;
-  }
-
-  billingStatusCheckPromise = (async () => {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch(`${API_BASE_URL}/api/maps/google/status`, { signal: controller.signal });
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.billingEnabled === true) {
-          googleBillingVerified = true;
-          if (data.apiKey) {
-            fetchedGoogleMapsApiKey = data.apiKey;
-          }
-          return true;
-        } else {
-          googleBillingVerified = false;
-          googleMapsAuthFailed = true;
-          console.info('[GoogleMapsProvider] Google Maps billing is not active on this project. Using resilient high-definition map renderer.');
-          return false;
-        }
-      }
-    } catch {
-      // In case of timeout or offline, default to safe fallback renderer to avoid billing error
-      googleBillingVerified = false;
-      googleMapsAuthFailed = true;
-      return false;
-    }
-
-    googleBillingVerified = false;
-    googleMapsAuthFailed = true;
-    return false;
-  })();
-
-  return billingStatusCheckPromise;
-}
-
-async function loadGoogleMapsScript(apiKey: string): Promise<boolean> {
+export async function loadGoogleMapsScript(apiKey: string): Promise<boolean> {
   if (typeof window === 'undefined') return Promise.resolve(false);
-
-  // Mandatory pre-flight: Only load script if billing is verified active
-  const isBilled = await isGoogleMapsBillingActive();
-  if (!isBilled || googleMapsAuthFailed || googleBillingVerified === false) {
-    return Promise.resolve(false);
-  }
 
   if ((window as any).google && (window as any).google.maps && (window as any).google.maps.Map) {
     return Promise.resolve(true);
@@ -101,14 +36,14 @@ async function loadGoogleMapsScript(apiKey: string): Promise<boolean> {
 
     const script = document.createElement('script');
     script.id = 'google-maps-js-sdk';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places,geometry&loading=async`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places,geometry,marker,routes&loading=async`;
     script.async = true;
     script.defer = true;
 
     const timeout = setTimeout(() => {
-      console.warn('[GoogleMapsProvider] Script load timeout, using resilient renderer');
-      resolve(false);
-    }, 6000);
+      console.warn('[GoogleMapsProvider] Google Maps script load timeout');
+      resolve(Boolean((window as any).google?.maps?.Map));
+    }, 8000);
 
     script.onload = () => {
       clearTimeout(timeout);
@@ -130,81 +65,30 @@ async function loadGoogleMapsScript(apiKey: string): Promise<boolean> {
 export class GoogleMapsProvider implements IMapProvider {
   readonly name = 'google' as const;
 
-  private getApiKey(): string | null {
-    if (fetchedGoogleMapsApiKey) {
-      return fetchedGoogleMapsApiKey;
-    }
-    const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : (process.env as any || {});
-    const key = (
-      env.VITE_GOOGLE_MAPS_API_KEY ||
-      env.GOOGLE_MAPS_API_KEY ||
-      env.OGLE_MAPS_API_KEY ||
-      ''
-    ).trim();
-    if (
-      key &&
-      key !== 'YOUR_API_KEY' &&
-      !key.includes('placeholder') &&
-      !key.includes('demo') &&
-      key.length > 10
-    ) {
-      return key;
-    }
-    return null;
-  }
-
   isAvailable(): boolean {
-    if (googleMapsAuthFailed || googleBillingVerified === false) {
-      return false;
-    }
-    return Boolean(this.getApiKey());
+    const key = getSynchronousGoogleMapsKey();
+    return Boolean(key && key.length > 10);
   }
 
   async initialize(container: HTMLElement, options: MapInitOptions): Promise<IMapInstance> {
     container.innerHTML = '';
-    const apiKey = this.getApiKey();
+    const status = await getGoogleMapsStatus();
 
-    // Verify billing active before deciding renderer
-    const isBilled = await isGoogleMapsBillingActive();
-
-    // If no key or if billing is not enabled, seamlessly use resilient clean renderer
-    if (!apiKey || !isBilled || googleMapsAuthFailed || googleBillingVerified === false) {
-      return this.initializeCleanTileMap(container, options);
+    if (!status.apiKey || !status.billingEnabled) {
+      throw new Error('Google Maps billing is not active on this project');
     }
 
-    // 1. Try Native Google Maps JavaScript API only if billing is verified
-    try {
-      const loaded = await loadGoogleMapsScript(apiKey);
-      if (loaded && !googleMapsAuthFailed && (window as any).google?.maps?.Map) {
-        return this.initializeNativeGoogleMap(container, options);
-      }
-    } catch (err) {
-      console.warn('[GoogleMapsProvider] Native Google Maps initialization error, falling back to clean tiles:', err);
+    const loaded = await loadGoogleMapsScript(status.apiKey);
+    if (!loaded || !(window as any).google?.maps?.Map) {
+      throw new Error('Google Maps JavaScript SDK failed to load');
     }
 
-    // 2. Resilient High-Definition Clean Renderer (Zero watermark, zero error popups)
-    return this.initializeCleanTileMap(container, options);
+    return this.initializeNativeGoogleMap(container, options);
   }
 
   private initializeNativeGoogleMap(container: HTMLElement, options: MapInitOptions): IMapInstance {
     const google = (window as any).google;
     const initialCenter = { lat: options.center.lat, lng: options.center.lng };
-
-    let currentInstance: IMapInstance | null = null;
-    let isSwapped = false;
-
-    // Safety swap helper if Google Maps watermark / billing error happens during session
-    const swapToCleanRenderer = () => {
-      if (isSwapped) return;
-      isSwapped = true;
-      googleMapsAuthFailed = true;
-      googleBillingVerified = false;
-      console.info('[GoogleMapsProvider] Swapping to clean high-definition tile map to prevent watermark display.');
-      currentInstance = this.initializeCleanTileMap(container, options);
-    };
-
-    const authFailListener = () => swapToCleanRenderer();
-    window.addEventListener('google_maps_auth_failure', authFailListener, { once: true });
 
     const map = new google.maps.Map(container, {
       center: initialCenter,
@@ -218,28 +102,10 @@ export class GoogleMapsProvider implements IMapProvider {
       fullscreenControl: false,
       gestureHandling: 'greedy',
       keyboardShortcuts: false,
-      styles: [
-        {
-          featureType: 'poi',
-          elementType: 'labels',
-          stylers: [{ visibility: 'on' }]
-        }
-      ]
+      internalUsageAttributionIds: [USAGE_ATTRIBUTION_ID]
     });
-
-    // Check for Google Maps watermark banner injection (.gm-style-pbc)
-    const observer = new MutationObserver(() => {
-      if (container.querySelector('.gm-style-pbc') || container.innerText?.includes('development purposes')) {
-        observer.disconnect();
-        swapToCleanRenderer();
-      }
-    });
-    observer.observe(container, { childList: true, subtree: true });
-
-    let isUserDragging = false;
 
     map.addListener('dragstart', () => {
-      isUserDragging = true;
       options.onMoveStart?.();
     });
 
@@ -251,7 +117,6 @@ export class GoogleMapsProvider implements IMapProvider {
     });
 
     map.addListener('idle', () => {
-      isUserDragging = false;
       const center = map.getCenter();
       if (center) {
         options.onMoveEnd?.({ lat: center.lat(), lng: center.lng() });
@@ -260,108 +125,30 @@ export class GoogleMapsProvider implements IMapProvider {
 
     const instance: IMapInstance = {
       setCenter: (coords: MapCoordinates) => {
-        if (isSwapped && currentInstance) return currentInstance.setCenter(coords);
         map.setCenter({ lat: coords.lat, lng: coords.lng });
       },
       getCenter: (): MapCoordinates => {
-        if (isSwapped && currentInstance) return currentInstance.getCenter();
         const c = map.getCenter();
         return { lat: c ? c.lat() : options.center.lat, lng: c ? c.lng() : options.center.lng };
       },
       flyTo: (coords: MapCoordinates, zoom = 18) => {
-        if (isSwapped && currentInstance) return currentInstance.flyTo(coords, zoom);
         map.panTo({ lat: coords.lat, lng: coords.lng });
         if (zoom) map.setZoom(zoom);
       },
       zoomIn: () => {
-        if (isSwapped && currentInstance) return currentInstance.zoomIn();
         const z = map.getZoom() || 18;
         map.setZoom(z + 1);
       },
       zoomOut: () => {
-        if (isSwapped && currentInstance) return currentInstance.zoomOut();
         const z = map.getZoom() || 18;
         map.setZoom(Math.max(1, z - 1));
       },
       invalidateSize: () => {
-        if (isSwapped && currentInstance) return currentInstance.invalidateSize();
         google.maps.event.trigger(map, 'resize');
       },
       destroy: () => {
-        observer.disconnect();
-        window.removeEventListener('google_maps_auth_failure', authFailListener);
-        if (isSwapped && currentInstance) {
-          currentInstance.destroy();
-        } else {
-          google.maps.event.clearInstanceListeners(map);
-          container.innerHTML = '';
-        }
-      }
-    };
-
-    return instance;
-  }
-
-  private initializeCleanTileMap(container: HTMLElement, options: MapInitOptions): IMapInstance {
-    const map = L.map(container, {
-      center: [options.center.lat, options.center.lng],
-      zoom: options.zoom || 18,
-      minZoom: options.minZoom || 11,
-      maxZoom: options.maxZoom || 19,
-      zoomControl: false,
-      attributionControl: false
-    });
-
-    // High-resolution clean map tiles with zero watermark
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd',
-      maxZoom: 20,
-      attribution: ''
-    }).addTo(map);
-
-    if (options.onMoveStart) {
-      map.on('movestart', () => options.onMoveStart?.());
-    }
-
-    if (options.onMove) {
-      map.on('move', () => {
-        const c = map.getCenter();
-        options.onMove?.({ lat: c.lat, lng: c.lng });
-      });
-    }
-
-    if (options.onMoveEnd) {
-      map.on('moveend', () => {
-        const c = map.getCenter();
-        options.onMoveEnd?.({ lat: c.lat, lng: c.lng });
-      });
-    }
-
-    const instance: IMapInstance = {
-      setCenter: (coords: MapCoordinates) => {
-        map.setView([coords.lat, coords.lng]);
-      },
-      getCenter: (): MapCoordinates => {
-        const c = map.getCenter();
-        return { lat: c.lat, lng: c.lng };
-      },
-      flyTo: (coords: MapCoordinates, zoom = 18) => {
-        map.flyTo([coords.lat, coords.lng], zoom, {
-          duration: 1.0,
-          easeLinearity: 0.25
-        });
-      },
-      zoomIn: () => {
-        map.zoomIn();
-      },
-      zoomOut: () => {
-        map.zoomOut();
-      },
-      invalidateSize: () => {
-        map.invalidateSize();
-      },
-      destroy: () => {
-        map.remove();
+        google.maps.event.clearInstanceListeners(map);
+        container.innerHTML = '';
       }
     };
 
@@ -369,8 +156,7 @@ export class GoogleMapsProvider implements IMapProvider {
   }
 
   async searchPlaces(query: string, locationBias?: MapCoordinates): Promise<MapSearchResult[]> {
-    const q = query.trim();
-    if (!q) return [];
+    const q = query.trim() || 'all';
 
     try {
       const biasParam = locationBias ? `&lat=${locationBias.lat}&lng=${locationBias.lng}` : '';
@@ -382,6 +168,10 @@ export class GoogleMapsProvider implements IMapProvider {
             id: r.id || generateSecureToken('google', 8),
             name: r.name,
             secondaryText: r.secondaryText || 'Kolkata, West Bengal',
+            building: r.building,
+            road: r.road,
+            area: r.area,
+            city: r.city,
             lat: r.lat,
             lng: r.lng,
             placeId: r.placeId,
@@ -423,7 +213,7 @@ export class GoogleMapsProvider implements IMapProvider {
       console.warn('[GoogleMapsProvider] reverseGeocode proxy error:', err);
     }
 
-    // Fallback geocoding via Nominatim
+    // Secondary fallback geocoding via Nominatim
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.lat}&lon=${coords.lng}&zoom=18&addressdetails=1`,

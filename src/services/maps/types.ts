@@ -13,6 +13,10 @@ export interface MapSearchResult {
   pincode?: string;
   isMapGeocoded?: boolean;
   provider: 'google' | 'osm' | 'local';
+  building?: string;
+  road?: string;
+  area?: string;
+  city?: string;
 }
 
 export interface ReverseGeocodeResult {

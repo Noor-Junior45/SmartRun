@@ -14,6 +14,8 @@ if (!env.VITE_SUPABASE_URL || !env.VITE_SUPABASE_ANON_KEY) {
   );
 }
 
+import { durableAuthStorage } from './durableStorage';
+
 /**
  * Shared Supabase Client singleton with persistent session handling
  */
@@ -22,7 +24,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storageKey: 'giriraj_supabase_auth_session'
+    storageKey: 'giriraj_supabase_auth_session',
+    storage: durableAuthStorage
   }
 });
 

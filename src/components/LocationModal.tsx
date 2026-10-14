@@ -15,8 +15,6 @@ import {
   ChevronRight,
   Phone,
   User as UserIcon,
-  ZoomIn,
-  ZoomOut,
   Loader2,
   Plus,
   Map as MapIcon,
@@ -355,7 +353,8 @@ export const LocationModal = ({
           mapInstanceRef.current = instance;
           setActiveProvider(provider);
           instance.invalidateSize();
-          setTimeout(() => instance.invalidateSize(), 200);
+          setTimeout(() => instance.invalidateSize(), 150);
+          setTimeout(() => instance.invalidateSize(), 400);
         }
       } catch (err) {
         console.error('[LocationModal] Map render failed:', err);
@@ -372,10 +371,18 @@ export const LocationModal = ({
     };
   }, [isOpen, step, resolveCoordinatesToAddress]);
 
-  // Fly to target coordinates on map
+  // Fly to target coordinates on map with resilient retry if instance is mounting
   const flyToCoords = (lat: number, lng: number, zoom = 18) => {
     if (mapInstanceRef.current) {
       mapInstanceRef.current.flyTo({ lat, lng }, zoom);
+      mapInstanceRef.current.invalidateSize();
+    } else {
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.flyTo({ lat, lng }, zoom);
+          mapInstanceRef.current.invalidateSize();
+        }
+      }, 300);
     }
   };
 
@@ -504,23 +511,22 @@ export const LocationModal = ({
       const isDenied = err?.code === 1 || String(err?.message || '').toLowerCase().includes('denied');
       showToast(
         isDenied
-          ? 'Location permission denied. Please select your delivery area below.'
-          : 'Unable to acquire GPS fix. Please select your delivery area below.',
+          ? 'Location permission not granted. Opened map so you can pick your exact spot.'
+          : 'Unable to acquire direct GPS fix. Opened map so you can pin your location.',
         'info',
         4000
       );
-      // Keep modal open so the user can comfortably choose their delivery area or search manually
+      // Gracefully transition to map pin view centered on current area or Kolkata center
+      const fallbackLat = pinCoordinates.lat || currentArea.lat || 22.5735;
+      const fallbackLng = pinCoordinates.lng || currentArea.lng || 88.4331;
+      setStep('map_pin');
+      setTimeout(() => flyToCoords(fallbackLat, fallbackLng, 16), 200);
     }
   };
 
-  // Real-time Places Search via MapProviderManager
+  // Real-time Places & Buildings Search via MapProviderManager & Google Maps API
   useEffect(() => {
     const q = searchQuery.trim();
-    if (!q) {
-      setMapSearchResults([]);
-      setIsSearchingMap(false);
-      return;
-    }
 
     if (searchAbortRef.current) {
       searchAbortRef.current.abort();
@@ -532,7 +538,8 @@ export const LocationModal = ({
 
     const debounceTimer = setTimeout(async () => {
       try {
-        const results = await mapManager.searchPlaces(q, pinCoordinates);
+        const queryToRun = q || 'all';
+        const results = await mapManager.searchPlaces(queryToRun, pinCoordinates);
         if (results && results.length > 0) {
           setMapSearchResults(results);
           setIsSearchingMap(false);
@@ -544,8 +551,9 @@ export const LocationModal = ({
         }
       }
 
-      // Local fallback
+      // Local fallback with all Kolkata hubs & areas
       const localMatches: MapSearchResult[] = KOLKATA_AREAS.filter((area) => {
+        if (!q) return true;
         const lowerQ = q.toLowerCase();
         return (
           area.name.toLowerCase().includes(lowerQ) ||
@@ -555,7 +563,10 @@ export const LocationModal = ({
       }).map((area) => ({
         id: `area-${area.pincode}`,
         name: area.name,
-        secondaryText: `Kolkata, West Bengal • PIN ${area.pincode}`,
+        building: area.name,
+        road: area.exactStreet || area.name,
+        area: area.name,
+        secondaryText: `${area.exactStreet ? area.exactStreet + ', ' : ''}Kolkata, West Bengal • PIN ${area.pincode}`,
         lat: area.lat || 22.5735,
         lng: area.lng || 88.4331,
         pincode: area.pincode,
@@ -564,7 +575,7 @@ export const LocationModal = ({
 
       setMapSearchResults(localMatches);
       setIsSearchingMap(false);
-    }, 250);
+    }, q ? 200 : 0);
 
     return () => {
       clearTimeout(debounceTimer);
@@ -621,7 +632,20 @@ export const LocationModal = ({
 
     setMatchedArea(updatedArea);
     setDetectedStreet(street);
-    setBuildingRoad(street);
+
+    // Extract rich building / address details
+    const buildingInfo = result.building || result.name;
+    const fullStreetAddress = result.road && buildingInfo !== result.road
+      ? `${buildingInfo}, ${result.road}`
+      : (result.secondaryText || street);
+
+    setBuildingRoad(fullStreetAddress);
+    if (result.building) {
+      setHouseFlat(result.building);
+    }
+    if (result.road) {
+      setLandmark(result.road);
+    }
 
     if (openPinMap) {
       setMapEntrySource('detect_location');
@@ -803,110 +827,88 @@ export const LocationModal = ({
               </div>
             </div>
 
-            {/* Real-time Search Results */}
-            {searchQuery.trim() ? (
-              <div className="flex-1 flex flex-col bg-white border border-slate-200 shadow-sm rounded-lg overflow-hidden mb-4">
-                <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-                  <span className="flex items-center gap-1.5 text-slate-800">
-                    <MapIcon className="w-3.5 h-3.5 text-emerald-600" />
-                    Locations ({mapSearchResults.length})
+            {/* Real-time Search Results & All Locations */}
+            <div className="flex-1 flex flex-col bg-white border border-slate-200 shadow-2xs rounded-xl overflow-hidden mb-4">
+              <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                <span className="flex items-center gap-1.5 text-slate-800">
+                  <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+                  {searchQuery.trim() ? `Search Results (${mapSearchResults.length})` : `All Locations & Buildings (${mapSearchResults.length})`}
+                </span>
+                {isSearchingMap ? (
+                  <span className="text-emerald-700 font-normal normal-case flex items-center gap-1 text-[11px]">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Fetching...
                   </span>
-                  {isSearchingMap && (
-                    <span className="text-emerald-700 font-normal normal-case flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Searching...
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-                  {mapSearchResults.length > 0 ? (
-                    mapSearchResults.map((result) => (
-                      <div
-                        key={result.id}
-                        onClick={() => handleSelectMapSearchResult(result, true)}
-                        className="w-full p-3.5 text-left hover:bg-slate-50 flex items-center justify-between group cursor-pointer transition-colors"
-                      >
-                        <div className="flex items-start gap-3 truncate text-left">
-                          <div className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                            <MapPin className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="truncate">
-                            <div className="text-sm font-semibold text-slate-900 group-hover:text-black truncate">
-                              {result.name}
-                            </div>
-                            <div className="text-xs text-slate-500 mt-0.5 truncate">
-                              {result.secondaryText}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1 shrink-0 ml-2">
-                          <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 group-hover:bg-emerald-100 px-2 py-1 rounded transition-colors flex items-center gap-1">
-                            <Crosshair className="w-3 h-3" />
-                            Select
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  ) : !isSearchingMap ? (
-                    <div className="p-6 text-center">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2.5">
-                        <MapPin className="w-5 h-5" />
-                      </div>
-                      <p className="text-xs font-semibold text-slate-700">No exact area found</p>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Try searching with a landmark, main road or PIN code
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
+                ) : (
+                  <span className="text-[10px] font-semibold text-slate-400 normal-case tracking-normal">
+                    Google Maps API
+                  </span>
+                )}
               </div>
-            ) : (
-              <>
-                {/* Detect Location Button */}
-                <div 
-                  id="detect-my-current-location-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!gpsLoading) handleDetectCurrentLocation(false);
-                  }}
-                  className={`relative overflow-hidden bg-white border rounded-xl p-3.5 transition-all duration-200 cursor-pointer shadow-2xs hover:shadow-xs group flex items-center justify-between ${
-                    gpsLoading
-                      ? 'border-blue-500 bg-blue-50/30 ring-1 ring-blue-500 pointer-events-none'
-                      : 'border-slate-200 hover:border-slate-900 active:scale-[0.99]'
-                  }`}
-                  title="Directly fetch current location"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors duration-200 shrink-0 ${
-                      gpsLoading
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
-                    }`}>
-                      {gpsLoading ? (
-                        <Loader2 className="w-4.5 h-4.5 animate-spin relative z-10" />
-                      ) : (
-                        <LocateFixed className="w-4.5 h-4.5 stroke-[2.2] relative z-10 group-hover:scale-110 transition-transform duration-200" />
-                      )}
-                    </div>
-                    <div className="flex items-center min-w-0">
-                      <span className="text-sm font-bold text-slate-900 group-hover:text-black tracking-tight truncate">
-                        {gpsLoading ? 'Fetching Current Location...' : 'Detect Location'}
-                      </span>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center text-slate-400 group-hover:text-slate-900 transition-colors shrink-0 pl-2">
-                    {gpsLoading ? (
-                      <span className="text-xs text-blue-600 font-semibold animate-pulse">Locating...</span>
-                    ) : (
-                      <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-200" />
-                    )}
-                  </div>
-                </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-100 max-h-[340px] sm:max-h-[380px]">
+                {mapSearchResults.length > 0 ? (
+                  mapSearchResults.map((result) => (
+                    <div
+                      key={result.id}
+                      onClick={() => handleSelectMapSearchResult(result, true)}
+                      className="w-full p-3.5 text-left hover:bg-slate-50 flex items-center justify-between group cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-start gap-3 truncate text-left min-w-0 pr-2">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                          {result.building ? (
+                            <Building2 className="w-4 h-4" />
+                          ) : (
+                            <MapPin className="w-4 h-4" />
+                          )}
+                        </div>
+                        <div className="truncate min-w-0">
+                          <div className="text-sm font-semibold text-slate-900 group-hover:text-black truncate">
+                            {result.name}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5 truncate">
+                            {result.secondaryText}
+                          </div>
+                          {(result.building || result.pincode) && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              {result.building && (
+                                <span className="inline-flex items-center text-[10px] font-medium bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+                                  {result.building}
+                                </span>
+                              )}
+                              {result.pincode && (
+                                <span className="inline-flex items-center text-[10px] font-medium bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded">
+                                  PIN {result.pincode}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
 
-                {/* Add Address Action Button */}
+                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                        <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 group-hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 font-semibold">
+                          <Crosshair className="w-3 h-3" />
+                          Select
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : !isSearchingMap ? (
+                  <div className="p-6 text-center">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2.5">
+                      <MapPin className="w-5 h-5" />
+                    </div>
+                    <p className="text-xs font-semibold text-slate-700">No matching location found</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Try searching with a building name, landmark, main road or PIN code
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Add Address Action Button */}
                 <button
                   type="button"
                   id="add-saved-address-btn"
@@ -1026,13 +1028,11 @@ export const LocationModal = ({
                     <div className="bg-white border border-dashed border-slate-300 rounded-xl p-4 text-center">
                       <p className="text-xs font-semibold text-slate-700">No saved addresses yet</p>
                       <p className="text-[11px] text-slate-400 mt-1">
-                        Use "Detect Location" or "Add Address" to pin your delivery location.
+                        Select a location above or click "Add Address" to pin your delivery location.
                       </p>
                     </div>
                   )}
                 </div>
-              </>
-            )}
 
           </div>
         )}
@@ -1073,23 +1073,7 @@ export const LocationModal = ({
             <div className="flex-1 w-full min-h-[300px] relative">
               <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-              {/* Floating Top Quick GPS Action */}
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] w-full max-w-[90%] flex justify-center">
-                <button
-                  type="button"
-                  id="map-detect-current-location-pill"
-                  onClick={() => handleDetectCurrentLocation(true)}
-                  className="bg-white/95 hover:bg-white text-slate-900 border border-slate-300 shadow-md px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 hover:border-slate-800 transition-all cursor-pointer backdrop-blur-sm active:scale-95"
-                  title="Auto-populate map to your GPS location"
-                >
-                  {gpsLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-800" />
-                  ) : (
-                    <LocateFixed className="w-3.5 h-3.5 text-slate-900" />
-                  )}
-                  <span>{gpsLoading ? 'Detecting Location...' : 'Detect My Current Location'}</span>
-                </button>
-              </div>
+
 
               {/* Center Map Pin */}
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-[950]">
@@ -1128,26 +1112,18 @@ export const LocationModal = ({
                 </div>
               </div>
 
-              {/* Floating Controls: Locate Me, Retry & Zoom */}
+              {/* Floating Controls: Retry */}
               <div className="absolute bottom-4 right-3.5 z-[1000] flex flex-col gap-2">
                 <button
                   type="button"
                   id="floating-retry-map-btn"
                   onClick={handleRetryMap}
                   disabled={isRetryingMap}
-                  className="w-10 h-10 bg-white border border-slate-200 text-slate-800 shadow-lg flex items-center justify-center hover:bg-slate-50 cursor-pointer active:scale-95 transition-all disabled:opacity-60"
+                  className="w-10 h-10 bg-white border border-slate-200 text-slate-800 shadow-lg flex items-center justify-center hover:bg-slate-50 cursor-pointer active:scale-95 transition-all disabled:opacity-60 rounded-lg"
                   title="Retry / Re-initialize Map"
+                  aria-label="Re-initialize Map"
                 >
                   <RotateCw className={`w-4 h-4 text-slate-900 ${isRetryingMap ? 'animate-spin' : ''}`} />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleDetectCurrentLocation(true)}
-                  className="w-10 h-10 bg-white border border-slate-200 text-slate-800 shadow-lg flex items-center justify-center hover:bg-slate-50 cursor-pointer active:scale-95 transition-all"
-                  title="Detect My Current Location (GPS)"
-                >
-                  <LocateFixed className={`w-4 h-4 text-slate-900 ${gpsLoading ? 'animate-spin' : ''}`} />
                 </button>
               </div>
             </div>
@@ -1156,7 +1132,7 @@ export const LocationModal = ({
             <div className="bg-white border-t border-slate-200 p-4 sm:p-5 z-[1000] shadow-xl shrink-0 space-y-3">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded bg-slate-100 text-slate-800 flex items-center justify-center shrink-0 mt-0.5">
-                  <MapPin className="w-4 h-4" />
+                  <MapPin className="w-4 h-4 text-emerald-600" />
                 </div>
                 <div className="overflow-hidden flex-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
@@ -1171,14 +1147,29 @@ export const LocationModal = ({
                 </div>
               </div>
 
-              <div className="pt-1">
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                {/* 1-Tap Deliver to this location directly */}
+                <button
+                  type="button"
+                  id="confirm-pin-deliver-here-btn"
+                  onClick={() => handleUseCurrentLocationDirectly(matchedArea, detectedStreet)}
+                  className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm tracking-tight flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm active:scale-[0.99] rounded-xl"
+                  title="Deliver to this location and start shopping immediately"
+                >
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  <span>Deliver to this Location</span>
+                </button>
+
+                {/* Add Flat/House details to save as address */}
                 <button
                   type="button"
                   id="confirm-pin-proceed-details-btn"
                   onClick={handleProceedToDetails}
-                  className="w-full py-3 px-4 bg-slate-900 hover:bg-black text-white font-bold text-sm tracking-tight flex items-center justify-center cursor-pointer transition-all shadow-sm active:scale-[0.99]"
+                  className="py-3 px-4 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-sm tracking-tight flex items-center justify-center gap-1.5 cursor-pointer transition-all border border-slate-300 active:scale-[0.99] rounded-xl shrink-0"
+                  title="Add complete house/flat details"
                 >
-                  <span>Confirm</span>
+                  <Plus className="w-4 h-4" />
+                  <span>Add Flat / House</span>
                 </button>
               </div>
             </div>

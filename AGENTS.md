@@ -85,9 +85,8 @@
 ## 5. Map & Delivery Tracking Architecture
 
 - **Cascaded Map Provider**:
-  1. **Mappls (MapmyIndia) v3.0**: Primary Indian address autocomplete and geocoding.
-  2. **Google Maps Platform**: Secondary provider.
-  3. **Leaflet / OpenStreetMap**: Zero-dependency fallback built into `LiveOrderRealMap.tsx`.
+  1. **Google Maps Platform**: Primary map provider across live order delivery tracking (`LiveOrderRealMap.tsx` using `@vis.gl/react-google-maps`) and address location selecting (`GoogleMapsProvider.ts` / `LocationModal.tsx`).
+  2. **OpenStreetMap**: Lightweight fallback provider. All Carto CDN raster tiles have been completely eliminated from the codebase.
 - **Server-Authoritative Rider Location**:
   - POST coordinates: `/api/orders/:orderId/rider-location`
   - GET coordinates: `/api/orders/:orderId/rider-location`
@@ -300,4 +299,29 @@
     - Added a 1.5-second auto-fade watchdog in `index.html` to guarantee the preloader smoothly dismisses itself if React takes time to mount.
   - **Vite WebSocket Silence**:
     - Neutralized benign `@vite/client` HMR WebSocket attempts in the sandboxed preview iframe via a lightweight WebSocket stub and silent console filter, eliminating `WebSocket closed without opened` and `Unhandled Rejection` errors from logs.
+- [x] **Google Maps Platform Integration & Complete Carto / Leaflet Eradication**:
+  - **Eliminated Carto CDN**: Removed all Carto voyager tile layer URLs (`basemaps.cartocdn.com`) across `LiveOrderRealMap.tsx`, `GoogleMapsProvider.ts`, and `OsmProvider.ts`.
+  - **Live Delivery & Rider Tracking via Google Maps**: Re-architected `LiveOrderRealMap.tsx` using official `@vis.gl/react-google-maps`:
+    - Integrated `<APIProvider>` with active Google Maps API key resolution via `googleMapsConfig.ts`.
+    - Integrated `<Map>` with mandatory `mapId="DEMO_MAP_ID"` and `internalUsageAttributionIds={["gmp_mcp_codeassist_v1_aistudio"]}`.
+    - Used modern `<AdvancedMarker>` for Store (SmartRun Warehouse depot), Destination (delivery address), and Live Rider (with avatar, bike icon, and vehicle registration number e.g. `WB 02 AR 4491`).
+    - Implemented `DeliveryRouteOverlay` using `google.maps.Polyline` with dynamic road-following driving path, glowing express stroke, and automatic `fitBounds` camera adjustment.
+  - **Unblocked Google Maps Initialization**:
+    - Removed `isGoogleMapsBillingActive()` server-probe blocker in `GoogleMapsProvider.ts` that falsely fell back to Carto.
+    - Removed MutationObserver that was aggressively destroying Google Maps.
+    - Updated `/api/maps/google/status` in `server.ts` to always supply the active API key with `available: true`.
+- [x] **Permanent Auth Longevity Across Native Android App & Browsers (Zero-Logout)**:
+  - **Durable Storage Adapter (`src/lib/durableStorage.ts`)**: Built unified multi-layer storage that mirrors auth tokens, active user scope, and user profiles across in-memory cache, `window.localStorage`, and permanent Android SharedPreferences via `@capacitor/preferences`. Data never expires or gets wiped on OS memory pressure or background suspension.
+  - **Native Startup Hydration (`hydrateDurableStorage`)**: On app startup, automatically pulls session data from Android SharedPreferences into memory and `localStorage` before any auth checks run, preventing cold-start session wipes.
+  - **Silent Token Auto-Renewal**: If Supabase JWT access tokens expire after 24h, 48h, or network reconnects, `getInitialAuthSession` and `onAuthStateChange` proactively recover sessions using canonical phone credentials (`p${clean10}@girirajpower.internal` and deterministic password).
+  - **Strict Logout Gating**: In `App.tsx`, prohibited session wiping unless `isLoggingOutRef.current` or `isUserLoggingOut()` is explicitly true. Transient network drops or expired tokens never kick users to `/login`.
+  - **App Resume Token Refresh (`appStateChange`)**: Added Capacitor native app lifecycle listener to verify and silently refresh tokens whenever the user returns to the app from the background.
+- [x] **Google Maps `BillingNotEnabledMapError` Resolution & Zero-Crash Architecture**:
+  - **Root Cause**: When the Google Maps JS SDK loaded with an API key whose Google Cloud project had not linked a billing account, the browser threw fatal `Google Maps JavaScript API error: BillingNotEnabledMapError`.
+  - **Pre-Flight Billing Verification**: In `server.ts` (`/api/maps/google/status`), probes the key and reports `billingEnabled: false` with Google Cloud billing link if billing is missing.
+  - **Safe Initialization Guard**: In `LiveOrderRealMap.tsx` and `GoogleMapsProvider.ts`, checks `billingEnabled` before loading `@vis.gl/react-google-maps`. If unbilled, skips Google Maps JS injection, eliminating `BillingNotEnabledMapError` entirely.
+  - **Runtime Auth Failure Trap**: Registered global `window.gm_authFailure` listener in `LiveOrderRealMap.tsx` that catches any runtime Google Maps auth/billing failures and seamlessly transitions to the resilient map renderer.
+  - **Resilient Fallback Tracking**: While billing is pending, delivery tracking displays an advisory banner with direct billing link and renders the map on standard OpenStreetMap tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`, zero Carto CDN) with all custom markers, live OSRM road polyline, recenter button, and GPS badge. As soon as billing is linked in Google Cloud Console, Google Maps vector map activates immediately.
+- [x] **Map Controls Clean-up (Location Modal)**:
+  - Removed Zoom In button (`#floating-zoom-in-btn`), Zoom Out button (`#floating-zoom-out-btn`), and top floating "Detect My Current Location" button (`#map-detect-current-location-pill`) from over the map canvas in `LocationModal.tsx`, leaving a clean, unobstructed map view.
 

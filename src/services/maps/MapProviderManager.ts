@@ -71,15 +71,13 @@ export class MapProviderManager {
     instance: IMapInstance;
     provider: 'google' | 'osm';
   }> {
-    // 1. Try Google Maps if configured
-    if (this.googleProvider.isAvailable()) {
-      try {
-        const instance = await this.googleProvider.initialize(container, options);
-        this.activeProviderName = 'google';
-        return { instance, provider: 'google' };
-      } catch (err) {
-        console.warn('[MapProviderManager] Google Maps failed to initialize, falling back to OSM:', err);
-      }
+    // 1. Try Google Maps first
+    try {
+      const instance = await this.googleProvider.initialize(container, options);
+      this.activeProviderName = 'google';
+      return { instance, provider: 'google' };
+    } catch (err) {
+      console.warn('[MapProviderManager] Google Maps failed to initialize, falling back to OSM:', err);
     }
 
     // 2. Fallback to OSM / Leaflet
@@ -92,8 +90,7 @@ export class MapProviderManager {
    * Searches places using Google Maps (Places API New), cascading to OSM.
    */
   public async searchPlaces(query: string, locationBias?: MapCoordinates): Promise<MapSearchResult[]> {
-    const q = query.trim();
-    if (!q) return [];
+    const q = query.trim() || 'all';
 
     // 1. Try Google Places
     try {

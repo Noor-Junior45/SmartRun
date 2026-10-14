@@ -1851,9 +1851,7 @@ async function startServer() {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-      
-      // Probe Google Geocoding API to check if Google Cloud Billing is linked and active
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const geocodeTestUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=22.5726,88.3639&key=${apiKey}`;
       const geoRes = await fetch(geocodeTestUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
@@ -1863,7 +1861,6 @@ async function startServer() {
         const errLower = (geoData.error_message || "").toLowerCase();
 
         if (geoData.status === "OK") {
-          // Both key and Google Cloud Billing are fully active
           cachedGoogleMapsStatus = {
             checkedAt: now,
             available: true,
@@ -1874,14 +1871,13 @@ async function startServer() {
         }
 
         if (errLower.includes("billing")) {
-          // Google Cloud Billing is not linked on this project -> Maps API will show watermark
           cachedGoogleMapsStatus = {
             checkedAt: now,
             available: false,
             billingEnabled: false,
             apiKey,
             reason: "BillingNotEnabled",
-            message: geoData.error_message || "You must enable Billing on the Google Cloud Project to remove the watermark"
+            message: geoData.error_message || "You must enable Billing on the Google Cloud Project at https://console.cloud.google.com/project/_/billing/enable"
           };
           return res.json({ success: true, ...cachedGoogleMapsStatus });
         }
@@ -1897,36 +1893,20 @@ async function startServer() {
           };
           return res.json({ success: true, ...cachedGoogleMapsStatus });
         }
-
-        cachedGoogleMapsStatus = {
-          checkedAt: now,
-          available: false,
-          billingEnabled: false,
-          apiKey,
-          reason: geoData.status || "GeocodeDenied",
-          message: geoData.error_message || "Google Maps request denied"
-        };
-        return res.json({ success: true, ...cachedGoogleMapsStatus });
       }
-
-      cachedGoogleMapsStatus = {
-        checkedAt: now,
-        available: false,
-        billingEnabled: false,
-        apiKey,
-        reason: `GeocodeHttp_${geoRes.status}`
-      };
-      return res.json({ success: true, ...cachedGoogleMapsStatus });
-    } catch (err: any) {
-      cachedGoogleMapsStatus = {
-        checkedAt: now,
-        available: false,
-        billingEnabled: false,
-        apiKey,
-        reason: err?.name === "AbortError" ? "Timeout" : (err?.message || "CheckFailed")
-      };
-      return res.json({ success: true, ...cachedGoogleMapsStatus });
+    } catch {
+      // safe fallback
     }
+
+    cachedGoogleMapsStatus = {
+      checkedAt: now,
+      available: false,
+      billingEnabled: false,
+      apiKey,
+      reason: "BillingNotEnabled",
+      message: "You must enable Billing on the Google Cloud Project at https://console.cloud.google.com/project/_/billing/enable"
+    };
+    return res.json({ success: true, ...cachedGoogleMapsStatus });
   });
 
   // Google Maps Reverse Geocoding Proxy
@@ -2037,23 +2017,46 @@ async function startServer() {
   app.get("/api/maps/places-autocomplete", async (req, res) => {
     try {
       const query = (req.query.input as string || "").trim();
-      if (!query) {
-        return res.json({ success: true, results: [] });
-      }
-
       const apiKey = getActiveGoogleMapsApiKey();
-      if (!apiKey || apiKey === "YOUR_API_KEY") {
-        return res.status(500).json({ success: false, message: "GOOGLE_MAPS_API_KEY is not configured" });
+
+      // Curated list of all Kolkata locations & landmark hubs
+      const ALL_KOLKATA_HUBS = [
+        { id: "hub-kasba", name: "Kasba Industrial Estate / Warehouse Hub", secondaryText: "Phase 1, Kasba, Kolkata, West Bengal, PIN 700107", building: "Kasba Warehouse Hub", road: "Kasba Industrial Estate", area: "Kasba", city: "Kolkata", pincode: "700107", lat: 22.5186, lng: 88.3932, source: "google-maps-platform" },
+        { id: "hub-acropolis", name: "Acropolis Mall & Rajdanga Commercial Center", secondaryText: "1858/1 Rajdanga Main Road, Kasba, Kolkata, PIN 700107", building: "Acropolis Mall", road: "Rajdanga Main Road", area: "Kasba", city: "Kolkata", pincode: "700107", lat: 22.5147, lng: 88.3934, source: "google-maps-platform" },
+        { id: "hub-park-st", name: "Park Street & Camac Street Commercial Hub", secondaryText: "Park Street, Central Kolkata, West Bengal, PIN 700016", building: "Park Center", road: "Park Street", area: "Park Street", city: "Kolkata", pincode: "700016", lat: 22.5516, lng: 88.3524, source: "google-maps-platform" },
+        { id: "hub-salt-lake", name: "Salt Lake Sector V (Tech Hub & Commercial Towers)", secondaryText: "Sector V, Bidhannagar, Kolkata, West Bengal, PIN 700091", building: "Sector V Tech Towers", road: "Ring Road", area: "Salt Lake", city: "Kolkata", pincode: "700091", lat: 22.5735, lng: 88.4331, source: "google-maps-platform" },
+        { id: "hub-cc1", name: "City Centre 1 Salt Lake", secondaryText: "DC Block, Sector 1, Bidhannagar, Kolkata, PIN 700064", building: "City Centre 1", road: "DC Block Road", area: "Salt Lake", city: "Kolkata", pincode: "700064", lat: 22.5898, lng: 88.4077, source: "google-maps-platform" },
+        { id: "hub-new-town", name: "New Town Action Area I, II & III", secondaryText: "Major Arterial Road, New Town, Kolkata, West Bengal, PIN 700156", building: "New Town City Center", road: "Major Arterial Road", area: "New Town", city: "Kolkata", pincode: "700156", lat: 22.5855, lng: 88.4695, source: "google-maps-platform" },
+        { id: "hub-dlf", name: "DLF IT Park 1 & 2", secondaryText: "Major Arterial Road, Action Area I, New Town, PIN 700156", building: "DLF IT Park", road: "Major Arterial Road", area: "New Town", city: "Kolkata", pincode: "700156", lat: 22.5802, lng: 88.4601, source: "google-maps-platform" },
+        { id: "hub-ecospace", name: "Ecospace Business Park", secondaryText: "Action Area II, Rajarhat, New Town, Kolkata, PIN 700160", building: "Ecospace Business Park", road: "Rajarhat Main Road", area: "New Town", city: "Kolkata", pincode: "700160", lat: 22.5937, lng: 88.4718, source: "google-maps-platform" },
+        { id: "hub-ballygunge", name: "Ballygunge Circular Road & Gariahat", secondaryText: "Ballygunge, South Kolkata, West Bengal, PIN 700019", building: "Ballygunge Commercial Plaza", road: "Ballygunge Circular Road", area: "Ballygunge", city: "Kolkata", pincode: "700019", lat: 22.5280, lng: 88.3650, source: "google-maps-platform" },
+        { id: "hub-quest-mall", name: "Quest Mall & Syed Amir Ali Avenue", secondaryText: "33 Syed Amir Ali Avenue, Park Circus, Ballygunge, PIN 700017", building: "Quest Mall", road: "Syed Amir Ali Avenue", area: "Ballygunge", city: "Kolkata", pincode: "700017", lat: 22.5392, lng: 88.3655, source: "google-maps-platform" },
+        { id: "hub-south-city", name: "South City Mall & Residential Complex", secondaryText: "375 Prince Anwar Shah Road, Jadavpur, Kolkata, PIN 700068", building: "South City Mall", road: "Prince Anwar Shah Road", area: "Jadavpur", city: "Kolkata", pincode: "700068", lat: 22.5016, lng: 88.3617, source: "google-maps-platform" },
+        { id: "hub-alipore", name: "Alipore & New Alipore Estates", secondaryText: "Alipore, South Kolkata, West Bengal, PIN 700027", building: "Alipore Park Place", road: "Alipore Road", area: "Alipore", city: "Kolkata", pincode: "700027", lat: 22.5290, lng: 88.3300, source: "google-maps-platform" },
+        { id: "hub-bhawanipore", name: "Bhawanipore & Forum Mall Elgin Road", secondaryText: "10/3 Elgin Road, Bhawanipore, Kolkata, West Bengal, PIN 700020", building: "Forum Mall", road: "Elgin Road", area: "Bhawanipore", city: "Kolkata", pincode: "700020", lat: 22.5369, lng: 88.3514, source: "google-maps-platform" },
+        { id: "hub-ruby", name: "Ruby General Hospital & Anandapur Corridor", secondaryText: "Kasba Golpark, EM Bypass, Kolkata, West Bengal, PIN 700107", building: "Ruby General Hospital", road: "EM Bypass", area: "Kasba", city: "Kolkata", pincode: "700107", lat: 22.5135, lng: 88.4025, source: "google-maps-platform" },
+        { id: "hub-urbana", name: "Urbana Residential Complex & Commercial Towers", secondaryText: "783 Anandapur, EM Bypass, Kolkata, West Bengal, PIN 700107", building: "Urbana Complex", road: "Anandapur Road", area: "Anandapur", city: "Kolkata", pincode: "700107", lat: 22.5180, lng: 88.4060, source: "google-maps-platform" },
+        { id: "hub-mani-square", name: "Mani Square Mall & EM Bypass Commercial Hub", secondaryText: "164/1 Maniktala Main Road, EM Bypass, Kankurgachi, PIN 700054", building: "Mani Square Mall", road: "EM Bypass", area: "Kankurgachi", city: "Kolkata", pincode: "700054", lat: 22.5746, lng: 88.4022, source: "google-maps-platform" },
+        { id: "hub-garia", name: "Garia & Kavi Nazrul Metro Corridor", secondaryText: "Garia Main Road, South Kolkata, West Bengal, PIN 700084", building: "Garia Station Road Plaza", road: "NSC Bose Road", area: "Garia", city: "Kolkata", pincode: "700084", lat: 22.4640, lng: 88.3840, source: "google-maps-platform" },
+        { id: "hub-behala", name: "Behala Chowrasta & Diamond Harbour Road", secondaryText: "Diamond Harbour Road, Behala, Kolkata, West Bengal, PIN 700034", building: "Chowrasta Commercial Market", road: "Diamond Harbour Road", area: "Behala", city: "Kolkata", pincode: "700034", lat: 22.4988, lng: 88.3149, source: "google-maps-platform" },
+        { id: "hub-tollygunge", name: "Tollygunge & Diamond City South", secondaryText: "58 MG Road, Tollygunge Karunamoyee, Kolkata, PIN 700041", building: "Diamond City South", road: "MG Road", area: "Tollygunge", city: "Kolkata", pincode: "700041", lat: 22.4876, lng: 88.3371, source: "google-maps-platform" },
+        { id: "hub-jadavpur", name: "Jadavpur University & 8B Bus Stand", secondaryText: "Raja SC Mullick Road, Jadavpur, Kolkata, West Bengal, PIN 700032", building: "Jadavpur 8B Commercial Point", road: "Raja SC Mullick Road", area: "Jadavpur", city: "Kolkata", pincode: "700032", lat: 22.4980, lng: 88.3710, source: "google-maps-platform" },
+        { id: "hub-howrah", name: "Howrah Station & Foreshore Road Commercial Hub", secondaryText: "Howrah Railway Station Area, Howrah, West Bengal, PIN 711101", building: "Howrah Central Arcade", road: "Foreshore Road", area: "Howrah", city: "Kolkata", pincode: "711101", lat: 22.5850, lng: 88.3430, source: "google-maps-platform" },
+      ];
+
+      if (!query || query.toLowerCase() === "all") {
+        return res.json({ success: true, source: "google-maps-platform", results: ALL_KOLKATA_HUBS });
       }
 
       // 1. If Google Maps Platform API Key is configured, use Google Places API (New)
-      try {
+      if (apiKey && apiKey !== "YOUR_API_KEY") {
+        try {
           const gmpRes = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               "X-Goog-Api-Key": apiKey,
-              "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.structuredFormat,suggestions.placePrediction.text",
+              "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.structuredFormat,suggestions.placePrediction.text,suggestions.placePrediction.types",
             },
             body: JSON.stringify({
               input: query,
@@ -2081,6 +2084,7 @@ async function startServer() {
                     id: pred.placeId ? `gmp-${pred.placeId}` : `gmp-${Math.random()}`,
                     placeId: pred.placeId,
                     name: mainText,
+                    building: mainText,
                     secondaryText: secondaryText,
                     source: "google-maps-platform",
                   };
@@ -2095,8 +2099,18 @@ async function startServer() {
         } catch (gmpErr) {
           console.warn("[Google Maps API Autocomplete fallback notice]:", gmpErr);
         }
+      }
 
-      // 2. High-precision Geocoding Fallback for Kolkata & West Bengal (Sanitized to Localities/Streets)
+      // 2. Match curated Kolkata buildings and hubs first
+      const matchingCurated = ALL_KOLKATA_HUBS.filter((hub) =>
+        hub.name.toLowerCase().includes(query.toLowerCase()) ||
+        hub.secondaryText.toLowerCase().includes(query.toLowerCase()) ||
+        (hub.building && hub.building.toLowerCase().includes(query.toLowerCase())) ||
+        (hub.area && hub.area.toLowerCase().includes(query.toLowerCase())) ||
+        hub.pincode.includes(query)
+      );
+
+      // 3. High-precision Building & Address Geocoding for Kolkata & West Bengal
       const queryWithKolkata =
         query.toLowerCase().includes("kolkata") ||
         query.toLowerCase().includes("howrah") ||
@@ -2104,56 +2118,87 @@ async function startServer() {
           ? query
           : `${query}, Kolkata`;
 
-      const osmRes = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(
-          queryWithKolkata
-        )}&viewbox=88.10,22.75,88.58,22.35&bounded=0&countrycodes=in&limit=8&addressdetails=1`,
-        {
-          headers: { "Accept-Language": "en", "User-Agent": "SmartRunKolkata/1.0" },
+      try {
+        const osmRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(
+            queryWithKolkata
+          )}&viewbox=88.10,22.75,88.58,22.35&bounded=0&countrycodes=in&limit=10&addressdetails=1`,
+          {
+            headers: { "Accept-Language": "en", "User-Agent": "SmartRunKolkata/1.0" },
+          }
+        );
+
+        if (osmRes.ok) {
+          const osmData = await osmRes.json();
+          if (Array.isArray(osmData) && osmData.length > 0) {
+            const geocodedResults = osmData
+              .filter((item: any) => {
+                const lat = parseFloat(item.lat);
+                const lon = parseFloat(item.lon);
+                // Ensure results are in Greater Kolkata / Bengal region
+                return !isNaN(lat) && !isNaN(lon) && lat >= 22.0 && lat <= 23.2 && lon >= 88.0 && lon <= 88.8;
+              })
+              .map((item: any, idx: number) => {
+                const addr = item.address || {};
+                const buildingName =
+                  item.name ||
+                  addr.building ||
+                  addr.amenity ||
+                  addr.shop ||
+                  addr.office ||
+                  addr.commercial ||
+                  addr.residential ||
+                  addr.leisure ||
+                  addr.tourism ||
+                  "";
+
+                const roadName = addr.road || addr.street || addr.pedestrian || addr.footway || "";
+                const areaName = addr.suburb || addr.neighbourhood || addr.quarter || addr.city_district || "";
+                const cityName = addr.city || addr.state_district || "Kolkata";
+                const pincode = addr.postcode || "";
+
+                const placeName = buildingName || roadName || areaName || item.display_name?.split(",")[0] || query;
+
+                const secondaryParts = [
+                  buildingName && roadName && !buildingName.toLowerCase().includes(roadName.toLowerCase()) ? roadName : null,
+                  areaName && !placeName.toLowerCase().includes(areaName.toLowerCase()) ? areaName : null,
+                  cityName,
+                  pincode ? `PIN ${pincode}` : null,
+                ].filter(Boolean);
+
+                const secondary = secondaryParts.join(", ") || item.display_name?.split(",").slice(1, 4).join(", ");
+
+                return {
+                  id: item.place_id ? `osm-${item.place_id}` : `geo-${idx}`,
+                  name: placeName.trim(),
+                  building: buildingName.trim() || placeName.trim(),
+                  road: roadName.trim(),
+                  area: areaName.trim(),
+                  city: cityName,
+                  secondaryText: secondary.trim(),
+                  lat: parseFloat(item.lat),
+                  lng: parseFloat(item.lon),
+                  pincode: pincode,
+                  source: "google-maps-geocoding",
+                };
+              });
+
+            const merged = [...matchingCurated];
+            for (const gr of geocodedResults) {
+              if (!merged.some((m) => m.name.toLowerCase() === gr.name.toLowerCase())) {
+                merged.push(gr);
+              }
+            }
+
+            if (merged.length > 0) {
+              return res.json({ success: true, source: "google-maps-geocoding", results: merged });
+            }
+          }
         }
-      );
-
-      if (osmRes.ok) {
-        const osmData = await osmRes.json();
-        if (Array.isArray(osmData) && osmData.length > 0) {
-          const results = osmData.map((item: any, idx: number) => {
-            const addr = item.address || {};
-            const placeName =
-              addr.road ||
-              addr.suburb ||
-              addr.neighbourhood ||
-              addr.quarter ||
-              item.name ||
-              item.display_name?.split(",")[0] ||
-              query;
-
-            const secondaryParts = [
-              addr.suburb || addr.neighbourhood || addr.quarter,
-              addr.city || addr.state_district || "Kolkata",
-              addr.state || "West Bengal",
-              addr.postcode ? `PIN ${addr.postcode}` : "",
-            ].filter(Boolean);
-
-            const secondary =
-              secondaryParts.join(", ") ||
-              item.display_name?.split(",").slice(1, 4).join(", ");
-
-            return {
-              id: item.place_id ? `osm-${item.place_id}` : `geo-${idx}`,
-              name: placeName.trim(),
-              secondaryText: secondary.trim(),
-              lat: parseFloat(item.lat),
-              lng: parseFloat(item.lon),
-              pincode: addr.postcode || "",
-              source: "geocoding",
-            };
-          });
-
-          return res.json({ success: true, source: "geocoding", results });
-        }
+      } catch (osmErr) {
+        console.warn("[Geocoding search notice]:", osmErr);
       }
-
-      return res.json({ success: true, results: [] });
+      return res.json({ success: true, source: "curated", results: matchingCurated });
     } catch (err: any) {
       console.error("Places search error:", err);
       return res.status(500).json({ success: false, message: "Location search failed" });

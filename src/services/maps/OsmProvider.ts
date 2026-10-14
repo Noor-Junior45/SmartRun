@@ -20,10 +20,9 @@ export class OsmProvider implements IMapProvider {
       attributionControl: false
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd',
-      maxZoom: 20,
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
     if (options.onMoveStart) {
@@ -43,6 +42,14 @@ export class OsmProvider implements IMapProvider {
         options.onMoveEnd?.({ lat: c.lat, lng: c.lng });
       });
     }
+
+    map.on('click', (e: any) => {
+      if (e?.latlng) {
+        map.panTo([e.latlng.lat, e.latlng.lng]);
+        options.onClick?.({ lat: e.latlng.lat, lng: e.latlng.lng });
+        options.onMoveEnd?.({ lat: e.latlng.lat, lng: e.latlng.lng });
+      }
+    });
 
     const instance: IMapInstance = {
       setCenter: (coords: MapCoordinates) => {

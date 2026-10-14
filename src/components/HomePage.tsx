@@ -19,11 +19,7 @@ import {
   Info,
   Package,
   Wrench,
-  Lock,
-  MapPin,
-  Navigation,
-  Clock,
-  Phone
+  Lock
 } from 'lucide-react';
 import { Product, CartItem } from '../types';
 import { supabase } from '../lib/supabaseClient';
@@ -1116,118 +1112,7 @@ export const HomePage = ({
           </div>
         </section>
 
-        {/* =====================================================================
-            ROW 11: CENTRAL DEPOT & WAREHOUSE LOCATION (Active Google Maps Showcase)
-            ===================================================================== */}
-        <section id="row-11-store-map" className="space-y-4 pt-2">
-          {/* Section Header */}
-          <div className="text-center max-w-2xl mx-auto space-y-1.5 px-2">
-            <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-800 border border-emerald-300/60 text-[10px] sm:text-xs font-bold uppercase tracking-wider">
-              <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Central Depot &amp; Express Dispatch Hub</span>
-            </div>
-            <h2 className="text-xl sm:text-3xl font-black font-sf-pro text-[#0F1B2D] tracking-tight">
-              Visit Our Kolkata Central Warehouse
-            </h2>
-            <p className="text-xs sm:text-sm text-[#5F6B7A] font-medium leading-relaxed">
-              Direct trade pick-up counter, material inspections &amp; 60-minute dispatch hub for all Kolkata electrical &amp; construction orders.
-            </p>
-          </div>
 
-          {/* Map + Location Details Card Container */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden p-3 sm:p-4">
-            {/* Interactive Google Maps Iframe Container */}
-            <div className="lg:col-span-7 h-[260px] sm:h-[320px] rounded-xl overflow-hidden border border-slate-200/90 relative bg-slate-100 shadow-inner">
-              <iframe
-                title="SmartRun Kasba Central Warehouse and Depot Location Map"
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3685.589886361847!2d88.38562517601614!3d22.51450003491415!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3a027137f6a27e7b%3A0xb3bc87e5b61ec055!2sKasba%2C%20Kolkata%2C%20West%20Bengal!5e0!3m2!1sen!2sin!4v1700000000000!5m2!1sen!2sin"
-                width="100%"
-                height="100%"
-                style={{ border: 0 }}
-                allowFullScreen
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                className="w-full h-full block"
-              />
-            </div>
-
-            {/* Warehouse Information & Quick Actions */}
-            <div className="lg:col-span-5 flex flex-col justify-between space-y-4 p-1 sm:p-2">
-              <div className="space-y-3.5">
-                {/* Physical Address */}
-                <div className="flex items-start gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-300/40 flex items-center justify-center shrink-0 mt-0.5">
-                    <MapPin className="w-4 h-4 text-amber-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Warehouse Address</h3>
-                    <p className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5 leading-snug">
-                      SmartRun Kasba Hub, Bediadanga 1st Lane, Nator Park, Kasba, Kolkata, West Bengal 700039
-                    </p>
-                    <span className="inline-block mt-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      Primary Kolkata Operating Depot
-                    </span>
-                  </div>
-                </div>
-
-                {/* Operating Hours */}
-                <div className="flex items-start gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-300/40 flex items-center justify-center shrink-0 mt-0.5">
-                    <Clock className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Operating Hours</h3>
-                    <p className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5 leading-snug">
-                      8:00 AM – 9:30 PM
-                    </p>
-                    <p className="text-[11px] text-slate-600 mt-0.5">
-                      Open 7 Days a Week (Dispatch &amp; Pick-up Counter)
-                    </p>
-                  </div>
-                </div>
-
-                {/* Direct Helpline */}
-                <div className="flex items-start gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-300/40 flex items-center justify-center shrink-0 mt-0.5">
-                    <Phone className="w-4 h-4 text-purple-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Hub &amp; Dispatch Desk</h3>
-                    <p className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5 leading-snug">
-                      +91 8777400280
-                    </p>
-                    <p className="text-[11px] text-slate-600 mt-0.5">
-                      Voice call &amp; WhatsApp instant contractor support
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                <a
-                  href="https://maps.google.com/?q=22.5145,88.3882"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="min-h-[38px] px-3 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95 text-center"
-                  aria-label="Open warehouse location in Google Maps"
-                >
-                  <Navigation className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>Get Directions</span>
-                </a>
-
-                <a
-                  href="tel:+918777400280"
-                  className="min-h-[38px] px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95 text-center border border-amber-500/40"
-                  aria-label="Call Kasba Warehouse Desk"
-                >
-                  <Phone className="w-3.5 h-3.5 shrink-0" />
-                  <span>Call Hub Desk</span>
-                </a>
-              </div>
-            </div>
-          </div>
-        </section>
 
         {/* =====================================================================
             ROW 10: REVIEW / VIDEO REELS (Code preserved, hidden from UI)

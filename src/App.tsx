@@ -67,7 +67,8 @@ import {
   setActiveUserScope,
   getStoredAddresses,
   signOutUser,
-  isUserLoggingOut
+  isUserLoggingOut,
+  USER_PROFILE_STORAGE_KEY
 } from './services/supabaseService';
 import { sendLoginNotificationEmail } from './services/securityNotificationService';
 import { useVersionCheck } from './hooks/useVersionCheck';
@@ -343,6 +344,17 @@ export default function App() {
             if (cloudProf.name) setUserName(cloudProf.name);
           }
         }).catch(() => {});
+
+        // Proactively refresh Supabase session if token is nearing expiration
+        supabase.auth.getSession().then(({ data }) => {
+          if (data?.session) {
+            const now = Math.floor(Date.now() / 1000);
+            const exp = data.session.expires_at || 0;
+            if (exp > 0 && exp <= now + 120) {
+              supabase.auth.refreshSession().catch(() => {});
+            }
+          }
+        }).catch(() => {});
       }
     };
 
@@ -352,8 +364,9 @@ export default function App() {
     // Fast path: If there is no stored session and no oauth tokens in URL, unlock loading immediately (zero delay)
     const hasStoredAuth =
       typeof window !== 'undefined' &&
-      (Boolean(window.localStorage.getItem('giriraj_supabase_auth_session')) ||
-       Boolean(window.localStorage.getItem('smartrun_user_profile')));
+      (Boolean(safeGetItem('giriraj_supabase_auth_session')) ||
+       Boolean(safeGetItem('smartrun_user_profile')) ||
+       Boolean(safeGetItem('giriraj_active_user_scope')));
     const hasUrlAuth =
       typeof window !== 'undefined' &&
       (window.location.hash.includes('access_token') ||
@@ -454,6 +467,7 @@ export default function App() {
                 cashbackBalance: cloudProf.cashbackBalance ?? prof.cashbackBalance,
               };
               setUserProfile(merged);
+              safeSetItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(merged));
               if (scope) {
                 safeSetItem(`giriraj_profile_${scope}`, JSON.stringify(merged));
               }
@@ -489,14 +503,17 @@ export default function App() {
             return;
           }
         }
-        activeUserIdRef.current = null;
-        setActiveUserScope(null);
-        setUserProfile(null);
-        setUserPhone(null);
-        setUserName('');
-        setOrders([]);
-        setSavedAddresses([]);
-        setupUserSubscriptions();
+        // ONLY clear user session if user explicitly initiated sign out
+        if (isLoggingOutRef.current || isUserLoggingOut()) {
+          activeUserIdRef.current = null;
+          setActiveUserScope(null);
+          setUserProfile(null);
+          setUserPhone(null);
+          setUserName('');
+          setOrders([]);
+          setSavedAddresses([]);
+          setupUserSubscriptions();
+        }
       }
     }).finally(() => {
       setIsAuthLoading(false);
@@ -540,15 +557,18 @@ export default function App() {
             return;
           }
         }
-        activeUserIdRef.current = null;
-        setActiveUserScope(null);
-        setUserProfile(null);
-        setUserPhone(null);
-        setUserName('');
-        setOrders([]);
-        setSavedAddresses([]);
-        setCartItems(getLocalCartItems());
-        setupUserSubscriptions();
+        // ONLY log out if user explicitly clicked Sign Out
+        if (isLoggingOutRef.current || isUserLoggingOut()) {
+          activeUserIdRef.current = null;
+          setActiveUserScope(null);
+          setUserProfile(null);
+          setUserPhone(null);
+          setUserName('');
+          setOrders([]);
+          setSavedAddresses([]);
+          setCartItems(getLocalCartItems());
+          setupUserSubscriptions();
+        }
         return;
       }
       if (user) {
@@ -634,6 +654,7 @@ export default function App() {
                 cashbackBalance: cloudProf.cashbackBalance ?? prof.cashbackBalance,
               };
               setUserProfile(merged);
+              safeSetItem(USER_PROFILE_STORAGE_KEY, JSON.stringify(merged));
               if (scope) {
                 safeSetItem(`giriraj_profile_${scope}`, JSON.stringify(merged));
               }
@@ -672,15 +693,17 @@ export default function App() {
           const saved = getSavedUserProfile();
           if (saved?.id || activeUserIdRef.current) return;
         }
-        activeUserIdRef.current = null;
-        setActiveUserScope(null);
-        setUserProfile(null);
-        setUserPhone(null);
-        setUserName('');
-        setOrders([]);
-        setSavedAddresses([]);
-        setCartItems(getLocalCartItems());
-        setupUserSubscriptions();
+        if (isLoggingOutRef.current || isUserLoggingOut()) {
+          activeUserIdRef.current = null;
+          setActiveUserScope(null);
+          setUserProfile(null);
+          setUserPhone(null);
+          setUserName('');
+          setOrders([]);
+          setSavedAddresses([]);
+          setCartItems(getLocalCartItems());
+          setupUserSubscriptions();
+        }
       }
     });
 
@@ -916,7 +939,7 @@ export default function App() {
       handleDeepUrl(data.url);
     });
 
-    // Listen for app resumption from background (e.g. user returning from Chrome Custom Tab)
+    // Listen for app resumption from background (e.g. user returning from Chrome Custom Tab or reopening app)
     const stateListenerPromise = CapApp.addListener('appStateChange', (state) => {
       if (state.isActive) {
         Browser.close().catch(() => {});
@@ -926,6 +949,28 @@ export default function App() {
               localStorage.removeItem('smartrun_oauth_target');
               sessionStorage.removeItem('smartrun_oauth_target');
             } catch {}
+            // If token is expiring or expired, refresh it silently in background
+            const now = Math.floor(Date.now() / 1000);
+            const exp = data.session.expires_at || 0;
+            if (exp > 0 && exp <= now + 120) {
+              supabase.auth.refreshSession().catch(() => {});
+            }
+          } else {
+            // Attempt silent session refresh if session became inactive while app was suspended
+            supabase.auth.refreshSession().then((res) => {
+              if (!res.data?.session) {
+                const saved = getSavedUserProfile();
+                if (saved?.phone && !isUserLoggingOut() && !isLoggingOutRef.current) {
+                  const clean10 = saved.phone.replace(/\D/g, '').slice(-10);
+                  if (clean10.length === 10) {
+                    supabase.auth.signInWithPassword({
+                      email: `p${clean10}@girirajpower.internal`,
+                      password: `GirirajPower@${clean10}#2026`
+                    }).catch(() => {});
+                  }
+                }
+              }
+            }).catch(() => {});
           }
         }).catch(() => {});
       }

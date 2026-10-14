@@ -472,34 +472,19 @@ if (typeof window !== 'undefined') {
   purgeLegacyUnscopedStorage();
 }
 
-// Safe LocalStorage helpers for SSR / sandboxed iframe environments
+// Durable Storage helpers backed by memory cache, localStorage, and native Android Preferences
+import { durableGetItem, durableSetItem, durableRemoveItem, hydrateDurableStorage } from '../lib/durableStorage';
+
 export function safeGetItem(key: string): string | null {
-  try {
-    return typeof window !== 'undefined' && window.localStorage ? localStorage.getItem(key) : null;
-  } catch (e) {
-    console.warn(`Error reading from localStorage key "${key}":`, e);
-    return null;
-  }
+  return durableGetItem(key);
 }
 
 export function safeSetItem(key: string, value: string): void {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem(key, value);
-    }
-  } catch (e) {
-    console.warn(`Error writing to localStorage key "${key}":`, e);
-  }
+  durableSetItem(key, value);
 }
 
 export function safeRemoveItem(key: string): void {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.removeItem(key);
-    }
-  } catch (e) {
-    console.warn(`Error removing from localStorage key "${key}":`, e);
-  }
+  durableRemoveItem(key);
 }
 
 // ============================================================================
@@ -1129,8 +1114,93 @@ export async function getInitialAuthSession(): Promise<{ session: Session | null
     const { data, error } = await supabase.auth.getSession();
     if (error) {
       console.warn('Initial session notice:', error.message);
+      // Attempt explicit refresh if stored refresh token exists
+      try {
+        const refreshRes = await supabase.auth.refreshSession();
+        if (refreshRes.data?.session) {
+          return { session: refreshRes.data.session, user: refreshRes.data.session.user || null };
+        }
+      } catch {}
+
+      // Fallback: silent session recovery using saved phone credentials
+      const savedProf = getSavedUserProfile();
+      if (savedProf?.phone) {
+        const clean10 = savedProf.phone.replace(/\D/g, '').slice(-10);
+        if (clean10.length === 10) {
+          try {
+            const silentRes = await supabase.auth.signInWithPassword({
+              email: `p${clean10}@girirajpower.internal`,
+              password: `GirirajPower@${clean10}#2026`
+            });
+            if (silentRes.data?.session) {
+              return { session: silentRes.data.session, user: silentRes.data.session.user || null };
+            }
+          } catch {}
+        }
+      }
+
       return { session: null, user: null };
     }
+
+    // Check if session token is expired or expiring within 60 seconds
+    if (data.session) {
+      const now = Math.floor(Date.now() / 1000);
+      const expiresAt = data.session.expires_at || 0;
+      if (expiresAt > 0 && expiresAt <= now + 60) {
+        console.info('[Supabase Auth] Access token nearing expiration or expired. Refreshing token proactively...');
+        try {
+          const refreshRes = await supabase.auth.refreshSession();
+          if (refreshRes.data?.session) {
+            return { session: refreshRes.data.session, user: refreshRes.data.session.user || null };
+          }
+        } catch (refreshErr) {
+          console.warn('[Supabase Auth] Proactive token refresh notice:', refreshErr);
+        }
+
+        // Fallback: silent re-auth if token refresh was rejected (e.g. after a day or refresh token rotated)
+        const savedProf = getSavedUserProfile();
+        if (savedProf?.phone) {
+          const clean10 = savedProf.phone.replace(/\D/g, '').slice(-10);
+          if (clean10.length === 10) {
+            try {
+              const silentRes = await supabase.auth.signInWithPassword({
+                email: `p${clean10}@girirajpower.internal`,
+                password: `GirirajPower@${clean10}#2026`
+              });
+              if (silentRes.data?.session) {
+                return { session: silentRes.data.session, user: silentRes.data.session.user || null };
+              }
+            } catch {}
+          }
+        }
+      }
+    } else {
+      // If no session found in memory, try refreshSession in case stored refresh token can rotate
+      try {
+        const refreshRes = await supabase.auth.refreshSession();
+        if (refreshRes.data?.session) {
+          return { session: refreshRes.data.session, user: refreshRes.data.session.user || null };
+        }
+      } catch {}
+
+      // Fallback: check if we have a saved phone profile and silently restore session
+      const savedProf = getSavedUserProfile();
+      if (savedProf?.phone) {
+        const clean10 = savedProf.phone.replace(/\D/g, '').slice(-10);
+        if (clean10.length === 10) {
+          try {
+            const silentRes = await supabase.auth.signInWithPassword({
+              email: `p${clean10}@girirajpower.internal`,
+              password: `GirirajPower@${clean10}#2026`
+            });
+            if (silentRes.data?.session) {
+              return { session: silentRes.data.session, user: silentRes.data.session.user || null };
+            }
+          } catch {}
+        }
+      }
+    }
+
     return { session: data.session, user: data.session?.user || null };
   } catch (err) {
     console.warn('Session fetch error:', err);
@@ -1185,7 +1255,16 @@ export function onAuthStateChange(
       const savedProf = getSavedUserProfile();
       if (savedProf?.id || activeUserScope) {
         console.info('[Supabase Auth Listener] Preserving active profile during token renewal/refresh event:', event);
-        // Attempt background silent session renewal if possible
+        // Attempt background silent session renewal via refreshSession first
+        try {
+          const refreshed = await supabase.auth.refreshSession();
+          if (refreshed.data?.session?.user) {
+            callback('TOKEN_REFRESHED', refreshed.data.session, refreshed.data.session.user);
+            return;
+          }
+        } catch {}
+
+        // Fallback: silent session renewal with deterministic credentials if internal phone user
         if (savedProf?.phone) {
           const clean10 = savedProf.phone.replace(/\D/g, '').slice(-10);
           if (clean10.length === 10) {
@@ -1194,6 +1273,10 @@ export function onAuthStateChange(
             supabase.auth.signInWithPassword({
               email: canonicalEmail,
               password: deterministicPassword
+            }).then((res) => {
+              if (res.data?.session?.user) {
+                callback('TOKEN_REFRESHED', res.data.session, res.data.session.user);
+              }
             }).catch(() => {});
           }
         }
