@@ -143,6 +143,7 @@ export const LocationModal = ({
   // Map Instance Ref
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<IMapInstance | null>(null);
+  const [is3DMode, setIs3DMode] = useState(true);
 
   // Close on Escape key
   useEffect(() => {
@@ -943,60 +944,52 @@ export const LocationModal = ({
               <ChevronRight className="w-4 h-4 text-emerald-600 group-hover:translate-x-0.5 transition-transform duration-200 shrink-0" />
             </button>
 
-            {/* Add Address Action Button */}
-                <button
-                  type="button"
-                  id="add-saved-address-btn"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setEditingAddressId(null);
-                    setHouseName('');
-                    setHouseFlat('');
-                    setLandmark('');
-                    setReceiverName(
-                      userProfile?.name && userProfile.name.toLowerCase() !== 'customer'
-                        ? userProfile.name
-                        : activeAddress?.receiverName || ''
-                    );
-                    setReceiverPhone(
-                      userProfile?.phone || userPhone || activeAddress?.receiverPhone || ''
-                    );
-                    setAddressTag('home');
-                    setCustomTagLabel('');
-                    setFormError(null);
-                    setMapEntrySource('add_saved_address');
-                    
-                    const initLat = currentArea.lat || 22.5735;
-                    const initLng = currentArea.lng || 88.4331;
-                    setPinCoordinates({ lat: initLat, lng: initLng });
-                    setStep('map_pin');
-                    
-                    setTimeout(() => {
-                      flyToCoords(initLat, initLng, 18);
-                    }, 200);
-                  }}
-                  className="w-full bg-white border border-slate-200 hover:border-slate-900 rounded-xl p-3.5 transition-all duration-200 cursor-pointer shadow-2xs hover:shadow-xs group flex items-center justify-between text-left"
-                  title="Add new address"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-900 text-white group-hover:bg-black transition-colors duration-200 shrink-0">
-                      <Plus className="w-4 h-4 stroke-[2.5] group-hover:rotate-90 transition-transform duration-300" />
-                    </div>
-                    <span className="text-sm font-bold text-slate-900 group-hover:text-black tracking-tight truncate">
-                      Add Address
-                    </span>
-                  </div>
-
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-900 group-hover:translate-x-0.5 transition-transform duration-200 shrink-0" />
-                </button>
-
                 {/* Saved Addresses Section */}
-                <div className="mt-6 space-y-3">
+                <div className="mt-4 space-y-3">
                   <div className="flex items-center justify-between px-0.5">
                     <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Saved Addresses {savedAddresses.length > 0 ? `(${savedAddresses.length})` : ''}
                     </span>
+
+                    {/* Plus sign logo on the right side to add location */}
+                    <button
+                      type="button"
+                      id="add-location-plus-btn"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditingAddressId(null);
+                        setHouseName('');
+                        setHouseFlat('');
+                        setLandmark('');
+                        setReceiverName(
+                          userProfile?.name && userProfile.name.toLowerCase() !== 'customer'
+                            ? userProfile.name
+                            : activeAddress?.receiverName || ''
+                        );
+                        setReceiverPhone(
+                          userProfile?.phone || userPhone || activeAddress?.receiverPhone || ''
+                        );
+                        setAddressTag('home');
+                        setCustomTagLabel('');
+                        setFormError(null);
+                        setMapEntrySource('add_saved_address');
+                        
+                        const initLat = currentArea.lat || 22.5735;
+                        const initLng = currentArea.lng || 88.4331;
+                        setPinCoordinates({ lat: initLat, lng: initLng });
+                        setStep('map_pin');
+                        
+                        setTimeout(() => {
+                          flyToCoords(initLat, initLng, 18);
+                        }, 200);
+                      }}
+                      className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 transition-all flex items-center justify-center cursor-pointer shadow-2xs group active:scale-95 border border-emerald-200/80"
+                      title="Add new delivery location"
+                      aria-label="Add location"
+                    >
+                      <Plus className="w-4 h-4 stroke-[2.5] group-hover:rotate-90 transition-transform duration-300" />
+                    </button>
                   </div>
 
                   {savedAddresses.length > 0 ? (
@@ -1110,36 +1103,61 @@ export const LocationModal = ({
 
 
 
-              {/* Center Map Pin */}
+              {/* Center Map Pin with Clean Red 3D Pointer (Text pill removed) */}
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-[950]">
                 <div className="relative flex flex-col items-center">
                   <div
-                    className={`bg-slate-900 text-white px-3 py-1 rounded-full shadow-xl text-[11px] font-bold flex items-center gap-1.5 transition-all duration-200 ${
-                      isMapDragging ? '-translate-y-2 opacity-90 scale-95' : 'translate-y-0 opacity-100 scale-100'
+                    className={`transition-all duration-200 flex flex-col items-center drop-shadow-2xl ${
+                      isMapDragging ? '-translate-y-3.5 scale-110' : 'translate-y-0 scale-100'
                     }`}
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-ping" />
-                    <span>Deliver here</span>
+                    {/* Modern Red Pin Pointer with 3D depth */}
+                    <div className="relative w-10 h-12 flex items-center justify-center -mb-1">
+                      <svg width="40" height="48" viewBox="0 0 40 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                          <linearGradient id="redPinGradient" x1="20" y1="0" x2="20" y2="48" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stopColor="#ef4444" />
+                            <stop offset="70%" stopColor="#dc2626" />
+                            <stop offset="100%" stopColor="#b91c1c" />
+                          </linearGradient>
+                          <filter id="pinInnerShadow" x="0" y="0" width="40" height="48" filterUnits="userSpaceOnUse">
+                            <feOffset dy="1" />
+                            <feGaussianBlur stdDeviation="1" />
+                            <feComposite operator="over" in2="SourceGraphic" />
+                          </filter>
+                        </defs>
+
+                        {/* Outer Red Teardrop Body */}
+                        <path
+                          d="M20 0C8.954 0 0 8.954 0 20C0 34.5 20 48 20 48C20 48 40 34.5 40 20C40 8.954 31.046 0 20 0Z"
+                          fill="url(#redPinGradient)"
+                          stroke="#ffffff"
+                          strokeWidth="2.5"
+                          strokeLinejoin="round"
+                        />
+
+                        {/* Top Subtle Light Reflection Highlight */}
+                        <path
+                          d="M7 16C7 11 11 7 16 7"
+                          stroke="#fca5a5"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          opacity="0.85"
+                        />
+
+                        {/* Crisp White Inner Ring */}
+                        <circle cx="20" cy="18" r="8" fill="#ffffff" />
+
+                        {/* Deep Crimson Center Target Dot */}
+                        <circle cx="20" cy="18" r="4" fill="#dc2626" />
+                      </svg>
+                    </div>
                   </div>
 
+                  {/* 3D Pin Ground Shadow */}
                   <div
-                    className={`mt-1 transition-all duration-200 flex flex-col items-center ${
-                      isMapDragging ? '-translate-y-2 scale-110' : 'translate-y-0 scale-100'
-                    }`}
-                  >
-                    <svg width="36" height="44" viewBox="0 0 40 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path
-                        d="M20 0C8.954 0 0 8.954 0 20C0 34.5 20 48 20 48C20 48 40 34.5 40 20C40 8.954 31.046 0 20 0Z"
-                        fill="#0f172a"
-                      />
-                      <circle cx="20" cy="18" r="7.5" fill="#FFFFFF" />
-                      <circle cx="20" cy="18" r="3.5" fill="#0f172a" />
-                    </svg>
-                  </div>
-
-                  <div
-                    className={`w-3.5 h-1.5 rounded-full bg-black/40 blur-[1px] transition-all duration-200 ${
-                      isMapDragging ? 'scale-50 opacity-20' : 'scale-100 opacity-80'
+                    className={`w-4 h-1.5 rounded-full bg-black/45 blur-[1px] transition-all duration-200 ${
+                      isMapDragging ? 'scale-40 opacity-20' : 'scale-100 opacity-80'
                     }`}
                   >
                     <span className="sr-only">Pin shadow</span>
@@ -1147,18 +1165,48 @@ export const LocationModal = ({
                 </div>
               </div>
 
-              {/* Floating Controls: Retry */}
+              {/* Floating Controls: 3D/2D Perspective Toggle & Detect Location Buttons */}
               <div className="absolute bottom-4 right-3.5 z-[1000] flex flex-col gap-2">
+                {/* 3D Map View Toggle Button */}
                 <button
                   type="button"
-                  id="floating-retry-map-btn"
-                  onClick={handleRetryMap}
-                  disabled={isRetryingMap}
-                  className="w-10 h-10 bg-white border border-slate-200 text-slate-800 shadow-lg flex items-center justify-center hover:bg-slate-50 cursor-pointer active:scale-95 transition-all disabled:opacity-60 rounded-lg"
-                  title="Retry / Re-initialize Map"
-                  aria-label="Re-initialize Map"
+                  id="floating-toggle-3d-map-btn"
+                  onClick={() => {
+                    if (mapInstanceRef.current?.toggle3D) {
+                      const nextIs3D = mapInstanceRef.current.toggle3D();
+                      setIs3DMode(nextIs3D);
+                    } else if (mapInstanceRef.current?.setTilt) {
+                      const next = is3DMode ? 0 : 45;
+                      mapInstanceRef.current.setTilt(next);
+                      setIs3DMode(!is3DMode);
+                    }
+                  }}
+                  className={`w-10 h-10 border shadow-lg flex items-center justify-center cursor-pointer active:scale-95 transition-all rounded-lg font-black text-xs ${
+                    is3DMode
+                      ? 'bg-slate-900 border-slate-950 text-white'
+                      : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
+                  }`}
+                  title={is3DMode ? 'Switch to 2D Top-Down View' : 'Switch to 3D Building View'}
+                  aria-label="Toggle 3D Map View"
                 >
-                  <RotateCw className={`w-4 h-4 text-slate-900 ${isRetryingMap ? 'animate-spin' : ''}`} />
+                  <span className="tracking-tight">{is3DMode ? '3D' : '2D'}</span>
+                </button>
+
+                {/* Detect Current Location Button (replaces refresh button) */}
+                <button
+                  type="button"
+                  id="floating-detect-location-btn"
+                  onClick={() => handleDetectCurrentLocation(true)}
+                  disabled={gpsLoading}
+                  className="w-10 h-10 bg-white border border-slate-200 text-slate-800 shadow-lg flex items-center justify-center hover:bg-slate-50 cursor-pointer active:scale-95 transition-all disabled:opacity-60 rounded-lg group"
+                  title="Detect Current Location"
+                  aria-label="Detect Current Location"
+                >
+                  {gpsLoading ? (
+                    <Loader2 className="w-5 h-5 text-emerald-600 animate-spin stroke-[2.5]" />
+                  ) : (
+                    <Crosshair className="w-5 h-5 text-emerald-600 group-hover:text-emerald-700 stroke-[2.5] transition-colors" />
+                  )}
                 </button>
               </div>
             </div>
@@ -1182,29 +1230,17 @@ export const LocationModal = ({
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <div className="flex flex-col gap-2 pt-1">
                 {/* 1-Tap Deliver to this location directly */}
                 <button
                   type="button"
                   id="confirm-pin-deliver-here-btn"
                   onClick={() => handleUseCurrentLocationDirectly(matchedArea, detectedStreet)}
-                  className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm tracking-tight flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm active:scale-[0.99] rounded-xl"
+                  className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm tracking-tight flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm active:scale-[0.99] rounded-xl"
                   title="Deliver to this location and start shopping immediately"
                 >
-                  <Check className="w-4 h-4 stroke-[3]" />
+                  <Check className="w-4.5 h-4.5 stroke-[3]" />
                   <span>Deliver to this Location</span>
-                </button>
-
-                {/* Add Flat/House details to save as address */}
-                <button
-                  type="button"
-                  id="confirm-pin-proceed-details-btn"
-                  onClick={handleProceedToDetails}
-                  className="py-3 px-4 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-sm tracking-tight flex items-center justify-center gap-1.5 cursor-pointer transition-all border border-slate-300 active:scale-[0.99] rounded-xl shrink-0"
-                  title="Add complete house/flat details"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add Flat / House</span>
                 </button>
               </div>
             </div>

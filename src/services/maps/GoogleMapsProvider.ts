@@ -90,11 +90,46 @@ export class GoogleMapsProvider implements IMapProvider {
     const google = (window as any).google;
     const initialCenter = { lat: options.center.lat, lng: options.center.lng };
 
+    // Zomato-inspired clean white map styling with prominent building footprints,
+    // clear building names and road hierarchy
+    const ZOMATO_PIN_MAP_STYLES = [
+      { elementType: 'geometry', stylers: [{ color: '#f8fafc' }] },
+      { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+      // Building footprints & outlines (Zomato 3D/2D building look)
+      { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#f1f5f9' }] },
+      { featureType: 'landscape.man_made', elementType: 'geometry.stroke', stylers: [{ color: '#e2e8f0' }] },
+      { featureType: 'landscape.man_made', elementType: 'labels.text.fill', stylers: [{ color: '#334155' }, { visibility: 'on' }] },
+      { featureType: 'landscape.man_made', elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }, { weight: 2 }] },
+      // Clean roads
+      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+      { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e2e8f0' }] },
+      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#475569' }] },
+      { featureType: 'road', elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }, { weight: 2 }] },
+      { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+      { featureType: 'road.arterial', elementType: 'geometry.stroke', stylers: [{ color: '#cbd5e1' }] },
+      { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#f8fafc' }] },
+      { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#94a3b8' }] },
+      // Parks & Greenery
+      { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#ecfdf5' }] },
+      { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#059669' }] },
+      // Water
+      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#e0f2fe' }] },
+      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#0284c7' }] },
+      // Keep building/point of interest labels clean and legible
+      { featureType: 'poi.business', stylers: [{ visibility: 'simplified' }] },
+      { featureType: 'poi.government', stylers: [{ visibility: 'simplified' }] },
+      { featureType: 'poi.school', stylers: [{ visibility: 'simplified' }] },
+      { featureType: 'poi.medical', stylers: [{ visibility: 'simplified' }] },
+      { featureType: 'transit', stylers: [{ visibility: 'off' }] }
+    ];
+
     const map = new google.maps.Map(container, {
       center: initialCenter,
       zoom: options.zoom || 18,
       minZoom: options.minZoom || 11,
       maxZoom: options.maxZoom || 20,
+      tilt: 45, // 2D with 3D building perspective tilt
+      heading: 0,
       disableDefaultUI: true,
       zoomControl: false,
       mapTypeControl: false,
@@ -102,6 +137,7 @@ export class GoogleMapsProvider implements IMapProvider {
       fullscreenControl: false,
       gestureHandling: 'greedy',
       keyboardShortcuts: false,
+      styles: ZOMATO_PIN_MAP_STYLES,
       internalUsageAttributionIds: [USAGE_ATTRIBUTION_ID]
     });
 
@@ -145,6 +181,28 @@ export class GoogleMapsProvider implements IMapProvider {
       },
       invalidateSize: () => {
         google.maps.event.trigger(map, 'resize');
+      },
+      setTilt: (t: number) => {
+        try {
+          map.setTilt(t);
+        } catch {}
+      },
+      getTilt: (): number => {
+        try {
+          return map.getTilt() || 0;
+        } catch {
+          return 0;
+        }
+      },
+      toggle3D: (): boolean => {
+        try {
+          const current = map.getTilt() || 0;
+          const next = current > 20 ? 0 : 45;
+          map.setTilt(next);
+          return next > 0;
+        } catch {
+          return false;
+        }
       },
       destroy: () => {
         google.maps.event.clearInstanceListeners(map);

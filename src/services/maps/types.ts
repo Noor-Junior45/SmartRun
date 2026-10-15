@@ -51,6 +51,9 @@ export interface IMapInstance {
   zoomOut(): void;
   invalidateSize(): void;
   destroy(): void;
+  setTilt?(tilt: number): void;
+  getTilt?(): number;
+  toggle3D?(): boolean;
 }
 
 export interface IMapProvider {
