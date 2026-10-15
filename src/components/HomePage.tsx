@@ -611,7 +611,10 @@ export const HomePage = ({
         description="Shop genuine electrical goods, Polycab & RR Kabel wires, switches, cement, TMT rebars, and book licensed electrician wiring services in Kolkata with 60-min express delivery."
         keywords="SmartRun, smartrun, smartrun kolkata, smartrun electricals, electrical shop near me, buy electrical goods online Kolkata, house wiring contractor, electrical wiring services, modular switches, Polycab wire, Havells cables, Finolex wire, Schneider MCB, distribution board, LED lighting, construction materials Kolkata, cement delivery, UltraTech cement, ACC cement, TMT steel bars, Tata Tiscon rebars, waterproofing chemicals, real estate electrification, licensed electrician Kolkata, Kasba electrical shop, wholesale electrical market Kolkata, B2B building materials procurement, direct depot Kolkata"
       />
-      <div className="min-h-screen bg-white text-slate-900 pb-4 sm:pb-6 font-sans">
+      <div
+        className="min-h-screen bg-white text-slate-900 pb-36 sm:pb-28 font-sans"
+        style={{ paddingBottom: 'max(9rem, calc(7.5rem + env(safe-area-inset-bottom, 1rem)))' }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-12 sm:space-y-16 pt-3 sm:pt-4">
 
         {/* =====================================================================

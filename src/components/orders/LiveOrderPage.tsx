@@ -839,7 +839,7 @@ export const LiveOrderPage = ({
       </div>
 
       {/* Main Page Body (Clean separate section layout, no double box nesting) */}
-      <main className="flex-1 w-full max-w-2xl mx-auto p-4 sm:p-6 pb-20 sm:pb-12">
+      <main className="flex-1 w-full max-w-2xl mx-auto p-4 sm:px-6 pt-4 sm:pt-6 pb-28 sm:pb-20">
         {/* Container identified with live-order-details-modal for seamless targeting */}
         <div id="live-order-details-modal" className="space-y-4 sm:space-y-5">
           {/* 1. RIDER DETAILS (Directly above Delivery Destination box when delivery partner is assigned) */}

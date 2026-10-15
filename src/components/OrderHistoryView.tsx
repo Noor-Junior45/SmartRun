@@ -788,7 +788,7 @@ export const OrderHistoryView = ({
     const canCancel = cancellationState.canCancel;
 
     return (
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-5 space-y-5">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-5 pb-28 sm:pb-24 space-y-5">
         {/* Top Navigation & Action Header */}
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <button
@@ -1302,7 +1302,7 @@ export const OrderHistoryView = ({
         description="View your active orders, past delivery history, download GST invoices, and reorder electrical supplies on SmartRun."
         noIndex={true}
       />
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-28 sm:pb-24 space-y-6">
         {/* Top Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">

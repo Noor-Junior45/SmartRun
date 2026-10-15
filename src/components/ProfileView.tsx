@@ -280,7 +280,7 @@ export const ProfileView = ({
   // -------------------------------------------------------------
   if (subPage === 'orders') {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 pb-10">
+      <div className="min-h-screen bg-slate-50 text-slate-900 pb-28 sm:pb-24">
         <OrderHistoryView
           orders={sortedOrders}
           userProfile={userProfile}
@@ -448,7 +448,10 @@ export const ProfileView = ({
   // PRIMARY VIEW: SWIGGY-STYLE PROFILE DASHBOARD
   // -------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-10">
+    <div
+      className="min-h-screen bg-slate-50 text-slate-900 pb-28 sm:pb-24"
+      style={{ paddingBottom: 'max(7rem, calc(5rem + env(safe-area-inset-bottom, 1rem)))' }}
+    >
       <SEOHead
         title="My Profile & Saved Addresses | SmartRun"
         description="Manage your SmartRun profile, saved delivery addresses, wallet balance, GST tax details, and account preferences."
