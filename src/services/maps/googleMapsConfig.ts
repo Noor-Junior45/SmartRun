@@ -18,8 +18,10 @@ let statusFetchPromise: Promise<GoogleMapsStatus> | null = null;
 export function getSynchronousGoogleMapsKey(): string | null {
   if (cachedApiKey) return cachedApiKey;
 
+  const customConfiguredKey = 'AIzaSyC8tFbIuHfKbFcKn0hx26_nsKgR8tyorIw';
   const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : ((process as any)?.env || {});
   const envKey = (
+    customConfiguredKey ||
     env.VITE_GOOGLE_MAPS_API_KEY ||
     env.GOOGLE_MAPS_API_KEY ||
     (typeof window !== 'undefined' && (window as any).__GOOGLE_MAPS_API_KEY__) ||

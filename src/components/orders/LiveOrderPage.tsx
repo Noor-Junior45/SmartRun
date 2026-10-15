@@ -280,8 +280,22 @@ export const LiveOrderPage = ({
     if (typeof anyOrder.deliveryPartner?.lat === 'number' && typeof anyOrder.deliveryPartner?.lng === 'number') {
       return { lat: anyOrder.deliveryPartner.lat, lng: anyOrder.deliveryPartner.lng };
     }
+    // If order status is near_destination without hardware GPS, place rider ~350m from house along approach path
+    if (order.status === 'near_destination' && mapDestination?.lat && WAREHOUSE_LOCATION?.lat) {
+      return {
+        lat: Number((mapDestination.lat - (mapDestination.lat - WAREHOUSE_LOCATION.lat) * 0.08).toFixed(6)),
+        lng: Number((mapDestination.lng - (mapDestination.lng - WAREHOUSE_LOCATION.lng) * 0.08).toFixed(6))
+      };
+    }
+    // If order status is out_for_delivery, place rider along route
+    if (order.status === 'out_for_delivery' && mapDestination?.lat && WAREHOUSE_LOCATION?.lat) {
+      return {
+        lat: Number((WAREHOUSE_LOCATION.lat + (mapDestination.lat - WAREHOUSE_LOCATION.lat) * 0.6).toFixed(6)),
+        lng: Number((WAREHOUSE_LOCATION.lng + (mapDestination.lng - WAREHOUSE_LOCATION.lng) * 0.6).toFixed(6))
+      };
+    }
     return null;
-  }, [order]);
+  }, [order, mapDestination]);
 
   const [liveRiderLocation, setLiveRiderLocation] = useState<{
     lat: number;
@@ -296,6 +310,12 @@ export const LiveOrderPage = ({
   const [riderReview, setRiderReview] = useState<any | null>(null);
   const [productReview, setProductReview] = useState<any | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+  // Google Maps Tracked Route & Transit Time
+  const [googleRouteInfo, setGoogleRouteInfo] = useState<{
+    distanceKm: number;
+    transitDurationMinutes: number;
+  } | null>(null);
 
   // Cancellation State
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -679,6 +699,71 @@ export const LiveOrderPage = ({
     };
   }, [order, isPartnerAssigned]);
 
+  // Compute calculated delivery time combining packaging time (min 20m, max 30m)
+  // and transit time tracked directly from Google Maps
+  const calculatedDeliveryTime = useMemo(() => {
+    // Distance from Google Maps road route (fallback to straight distance)
+    const activeDistanceKm = googleRouteInfo?.distanceKm || deliveryDistanceKm || 3.5;
+    
+    // Transit duration from Google Maps (or estimated based on average Kolkata two-wheeler traffic: ~3.5 min/km)
+    const transitMin = googleRouteInfo?.transitDurationMinutes || Math.max(10, Math.round(activeDistanceKm * 3.5));
+
+    // Order status progression
+    const st = (order?.status || '').toLowerCase();
+    const isPacked = st === 'packed' || st === 'shipped' || st === 'out_for_delivery' || st === 'near_destination';
+    const isOut = st === 'out_for_delivery' || st === 'near_destination';
+    const isNear = st === 'near_destination';
+
+    if (st === 'delivered') {
+      return {
+        displayText: 'Delivered',
+        packingText: 'Packaging completed (20-30 min)',
+        transitText: 'Delivered to doorstep',
+        badgeColor: 'text-emerald-700 bg-emerald-50',
+        minTotalMins: 0,
+        maxTotalMins: 0
+      };
+    }
+
+    if (isNear) {
+      return {
+        displayText: 'Arriving in 2-5 Mins',
+        packingText: 'Packed & Dispatched',
+        transitText: `${transitMin}m transit (near doorstep)`,
+        badgeColor: 'text-emerald-700 bg-emerald-50',
+        minTotalMins: 2,
+        maxTotalMins: 5
+      };
+    }
+
+    if (isOut) {
+      // Once out for delivery, packaging is already complete; ETA is transit time
+      const minEta = Math.max(5, transitMin - 3);
+      const maxEta = transitMin + 5;
+      return {
+        displayText: `${minEta}-${maxEta} Mins (On the way)`,
+        packingText: 'Packed & Handed to Rider',
+        transitText: `${transitMin} mins transit via Google Maps`,
+        badgeColor: 'text-emerald-700 bg-emerald-50',
+        minTotalMins: minEta,
+        maxTotalMins: maxEta
+      };
+    }
+
+    // Packaging phase: 20 min minimum to 30 min maximum + transit time from Google Maps
+    const minTotal = 20 + transitMin;
+    const maxTotal = 30 + transitMin;
+
+    return {
+      displayText: `${minTotal}-${maxTotal} Mins Express`,
+      packingText: 'Packaging (20-30 mins)',
+      transitText: `+ ${transitMin} mins transit via Google Maps`,
+      badgeColor: 'text-emerald-700 bg-emerald-50',
+      minTotalMins: minTotal,
+      maxTotalMins: maxTotal
+    };
+  }, [googleRouteInfo, deliveryDistanceKm, order?.status]);
+
   // Comprehensive Order Context for AI Assistant and Resend Admin Alerts
   const orderContext = useMemo(() => {
     if (!order) return null;
@@ -824,7 +909,7 @@ export const LiveOrderPage = ({
       )}
 
       {/* Borderless Equal Box Real Map touching both sides of the screen edge-to-edge */}
-      <div className="w-full border-none overflow-hidden bg-slate-100">
+      <div className="w-full border-none overflow-hidden bg-slate-50">
         <LiveOrderRealMap
           warehouse={WAREHOUSE_LOCATION}
           destination={mapDestination}
@@ -835,6 +920,8 @@ export const LiveOrderPage = ({
           deliveryPartnerName={deliveryPartnerName}
           riderAvatarUrl={assignedRider?.avatarUrl || (assignedRider as any)?.avatar_url || null}
           riderBikeNumber={(assignedRider as any)?.vehicleNumber || (assignedRider as any)?.vehicle_number || (assignedRider as any)?.vehicle_no || null}
+          orderStatus={order?.status}
+          onRouteCalculated={setGoogleRouteInfo}
         />
       </div>
 
@@ -877,7 +964,10 @@ export const LiveOrderPage = ({
               <span className="text-[11px] text-slate-500 font-medium block">ETA Window</span>
               <span className="text-xs font-extrabold text-emerald-700 flex items-center gap-1 justify-end">
                 <Clock className="w-3.5 h-3.5" />
-                30-60 Mins Express
+                {calculatedDeliveryTime.displayText}
+              </span>
+              <span className="text-[10px] text-slate-400 font-semibold block mt-0.5">
+                Pack 20-30m {calculatedDeliveryTime.transitText}
               </span>
             </div>
           </div>

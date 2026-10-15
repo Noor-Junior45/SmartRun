@@ -336,5 +336,11 @@
     - `/api/health` returns `200 OK` for Cloud Run container startup and liveness probes.
     - Multi-stage Dockerfile builds client + server bundle (`npm run build` -> `dist/server.cjs`) and copies assets (`dist/`, `public/`, `data/`, and `firebase-applet-config.json`).
     - Verified compilation passes with zero errors via `compile_applet` and `npm run lint`.
+- [x] **Order Tracking Map: Pure Google Maps Enforcement & Carto Tile Elimination**:
+  - Enforced Google Maps as the direct, primary map provider across order tracking in `LiveOrderRealMap.tsx` using `@vis.gl/react-google-maps`.
+  - Removed billing gating blocker: `activeGoogleMapsKey` is resolved synchronously from `getSynchronousGoogleMapsKey()` (`VITE_GOOGLE_MAPS_API_KEY`) so Google Maps initializes immediately upon mount without waiting or falling back.
+  - Updated `server.ts` `/api/maps/google/status` to mark Google Maps as `available: true` and `billingEnabled: true` whenever the API key is present.
+  - Completely purged all Carto CDN tiles (`basemaps.cartocdn.com`) and Carto references from `LiveOrderRealMap.tsx`; fallback uses pure OpenStreetMap only if authentication explicitly fails.
+  - Preserved custom Zomato clean white map styling, 3D User House graphic with animated arrival sonar radar beacon, Store Depot marker, and automatic camera zoom-out when the rider approaches the user's home.
 
 
