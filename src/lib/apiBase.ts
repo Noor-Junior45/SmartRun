@@ -1,14 +1,14 @@
 import { Capacitor } from '@capacitor/core';
 
 /**
- * Universal API Base URL resolution for Native Apps (Capacitor Android & iOS) and Web Deployments.
+ * Universal API Base URL resolution for Native Apps (Capacitor Android & iOS) and Cloud Deployments.
  *
- * In native mobile builds (Android & iOS WebView) and external frontend deployments (Vercel),
- * relative fetch('/api/...') calls resolve to the active Render backend server (https://www.smartrun.in
- * or https://www.girirajpower.in), while preserving standard local relative paths during local development.
+ * In native mobile builds (Android & iOS WebView), relative fetch('/api/...') calls resolve
+ * to the production backend server (https://www.smartrun.in), while preserving standard local
+ * relative paths during local development and cloud web deployments.
  */
 export const API_BASE_URL: string = (() => {
-  // 1. Prioritize explicit environment variables if set (e.g. Render backend URL in Vercel)
+  // 1. Prioritize explicit environment variables if set
   const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : (process.env as any || {});
   const explicitApiUrl =
     env.VITE_API_URL ||
@@ -51,11 +51,6 @@ export const API_BASE_URL: string = (() => {
     return 'https://www.smartrun.in';
   }
 
-  // 3. If deployed on Vercel (*.vercel.app), route API traffic to Render live backend
-  if (hostname.endsWith('.vercel.app') || hostname === 'smartrun.vercel.app') {
-    return 'https://www.smartrun.in';
-  }
-
   return '';
 })();
 
@@ -66,37 +61,4 @@ export function apiUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   if (!API_BASE_URL) return cleanPath;
   return `${API_BASE_URL.replace(/\/+$/, '')}${cleanPath}`;
-}
-
-/**
- * Client-Side Warm-Up Helper
- * Sends a lightweight keep-alive ping to Render across all custom domains to prevent sleeping or wake up cold starts.
- */
-export function pingRenderKeepAlive(): void {
-  try {
-    const urls = [
-      apiUrl('/api/health'),
-      'https://www.smartrun.in/api/health',
-      'https://www.girirajpower.in/api/health'
-    ];
-    for (const u of Array.from(new Set(urls))) {
-      fetch(u, {
-        method: 'GET',
-        headers: { 'X-Keep-Alive': 'smartrun-frontend' }
-      }).catch(() => {});
-    }
-  } catch {}
-}
-
-/**
- * Continuous Keep-Alive Loop:
- * Keeps Render active and warm all the time by dispatching lightweight pings every 8 minutes.
- */
-export function startRenderKeepAlive(): () => void {
-  pingRenderKeepAlive();
-  const intervalId = setInterval(() => {
-    pingRenderKeepAlive();
-  }, 8 * 60 * 1000);
-
-  return () => clearInterval(intervalId);
 }

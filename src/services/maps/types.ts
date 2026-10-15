@@ -40,6 +40,7 @@ export interface MapInitOptions {
   onMoveStart?: () => void;
   onMove?: (coords: MapCoordinates) => void;
   onMoveEnd?: (coords: MapCoordinates) => void;
+  onClick?: (coords: MapCoordinates) => void;
 }
 
 export interface IMapInstance {

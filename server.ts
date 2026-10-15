@@ -1644,7 +1644,7 @@ async function startServer() {
     }) as any
   );
 
-  // Health check endpoint (exempt from rate limiter for keep-alive pings)
+  // Health check endpoint (exempt from rate limiter for container readiness probes)
   app.get("/api/health", (req, res) => {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -1652,8 +1652,7 @@ async function startServer() {
       status: "ok",
       app: "SmartRun Kolkata Express",
       uptime: process.uptime(),
-      timestamp: Date.now(),
-      render: Boolean(process.env.RENDER || process.env.RENDER_EXTERNAL_URL)
+      timestamp: Date.now()
     });
   });
 
@@ -1796,7 +1795,7 @@ async function startServer() {
   // GOOGLE MAPS PLATFORM PROXY ENDPOINTS (PRIMARY)
   // =========================================================================
 
-  // Helper to resolve active Google Maps API key from environment variables (e.g. Render, Vercel, or AI Studio secrets)
+  // Helper to resolve active Google Maps API key from environment variables (e.g. Cloud Run, production, or AI Studio secrets)
   const getActiveGoogleMapsApiKey = (): string => {
     const envKey = (
       process.env.GOOGLE_MAPS_API_KEY ||
@@ -7715,29 +7714,10 @@ Knowledge Base & Service Details:
   const serverInstance = app.listen(PORT, "0.0.0.0", () => {
     console.log(`SmartRun Server running on http://0.0.0.0:${PORT}`);
 
-    // 1. Universal Backfill: Synchronize existing user data and historic orders to Firebase Cloud Firestore
+    // Universal Backfill: Synchronize existing user data and historic orders to Firebase Cloud Firestore
     setTimeout(() => {
       backfillAllUsersToFirebaseFirestore().catch(() => {});
     }, 4000);
-
-    // 2. Render Keep-Alive: Only activate if explicitly hosted on Render with RENDER_EXTERNAL_URL set
-    const renderExternalUrl = (process.env.RENDER_EXTERNAL_URL || "").trim().replace(/\/+$/, "");
-    if (renderExternalUrl && !renderExternalUrl.includes("localhost") && !renderExternalUrl.includes("0.0.0.0")) {
-      const dispatchKeepAlive = async () => {
-        try {
-          const pingTarget = `${renderExternalUrl}/api/health`;
-          await fetch(pingTarget, {
-            headers: { "X-Render-Keep-Alive": "smartrun-server" },
-            signal: AbortSignal.timeout(10000)
-          });
-        } catch {
-          // Silently ignore ping errors when offline or during DNS migrations
-        }
-      };
-
-      setTimeout(dispatchKeepAlive, 5000);
-      setInterval(dispatchKeepAlive, 8 * 60 * 1000);
-    }
   });
 
   serverInstance.on("error", (err: any) => {

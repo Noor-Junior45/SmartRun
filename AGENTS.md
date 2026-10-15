@@ -324,4 +324,17 @@
   - **Resilient Fallback Tracking**: While billing is pending, delivery tracking displays an advisory banner with direct billing link and renders the map on standard OpenStreetMap tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`, zero Carto CDN) with all custom markers, live OSRM road polyline, recenter button, and GPS badge. As soon as billing is linked in Google Cloud Console, Google Maps vector map activates immediately.
 - [x] **Map Controls Clean-up (Location Modal)**:
   - Removed Zoom In button (`#floating-zoom-in-btn`), Zoom Out button (`#floating-zoom-out-btn`), and top floating "Detect My Current Location" button (`#map-detect-current-location-pill`) from over the map canvas in `LocationModal.tsx`, leaving a clean, unobstructed map view.
+- [x] **Removal of Unused Services (Render, Fast2SMS, Vercel) & Google Cloud Run Readiness**:
+  - **Vercel Removal**: Completely removed `vercel.json` and deleted `/api` directory (which contained legacy Vercel serverless functions). All endpoints (`/api/razorpay/*`, `/sitemap.xml`, etc.) are natively served by the unified Express server in `server.ts`.
+  - **Render Removal**: Removed Render keep-alive loops (`RENDER_EXTERNAL_URL`, `X-Render-Keep-Alive`) in `server.ts`, removed `render` flag from `/api/health`, and removed `pingRenderKeepAlive()` / `startRenderKeepAlive()` from `src/lib/apiBase.ts` and `src/App.tsx`.
+  - **Fast2SMS Verification**: Verified full removal of Fast2SMS code and endpoints; auth uses pure official Firebase Phone Auth.
+  - **Bug Fix**: Fixed `OsmProvider.ts` TypeScript error by adding optional `onClick?: (coords: MapCoordinates) => void;` to `MapInitOptions` in `src/services/maps/types.ts`.
+  - **Google Cloud Run Verification**:
+    - Container listens on `0.0.0.0` and dynamic `$PORT` (default 8080).
+    - `app.set("trust proxy", 1)` handles Cloud Run front-end proxy headers.
+    - Graceful `SIGTERM` and `SIGINT` connection draining implemented.
+    - `/api/health` returns `200 OK` for Cloud Run container startup and liveness probes.
+    - Multi-stage Dockerfile builds client + server bundle (`npm run build` -> `dist/server.cjs`) and copies assets (`dist/`, `public/`, `data/`, and `firebase-applet-config.json`).
+    - Verified compilation passes with zero errors via `compile_applet` and `npm run lint`.
+
 

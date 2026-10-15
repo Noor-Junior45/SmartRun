@@ -31,11 +31,12 @@ RUN npm install --omit=dev
 
 # Copy built distribution bundle from builder stage
 COPY --from=builder /app/dist ./dist
-# Copy public assets and necessary data files
+# Copy public assets, configurations and data files
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/data ./data
+COPY --from=builder /app/firebase-applet-config.json* ./
 
-# Expose port (Google Cloud Run uses 8080 by default)
+# Expose port (Google Cloud Run dynamically routes to PORT, default 8080)
 EXPOSE 8080
 
 # Start server
