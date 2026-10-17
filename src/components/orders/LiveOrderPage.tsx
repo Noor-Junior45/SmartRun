@@ -764,6 +764,104 @@ export const LiveOrderPage = ({
     };
   }, [googleRouteInfo, deliveryDistanceKm, order?.status]);
 
+  // Approx transit time from Kasba warehouse to user destination via Google Maps road route
+  const warehouseTransitMinutes = useMemo(() => {
+    if (googleRouteInfo?.transitDurationMinutes) {
+      return googleRouteInfo.transitDurationMinutes;
+    }
+    const roadDist = googleRouteInfo?.distanceKm || deliveryDistanceKm || 3.5;
+    return Math.max(10, Math.round(roadDist * 3.5));
+  }, [googleRouteInfo, deliveryDistanceKm]);
+
+  // Delivery time to show next to heading of delivery destination in left side:
+  // Shows 60 mins by default, calculates packing + google map transit, and updates if > 60 mins
+  const displayDeliveryTime = useMemo(() => {
+    const st = (order?.status || '').toLowerCase();
+    if (st === 'delivered') return 'Delivered';
+
+    const totalCalculatedTime = 25 + warehouseTransitMinutes;
+    if (totalCalculatedTime > 60) {
+      return `${totalCalculatedTime} mins`;
+    }
+    return '60 mins';
+  }, [order?.status, warehouseTransitMinutes]);
+
+  // User full address rendered in full length
+  const userFullAddress = useMemo(() => {
+    if (!order) return userLocation.name || 'Kasba, Kolkata';
+    
+    const primary = order.address || [order.addressLine1, order.addressLine2].filter(Boolean).join(', ');
+    const parts: string[] = [];
+
+    if (primary) parts.push(primary);
+    if (order.landmark && !primary.toLowerCase().includes(order.landmark.toLowerCase())) {
+      parts.push(`Landmark: ${order.landmark}`);
+    }
+    if (order.area && !primary.toLowerCase().includes(order.area.toLowerCase())) {
+      parts.push(order.area);
+    }
+    if (order.pincode && !primary.includes(order.pincode)) {
+      parts.push(`Kolkata - ${order.pincode}`);
+    } else if (!primary.toLowerCase().includes('kolkata')) {
+      parts.push('Kolkata');
+    }
+
+    return parts.filter(Boolean).join(', ') || order.area || userLocation.name || 'Kasba, Kolkata';
+  }, [order, userLocation]);
+
+  // Split user full details into Line 1 (Customer & Street) and Line 2 (Area, Landmark & Pincode) across whole length of box
+  const userDeliveryLines = useMemo(() => {
+    if (!order) {
+      return {
+        line1: userLocation.name || 'Kasba Delivery Point',
+        line2: 'Kolkata, West Bengal – 700042'
+      };
+    }
+
+    const name = (order.customerName || order.recipientName || (order as any).userName || '').trim();
+    const phone = (order.phone || order.recipientPhone || (order as any).userPhone || '').trim();
+    const contactStr = name && phone ? `${name} (+91 ${phone})` : name || (phone ? `+91 ${phone}` : '');
+
+    const rawAddress = (order.address || [order.addressLine1, order.addressLine2].filter(Boolean).join(', ')).trim();
+    const landmarkStr = order.landmark ? `Landmark: ${order.landmark}` : '';
+    const areaStr = order.area || userLocation.name || 'Kasba';
+    const pinStr = order.pincode ? `Kolkata – ${order.pincode}` : 'Kolkata';
+
+    if (rawAddress) {
+      const parts = rawAddress.split(',').map((s) => s.trim()).filter(Boolean);
+      if (parts.length >= 2) {
+        const mid = Math.ceil(parts.length / 2);
+        const streetPart = parts.slice(0, mid).join(', ');
+        const remainingPart = parts.slice(mid).join(', ');
+        
+        const l1 = contactStr ? `${contactStr} • ${streetPart}` : streetPart;
+        const l2Parts = [
+          remainingPart,
+          landmarkStr,
+          !remainingPart.toLowerCase().includes(areaStr.toLowerCase()) ? areaStr : '',
+          !remainingPart.includes(pinStr) ? pinStr : ''
+        ].filter(Boolean);
+
+        return {
+          line1: l1,
+          line2: l2Parts.join(', ') || `${areaStr}, ${pinStr}`
+        };
+      }
+
+      const l1 = contactStr ? `${contactStr} • ${rawAddress}` : rawAddress;
+      const l2 = [landmarkStr, areaStr, pinStr].filter(Boolean).join(', ');
+      return {
+        line1: l1,
+        line2: l2 || `${areaStr}, ${pinStr}`
+      };
+    }
+
+    return {
+      line1: contactStr ? `${contactStr} • ${areaStr}` : areaStr,
+      line2: [landmarkStr, areaStr, pinStr].filter(Boolean).join(', ')
+    };
+  }, [order, userLocation]);
+
   // Comprehensive Order Context for AI Assistant and Resend Admin Alerts
   const orderContext = useMemo(() => {
     if (!order) return null;
@@ -946,29 +1044,29 @@ export const LiveOrderPage = ({
           )}
 
           {/* Delivery Destination Box (Moved below map and above order items) */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs flex items-center justify-between border border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-black shrink-0">
-                <Bike className="w-4.5 h-4.5" />
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-100 space-y-2.5">
+            {/* Header row: One line with heading and 60 mins tag next to it */}
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-black shrink-0">
+                <Bike className="w-4 h-4" />
               </div>
-              <div>
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                  Delivery Destination
-                </span>
-                <span className="text-sm font-black text-slate-900">
-                  {order.area || userLocation.name}
-                </span>
-              </div>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Delivery Destination
+              </span>
+              <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 whitespace-nowrap inline-flex items-center gap-1 shadow-2xs">
+                <Clock className="w-3 h-3 text-emerald-600 shrink-0" />
+                {displayDeliveryTime}
+              </span>
             </div>
-            <div className="text-right">
-              <span className="text-[11px] text-slate-500 font-medium block">ETA Window</span>
-              <span className="text-xs font-extrabold text-emerald-700 flex items-center gap-1 justify-end">
-                <Clock className="w-3.5 h-3.5" />
-                {calculatedDeliveryTime.displayText}
-              </span>
-              <span className="text-[10px] text-slate-400 font-semibold block mt-0.5">
-                Pack 20-30m {calculatedDeliveryTime.transitText}
-              </span>
+
+            {/* Below heading: User full details in whole length of box in one line first than 2nd line */}
+            <div className="w-full pl-9 sm:pl-10.5 space-y-1">
+              <p className="w-full text-xs sm:text-sm font-bold text-slate-900 leading-snug break-words">
+                {userDeliveryLines.line1}
+              </p>
+              <p className="w-full text-xs sm:text-sm font-medium text-slate-600 leading-snug break-words">
+                {userDeliveryLines.line2}
+              </p>
             </div>
           </div>
 

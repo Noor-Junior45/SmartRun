@@ -365,7 +365,12 @@
   - Removed `button#btn-profile-playstore-ai` ("Google Play & AI Search") from `ProfileView.tsx`.
   - Removed `onOpenPlayStoreAI` callback and interface props from `ProfileViewProps` and `App.tsx`.
   - Removed `PlayStoreAIDiscoveryModal.tsx` and all references (`isPlayStoreAIModalOpen` state, back button listener, and modal JSX in `App.tsx`).
-  - Preserved background Android App Links (`in.smartrun.app` Digital Asset Links) and machine-readable AI metadata (`index.html` schema and manifest routes) without intrusive UI elements.
+- [x] **Live Order Details Delivery Card Layout Refinement**:
+  - Redesigned the Delivery Destination card with a unified single-line top header: Bike icon, "Delivery Destination" heading, and the "60 mins" tag badge (`displayDeliveryTime`) positioned next to each other on one line.
+  - Removed "From Warehouse ~29 min" from the right side, giving the user details 100% full width across the entire box.
+  - Positioned user full details across the full length of the box in two clean, distinct lines:
+    - Line 1: Customer contact (`Name (+91 Phone)`) and primary premises / street address.
+    - Line 2: Landmark, Area, Kolkata, and Pincode.
 
 
 
