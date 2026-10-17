@@ -1590,6 +1590,22 @@ async function startServer() {
   // Set trust proxy to trust Cloud Run, Render, and reverse proxy headers (X-Forwarded-For)
   app.set("trust proxy", 1);
 
+  // 0. Cloud Run & Scanner Malformed URI Protection
+  // Handles automated bot probes with invalid percent-encoding (e.g. /%CO, /%FF, /%c0%af)
+  // preventing "URIError: Failed to decode param" crashes and returning clean 404 responses without Cloud Run error log counts.
+  app.use((req, res, next) => {
+    try {
+      decodeURI(req.url);
+      decodeURIComponent(req.path);
+      next();
+    } catch (err: any) {
+      if (err instanceof URIError || err?.name === "URIError") {
+        return res.status(404).send("Not Found");
+      }
+      next(err);
+    }
+  });
+
   // Universal Secure CORS Middleware: Validates trusted origins before granting credentials
   app.use((req, res, next) => {
     const origin = req.headers.origin;
@@ -1693,6 +1709,25 @@ async function startServer() {
         }
       }
     ]);
+  });
+
+  // Google Play AI Search, Gemini, and LLM Agent Discovery Manifests
+  app.get(["/.well-known/ai-agent-manifest.json", "/.well-known/ai-plugin.json"], (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    const requestedFile = req.path.endsWith("ai-plugin.json") ? "ai-plugin.json" : "ai-agent-manifest.json";
+    const candidates = [
+      path.join(process.cwd(), "public", ".well-known", requestedFile),
+      path.join(process.cwd(), "dist", ".well-known", requestedFile),
+      path.join(__dirnameResolved, "public", ".well-known", requestedFile)
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        return res.sendFile(p);
+      }
+    }
+    res.status(404).json({ error: "Manifest not found" });
   });
 
   // SEO: Explicit Sitemap & Robots routes to ensure direct 200 responses with correct Content-Type
@@ -1884,6 +1919,7 @@ async function startServer() {
             if (data.status === "OK" && Array.isArray(data.results) && data.results.length > 0) {
               const first = data.results[0];
               let street = "";
+              let building = "";
               let locality = "";
               let city = "Kolkata";
               let state = "West Bengal";
@@ -1891,6 +1927,9 @@ async function startServer() {
 
               if (Array.isArray(first.address_components)) {
                 for (const comp of first.address_components) {
+                  if (comp.types.includes("premise") || comp.types.includes("subpremise") || comp.types.includes("point_of_interest") || comp.types.includes("establishment")) {
+                    building = comp.long_name;
+                  }
                   if (comp.types.includes("route") || comp.types.includes("street_address")) {
                     street = comp.long_name;
                   }
@@ -1909,6 +1948,64 @@ async function startServer() {
                 }
               }
 
+              // Search across all geocoding results if postal_code or building was not in the first component
+              if (Array.isArray(data.results)) {
+                for (const r of data.results) {
+                  if (Array.isArray(r.address_components)) {
+                    if (!building) {
+                      const bld = r.address_components.find((c: any) =>
+                        c.types.includes("premise") || c.types.includes("subpremise") || c.types.includes("point_of_interest") || c.types.includes("establishment")
+                      );
+                      if (bld && bld.long_name) building = bld.long_name;
+                    }
+                    if (!pincode) {
+                      const found = r.address_components.find((c: any) => c.types.includes("postal_code"));
+                      if (found && found.long_name) pincode = found.long_name;
+                    }
+                  }
+                  if (!pincode && r.formatted_address) {
+                    const match = r.formatted_address.match(/\b(7[0-1]\d{4})\b/);
+                    if (match) {
+                      pincode = match[1];
+                    }
+                  }
+                }
+              }
+
+              // If still no pincode from Google, calculate closest Kolkata area by geographic distance
+              if (!pincode) {
+                const kolkataGeomAreas = [
+                  { pincode: '700001', lat: 22.5744, lng: 88.3547 },
+                  { pincode: '700016', lat: 22.5512, lng: 88.3533 },
+                  { pincode: '700064', lat: 22.5867, lng: 88.4178 },
+                  { pincode: '700091', lat: 22.5735, lng: 88.4331 },
+                  { pincode: '700156', lat: 22.5898, lng: 88.4682 },
+                  { pincode: '700135', lat: 22.6045, lng: 88.4879 },
+                  { pincode: '700136', lat: 22.6284, lng: 88.4485 },
+                  { pincode: '700019', lat: 22.5195, lng: 88.3653 },
+                  { pincode: '700025', lat: 22.5354, lng: 88.3478 },
+                  { pincode: '700027', lat: 22.5186, lng: 88.3308 },
+                  { pincode: '700084', lat: 22.4645, lng: 88.3842 },
+                  { pincode: '700032', lat: 22.4988, lng: 88.3698 },
+                  { pincode: '700034', lat: 22.5023, lng: 88.3187 },
+                  { pincode: '700004', lat: 22.6033, lng: 88.3721 },
+                  { pincode: '700028', lat: 22.6322, lng: 88.4067 },
+                  { pincode: '711101', lat: 22.5855, lng: 88.3312 },
+                  { pincode: '700046', lat: 22.5441, lng: 88.3892 },
+                  { pincode: '700089', lat: 22.6078, lng: 88.4019 }
+                ];
+                let closestP = '700001';
+                let minD = Infinity;
+                for (const a of kolkataGeomAreas) {
+                  const d = Math.hypot(a.lat - lat, a.lng - lng);
+                  if (d < minD) {
+                    minD = d;
+                    closestP = a.pincode;
+                  }
+                }
+                pincode = closestP;
+              }
+
               const resolvedStreet = street || first.formatted_address?.split(",")[0] || locality || "Kolkata";
 
               return res.json({
@@ -1916,6 +2013,7 @@ async function startServer() {
                 source: "google-maps",
                 result: {
                   formattedAddress: first.formatted_address,
+                  building: building || (first.types?.includes("premise") ? first.address_components?.[0]?.long_name : ""),
                   street: resolvedStreet,
                   locality: locality || city,
                   suburb: locality,
@@ -7696,6 +7794,21 @@ Knowledge Base & Service Details:
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  // Universal Express Error Handling Middleware (Catches URIError and any uncaught errors)
+  app.use((err: any, req: any, res: any, next: any) => {
+    if (err instanceof URIError || err?.name === "URIError" || String(err?.message || "").includes("Failed to decode param")) {
+      // Cleanly return 404 without emitting to stderr so Cloud Run Error Reporting does not count this as an application error
+      return res.status(404).send("Not Found");
+    }
+    console.error("[DevServer] Internal error on request:", err);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: "Internal Server Error"
+      });
+    }
+  });
 
   const serverInstance = app.listen(PORT, "0.0.0.0", () => {
     console.log(`SmartRun Server running on http://0.0.0.0:${PORT}`);

@@ -21,6 +21,7 @@ import {
 } from './supabaseService';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { apiUrl } from '../lib/apiBase';
+import { Capacitor } from '@capacitor/core';
 
 // Initialize Firebase App singleton
 export const firebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -31,6 +32,8 @@ let activeConfirmationResult: ConfirmationResult | null = null;
 let activeRecaptchaVerifier: RecaptchaVerifier | null = null;
 let lastSentPhoneNumber: string | null = null;
 let activeBackendOtpToken: string | null = null;
+let activeBackendOtpPhone: string | null = null;
+let activeNativeVerificationId: string | null = null;
 
 /**
  * Sanitize customer name to filter out auto-generated place-holder names
@@ -91,9 +94,12 @@ export function formatFirebasePhoneError(err: any): FirebaseDiagnostic {
 
   // Check specifically for Hostname match not found
   if (rawMsg.toLowerCase().includes('hostname match not found')) {
+    const isLocal = currentHost === 'localhost' || currentHost === '127.0.0.1';
     return {
       code: 'auth/unauthorized-domain',
-      userMessage: `Firebase Error: Hostname match not found for "${currentHost}".`,
+      userMessage: isLocal
+        ? `Firebase Web reCAPTCHA does not authorize "${currentHost}". On Android app, native verification is used; on web, please test via https://www.smartrun.in or use test OTP 123456.`
+        : `Firebase Error: Hostname match not found for "${currentHost}".`,
       technicalCause: `The current domain "${currentHost}" is not added in Firebase Authorized Domains.`,
       resolution: `Go to Firebase Console -> Authentication -> Settings tab -> Authorized domains, and click "Add domain" to add "${currentHost}".`
     };
@@ -220,9 +226,15 @@ export function getOrCreateRecaptchaVerifier(containerId = 'recaptcha-container'
     containerEl = document.createElement('div');
     containerEl.id = containerId;
     containerEl.style.position = 'fixed';
-    containerEl.style.bottom = '10px';
-    containerEl.style.right = '10px';
-    containerEl.style.zIndex = '999999';
+    containerEl.style.bottom = '-9999px';
+    containerEl.style.right = '-9999px';
+    containerEl.style.width = '0px';
+    containerEl.style.height = '0px';
+    containerEl.style.overflow = 'hidden';
+    containerEl.style.visibility = 'hidden';
+    containerEl.style.opacity = '0';
+    containerEl.style.pointerEvents = 'none';
+    containerEl.style.zIndex = '-99999';
     document.body.appendChild(containerEl);
   } else {
     containerEl.innerHTML = '';
@@ -258,8 +270,10 @@ export interface SendFirebaseOtpResult {
 }
 
 /**
- * Sends phone OTP via official Google Firebase Phone Auth SDK with invisible reCAPTCHA.
- * Dispatches real SMS directly through Firebase / Google Identity Platform.
+ * Sends phone OTP via official Google Firebase Phone Auth SDK.
+ * On native Android / iOS devices, utilizes native Play Integrity and SMS Retriever
+ * without web reCAPTCHA or localhost origin restrictions.
+ * On Web, utilizes Firebase Web SDK with headless reCAPTCHA and server fallback.
  */
 export async function sendFirebasePhoneOtp(
   rawPhone: string,
@@ -275,13 +289,100 @@ export async function sendFirebasePhoneOtp(
 
   const formattedPhone = formatToE164Phone(digits);
   lastSentPhoneNumber = formattedPhone;
+  activeConfirmationResult = null;
+  activeNativeVerificationId = null;
+  activeBackendOtpToken = null;
+  activeBackendOtpPhone = null;
 
+  // 1. Native Android & iOS Capacitor Platform Phone Auth
+  if (Capacitor.isNativePlatform()) {
+    try {
+      console.log(`[Native Firebase Phone Auth] Initiating native verification for ${formattedPhone}...`);
+      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+
+      const nativeResult = await new Promise<SendFirebaseOtpResult>(async (resolve) => {
+        let codeSentSub: any = null;
+        let codeFailedSub: any = null;
+        let timeoutId: any = null;
+        let hasResolved = false;
+
+        const cleanup = () => {
+          if (timeoutId) clearTimeout(timeoutId);
+          try { codeSentSub?.remove?.(); } catch {}
+          try { codeFailedSub?.remove?.(); } catch {}
+        };
+
+        codeSentSub = await FirebaseAuthentication.addListener('phoneCodeSent', (event) => {
+          if (!hasResolved) {
+            hasResolved = true;
+            activeNativeVerificationId = event.verificationId;
+            console.log('[Native Firebase Phone Auth] phoneCodeSent event received, verificationId:', event.verificationId);
+            cleanup();
+            resolve({
+              success: true,
+              formattedPhone,
+              provider: 'firebase',
+              message: `OTP verification code sent to ${formattedPhone}. Enter the 6-digit code below.`
+            });
+          }
+        });
+
+        codeFailedSub = await FirebaseAuthentication.addListener('phoneVerificationFailed', (event) => {
+          if (!hasResolved) {
+            hasResolved = true;
+            console.error('[Native Firebase Phone Auth] phoneVerificationFailed event:', event);
+            cleanup();
+            resolve({
+              success: false,
+              formattedPhone,
+              error: (event as any)?.message || 'Failed to dispatch SMS verification on device.'
+            });
+          }
+        });
+
+        // 35s safety watchdog timeout
+        timeoutId = setTimeout(() => {
+          if (!hasResolved) {
+            hasResolved = true;
+            cleanup();
+            console.warn('[Native Firebase Phone Auth] Timed out waiting for phoneCodeSent event, falling back...');
+            resolve({
+              success: false,
+              formattedPhone,
+              error: 'Timed out waiting for SMS dispatch. Please check your mobile signal and try again.'
+            });
+          }
+        }, 35000);
+
+        try {
+          await FirebaseAuthentication.signInWithPhoneNumber({ phoneNumber: formattedPhone });
+        } catch (nativeErr: any) {
+          if (!hasResolved) {
+            hasResolved = true;
+            cleanup();
+            console.error('[Native Firebase Phone Auth] signInWithPhoneNumber invocation error:', nativeErr);
+            resolve({
+              success: false,
+              formattedPhone,
+              error: nativeErr?.message || 'Failed to start phone verification on Android.'
+            });
+          }
+        }
+      });
+
+      if (nativeResult.success) {
+        return nativeResult;
+      }
+      console.warn('[Native Firebase Phone Auth] Native dispatch did not complete, falling back...');
+    } catch (pluginErr: any) {
+      console.warn('[Native Firebase Phone Auth] Native plugin unavailable or error:', pluginErr);
+    }
+  }
+
+  // 2. Web Firebase Phone Auth (Standard browser)
   try {
-    // 1. Prepare invisible reCAPTCHA verifier for Firebase Phone Auth
     const appVerifier = getOrCreateRecaptchaVerifier(containerId);
-
-    // 2. Trigger Google Firebase Phone Auth OTP dispatch
-    console.log(`[Firebase Phone Auth] Requesting OTP dispatch for ${formattedPhone}...`);
+    console.log(`[Firebase Phone Auth] Requesting Web SDK OTP dispatch for ${formattedPhone}...`);
     const confirmationResult = await signInWithPhoneNumber(firebaseAuth, formattedPhone, appVerifier);
     activeConfirmationResult = confirmationResult;
 
@@ -292,8 +393,37 @@ export async function sendFirebasePhoneOtp(
       message: `Firebase OTP code sent to ${formattedPhone}. Enter the 6-digit code below.`
     };
   } catch (err: any) {
-    console.error('[Firebase Phone Auth] Dispatch error:', err);
+    console.error('[Firebase Phone Auth] Web SDK Dispatch error:', err);
     resetRecaptchaVerifier();
+
+    const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'smartrun.in';
+    const isLocalOrApp = currentHost === 'localhost' || currentHost === '127.0.0.1' || Capacitor.isNativePlatform();
+
+    // 3. Fallback for localhost or app where Firebase Web domain verification fails ("Hostname match not found for localhost")
+    if (isLocalOrApp || String(err?.message || '').toLowerCase().includes('hostname match not found')) {
+      console.warn(`[Firebase Phone Auth] Hostname match issue detected for "${currentHost}", activating server OTP session fallback...`);
+      try {
+        const resp = await fetch(apiUrl('/api/auth/send-phone-otp'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: digits })
+        });
+        const serverData = await resp.json();
+        if (serverData.success) {
+          activeBackendOtpToken = serverData.token || null;
+          activeBackendOtpPhone = digits;
+          return {
+            success: true,
+            formattedPhone,
+            provider: 'firebase',
+            message: `OTP verification code dispatched to ${formattedPhone}. Enter the 6-digit code below.`
+          };
+        }
+      } catch (serverFallbackErr) {
+        console.warn('[Firebase Phone Auth] Server OTP fallback error:', serverFallbackErr);
+      }
+    }
+
     const diagnostic = formatFirebasePhoneError(err);
     return {
       success: false,
@@ -314,7 +444,7 @@ export interface VerifyFirebaseOtpResult {
 }
 
 /**
- * Verifies the 6-digit OTP code directly using Firebase Auth confirmation result,
+ * Verifies the 6-digit OTP code directly using Firebase Auth confirmation result or Native Android plugin,
  * then bridges the authenticated Firebase phone identity into the EXACT SAME Supabase account and user session!
  */
 export async function verifyFirebaseOtpAndBridgeToSupabase(
@@ -340,8 +470,25 @@ export async function verifyFirebaseOtpAndBridgeToSupabase(
 
   let firebaseUser: FirebaseUser | undefined;
 
-  // 1. Verify OTP with Firebase Auth ConfirmationResult
-  if (activeConfirmationResult) {
+  // 1. Verify OTP with Native Android / Capacitor Firebase Auth
+  if (activeNativeVerificationId) {
+    try {
+      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+      const signInResult = await FirebaseAuthentication.confirmVerificationCode({
+        verificationId: activeNativeVerificationId,
+        verificationCode: cleanCode
+      });
+      activeNativeVerificationId = null;
+      console.log('[Native Firebase Phone Auth] Successfully verified OTP! Native User UID:', signInResult.user?.uid);
+      firebaseUser = signInResult.user as any;
+    } catch (err: any) {
+      console.error('[Native Firebase Phone Auth] OTP confirmation failed:', err);
+      return {
+        success: false,
+        error: err?.message || 'Invalid 6-digit verification code. Please check and try again.'
+      };
+    }
+  } else if (activeConfirmationResult) {
     try {
       const userCredential = await activeConfirmationResult.confirm(cleanCode);
       firebaseUser = userCredential.user;
@@ -358,6 +505,35 @@ export async function verifyFirebaseOtpAndBridgeToSupabase(
             : err?.code === 'auth/code-expired'
             ? 'Verification code has expired. Please request a new code.'
             : diagnostic.userMessage || err?.message || 'Failed to verify OTP code with Firebase.'
+      };
+    }
+  } else if (activeBackendOtpToken) {
+    try {
+      const resp = await fetch(apiUrl('/api/auth/verify-phone-otp'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: activeBackendOtpPhone || verifiedPhoneNumber,
+          otp: cleanCode,
+          token: activeBackendOtpToken,
+          fullName: userFullName
+        })
+      });
+      const verifyData = await resp.json();
+      if (!verifyData.success) {
+        return {
+          success: false,
+          error: verifyData.error || 'Invalid or expired OTP code.'
+        };
+      }
+      activeBackendOtpToken = null;
+      activeBackendOtpPhone = null;
+      console.log('[Firebase Phone Auth] Successfully verified via server OTP session.');
+    } catch (err: any) {
+      console.error('[Firebase Phone Auth] Backend OTP verification error:', err);
+      return {
+        success: false,
+        error: err?.message || 'Failed to verify OTP with server.'
       };
     }
   } else {
@@ -415,7 +591,24 @@ export async function verifyPhoneOtpOnly(
     };
   }
 
-  if (activeConfirmationResult) {
+  if (activeNativeVerificationId) {
+    try {
+      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+      await FirebaseAuthentication.confirmVerificationCode({
+        verificationId: activeNativeVerificationId,
+        verificationCode: cleanCode
+      });
+      activeNativeVerificationId = null;
+      console.log('[Native Firebase Phone Auth] Phone number updated and verified successfully.');
+      return { success: true, formattedPhone };
+    } catch (err: any) {
+      console.error('[Native Firebase Phone Auth] Profile update OTP verification error:', err);
+      return {
+        success: false,
+        error: err?.message || 'Invalid 6-digit OTP code.'
+      };
+    }
+  } else if (activeConfirmationResult) {
     try {
       await activeConfirmationResult.confirm(cleanCode);
       activeConfirmationResult = null;
@@ -432,6 +625,27 @@ export async function verifyPhoneOtpOnly(
             ? 'Verification code has expired.'
             : err?.message || 'Failed to verify OTP code.'
       };
+    }
+  } else if (activeBackendOtpToken) {
+    try {
+      const resp = await fetch(apiUrl('/api/auth/verify-phone-otp'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: activeBackendOtpPhone || formattedPhone,
+          otp: cleanCode,
+          token: activeBackendOtpToken
+        })
+      });
+      const verifyData = await resp.json();
+      if (!verifyData.success) {
+        return { success: false, error: verifyData.error || 'Invalid OTP code.' };
+      }
+      activeBackendOtpToken = null;
+      activeBackendOtpPhone = null;
+      return { success: true, formattedPhone };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to verify OTP code.' };
     }
   }
 

@@ -1,0 +1,12 @@
+{
+  "schema_version": "v1",
+  "name_for_model": "smartrun_express_electricals",
+  "name_for_human": "SmartRun",
+  "description_for_model": "Kolkata 60-min express electricals, building materials, and licensed electrician booking platform. Android App: in.smartrun.app, Web: https://www.smartrun.in",
+  "description_for_human": "Kolkata's express electrical depot with 60-minute delivery.",
+  "auth": { "type": "none" },
+  "api": { "type": "openapi", "url": "https://www.smartrun.in/api/ai/openapi.json" },
+  "logo_url": "https://www.smartrun.in/SmartRun.png",
+  "contact_email": "team@smartrun.in",
+  "legal_info_url": "https://www.smartrun.in/terms"
+}

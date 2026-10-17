@@ -10,6 +10,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { useBottomSheetDismiss } from '../hooks/useBottomSheetDismiss';
+import { launchSmartRunApp } from '../utils/appLauncher';
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -250,8 +251,20 @@ export const InstallAppModal = ({
                     <span>{isInstalling ? 'Opening Installer...' : 'Install Web App Now'}</span>
                   </button>
 
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      launchSmartRunApp();
+                    }}
+                    className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Already have the app? Open SmartRun</span>
+                  </button>
+
                   <p className="text-[11px] text-center text-slate-500">
-                    Works on Android, Chrome, Edge, and Windows/Mac browsers.
+                    Package: in.smartrun.app • Deep link: smartrun://
                   </p>
                 </div>
               )}

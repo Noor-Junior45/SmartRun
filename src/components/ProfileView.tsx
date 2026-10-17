@@ -19,7 +19,8 @@ import {
   RotateCcw,
   Trash2,
   Loader2,
-  BookOpen
+  BookOpen,
+  Smartphone
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Order, SavedAddress, UserProfile, CartItem, Product, WalletTransaction } from '../types';
@@ -735,6 +736,7 @@ export const ProfileView = ({
             </div>
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
+
 
           {/* 9. Privacy Policy */}
           <button

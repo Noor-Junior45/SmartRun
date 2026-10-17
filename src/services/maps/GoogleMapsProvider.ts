@@ -73,12 +73,13 @@ export class GoogleMapsProvider implements IMapProvider {
   async initialize(container: HTMLElement, options: MapInitOptions): Promise<IMapInstance> {
     container.innerHTML = '';
     const status = await getGoogleMapsStatus();
+    const apiKey = status.apiKey || getSynchronousGoogleMapsKey();
 
-    if (!status.apiKey || !status.billingEnabled) {
-      throw new Error('Google Maps billing is not active on this project');
+    if (!apiKey) {
+      throw new Error('Google Maps API key is not configured');
     }
 
-    const loaded = await loadGoogleMapsScript(status.apiKey);
+    const loaded = await loadGoogleMapsScript(apiKey);
     if (!loaded || !(window as any).google?.maps?.Map) {
       throw new Error('Google Maps JavaScript SDK failed to load');
     }
@@ -90,37 +91,135 @@ export class GoogleMapsProvider implements IMapProvider {
     const google = (window as any).google;
     const initialCenter = { lat: options.center.lat, lng: options.center.lng };
 
-    // Zomato-inspired clean white map styling with prominent building footprints,
-    // clear building names and road hierarchy
-    const ZOMATO_PIN_MAP_STYLES = [
-      { elementType: 'geometry', stylers: [{ color: '#f8fafc' }] },
-      { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-      // Building footprints & outlines (Zomato 3D/2D building look)
-      { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#f1f5f9' }] },
-      { featureType: 'landscape.man_made', elementType: 'geometry.stroke', stylers: [{ color: '#e2e8f0' }] },
-      { featureType: 'landscape.man_made', elementType: 'labels.text.fill', stylers: [{ color: '#334155' }, { visibility: 'on' }] },
-      { featureType: 'landscape.man_made', elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }, { weight: 2 }] },
-      // Clean roads
-      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-      { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e2e8f0' }] },
-      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#475569' }] },
-      { featureType: 'road', elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }, { weight: 2 }] },
-      { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-      { featureType: 'road.arterial', elementType: 'geometry.stroke', stylers: [{ color: '#cbd5e1' }] },
-      { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#f8fafc' }] },
-      { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#94a3b8' }] },
-      // Parks & Greenery
-      { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#ecfdf5' }] },
-      { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#059669' }] },
-      // Water
-      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#e0f2fe' }] },
-      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#0284c7' }] },
-      // Keep building/point of interest labels clean and legible
-      { featureType: 'poi.business', stylers: [{ visibility: 'simplified' }] },
-      { featureType: 'poi.government', stylers: [{ visibility: 'simplified' }] },
-      { featureType: 'poi.school', stylers: [{ visibility: 'simplified' }] },
-      { featureType: 'poi.medical', stylers: [{ visibility: 'simplified' }] },
-      { featureType: 'transit', stylers: [{ visibility: 'off' }] }
+    // Ultra-clean White Format with prominent visible building footprints, outlines, and building labels
+    const WHITE_FORMAT_BUILDING_MAP_STYLES = [
+      // 1. Pure crisp white background for all land & base canvas
+      { elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+
+      // 2. Keep icons clean and simplified for clarity
+      { elementType: 'labels.icon', stylers: [{ visibility: 'simplified' }] },
+
+      // 3. Buildings & Man-Made Structures (Clearly visible building footprints, 3D outlines & names)
+      {
+        featureType: 'landscape.man_made',
+        elementType: 'geometry.fill',
+        stylers: [{ color: '#f1f5f9' }, { visibility: 'on' }]
+      },
+      {
+        featureType: 'landscape.man_made',
+        elementType: 'geometry.stroke',
+        stylers: [{ color: '#cbd5e1' }, { weight: 1.2 }, { visibility: 'on' }]
+      },
+      {
+        featureType: 'landscape.man_made',
+        elementType: 'labels.text.fill',
+        stylers: [{ color: '#1e293b' }, { visibility: 'on' }]
+      },
+      {
+        featureType: 'landscape.man_made',
+        elementType: 'labels.text.stroke',
+        stylers: [{ color: '#ffffff' }, { weight: 2.5 }, { visibility: 'on' }]
+      },
+
+      // 4. Points of Interest, Commercial Complexes & Residential Buildings
+      {
+        featureType: 'poi',
+        elementType: 'geometry.fill',
+        stylers: [{ color: '#f1f5f9' }, { visibility: 'on' }]
+      },
+      {
+        featureType: 'poi',
+        elementType: 'geometry.stroke',
+        stylers: [{ color: '#cbd5e1' }, { weight: 1.2 }, { visibility: 'on' }]
+      },
+      {
+        featureType: 'poi',
+        elementType: 'labels.text.fill',
+        stylers: [{ color: '#0f172a' }, { visibility: 'on' }]
+      },
+      {
+        featureType: 'poi',
+        elementType: 'labels.text.stroke',
+        stylers: [{ color: '#ffffff' }, { weight: 2.5 }]
+      },
+      { featureType: 'poi.business', stylers: [{ visibility: 'on' }] },
+      { featureType: 'poi.government', stylers: [{ visibility: 'on' }] },
+      { featureType: 'poi.school', stylers: [{ visibility: 'on' }] },
+      { featureType: 'poi.medical', stylers: [{ visibility: 'on' }] },
+
+      // 5. Clean White Roads with soft gray borders
+      {
+        featureType: 'road',
+        elementType: 'geometry.fill',
+        stylers: [{ color: '#ffffff' }]
+      },
+      {
+        featureType: 'road',
+        elementType: 'geometry.stroke',
+        stylers: [{ color: '#e2e8f0' }, { weight: 1 }]
+      },
+      {
+        featureType: 'road',
+        elementType: 'labels.text.fill',
+        stylers: [{ color: '#475569' }]
+      },
+      {
+        featureType: 'road',
+        elementType: 'labels.text.stroke',
+        stylers: [{ color: '#ffffff' }, { weight: 2 }]
+      },
+      {
+        featureType: 'road.arterial',
+        elementType: 'geometry.fill',
+        stylers: [{ color: '#ffffff' }]
+      },
+      {
+        featureType: 'road.arterial',
+        elementType: 'geometry.stroke',
+        stylers: [{ color: '#cbd5e1' }, { weight: 1.2 }]
+      },
+      {
+        featureType: 'road.highway',
+        elementType: 'geometry.fill',
+        stylers: [{ color: '#f8fafc' }]
+      },
+      {
+        featureType: 'road.highway',
+        elementType: 'geometry.stroke',
+        stylers: [{ color: '#94a3b8' }, { weight: 1.5 }]
+      },
+
+      // 6. Parks & Greenery (subtle light pastel green)
+      {
+        featureType: 'poi.park',
+        elementType: 'geometry.fill',
+        stylers: [{ color: '#f0fdf4' }]
+      },
+      {
+        featureType: 'poi.park',
+        elementType: 'geometry.stroke',
+        stylers: [{ color: '#dcfce7' }, { weight: 1 }]
+      },
+      {
+        featureType: 'poi.park',
+        elementType: 'labels.text.fill',
+        stylers: [{ color: '#15803d' }]
+      },
+
+      // 7. Water (soft subtle light blue)
+      {
+        featureType: 'water',
+        elementType: 'geometry.fill',
+        stylers: [{ color: '#e0f2fe' }]
+      },
+      {
+        featureType: 'water',
+        elementType: 'labels.text.fill',
+        stylers: [{ color: '#0284c7' }]
+      },
+
+      // 8. Transit
+      { featureType: 'transit', stylers: [{ visibility: 'simplified' }] }
     ];
 
     const map = new google.maps.Map(container, {
@@ -128,7 +227,7 @@ export class GoogleMapsProvider implements IMapProvider {
       zoom: options.zoom || 18,
       minZoom: options.minZoom || 11,
       maxZoom: options.maxZoom || 20,
-      tilt: 45, // 2D with 3D building perspective tilt
+      tilt: 45, // 3D building perspective tilt
       heading: 0,
       disableDefaultUI: true,
       zoomControl: false,
@@ -137,7 +236,7 @@ export class GoogleMapsProvider implements IMapProvider {
       fullscreenControl: false,
       gestureHandling: 'greedy',
       keyboardShortcuts: false,
-      styles: ZOMATO_PIN_MAP_STYLES,
+      styles: WHITE_FORMAT_BUILDING_MAP_STYLES,
       internalUsageAttributionIds: [USAGE_ATTRIBUTION_ID]
     });
 
@@ -158,6 +257,9 @@ export class GoogleMapsProvider implements IMapProvider {
         options.onMoveEnd?.({ lat: center.lat(), lng: center.lng() });
       }
     });
+
+    let liveLocationMarker: any = null;
+    let liveLocationAccuracyCircle: any = null;
 
     const instance: IMapInstance = {
       setCenter: (coords: MapCoordinates) => {
@@ -182,6 +284,70 @@ export class GoogleMapsProvider implements IMapProvider {
       invalidateSize: () => {
         google.maps.event.trigger(map, 'resize');
       },
+      setLiveLocationMarker: (coords: MapCoordinates | null) => {
+        try {
+          if (!coords) {
+            if (liveLocationMarker) {
+              liveLocationMarker.setMap(null);
+              liveLocationMarker = null;
+            }
+            if (liveLocationAccuracyCircle) {
+              liveLocationAccuracyCircle.setMap(null);
+              liveLocationAccuracyCircle = null;
+            }
+            return;
+          }
+
+          const position = { lat: coords.lat, lng: coords.lng };
+
+          // 1. Soft pulsing light blue halo circle around live location (accuracy circle)
+          if (!liveLocationAccuracyCircle) {
+            liveLocationAccuracyCircle = new google.maps.Circle({
+              strokeColor: '#2563EB',
+              strokeOpacity: 0.35,
+              strokeWeight: 1.5,
+              fillColor: '#3B82F6',
+              fillOpacity: 0.16,
+              map,
+              center: position,
+              radius: 35,
+              zIndex: 999990
+            });
+          } else {
+            liveLocationAccuracyCircle.setCenter(position);
+            liveLocationAccuracyCircle.setMap(map);
+          }
+
+          // 2. High-precision Blue Dot marker with crisp white outline and soft glow
+          const blueDotSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+            <circle cx="14" cy="14" r="12" fill="#3B82F6" fill-opacity="0.3" stroke="#2563EB" stroke-width="1.5" />
+            <circle cx="14" cy="14" r="7" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="2.5" />
+          </svg>`;
+          const blueDotIcon = {
+            url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(blueDotSvg),
+            scaledSize: new google.maps.Size(28, 28),
+            anchor: new google.maps.Point(14, 14)
+          };
+
+          if (!liveLocationMarker) {
+            liveLocationMarker = new google.maps.Marker({
+              position,
+              map,
+              icon: blueDotIcon,
+              title: 'Your Live Location',
+              zIndex: 999999,
+              optimized: false
+            });
+          } else {
+            liveLocationMarker.setPosition(position);
+            liveLocationMarker.setIcon(blueDotIcon);
+            liveLocationMarker.setMap(map);
+          }
+        } catch (e) {
+          console.warn('[GoogleMapsProvider] setLiveLocationMarker notice:', e);
+        }
+      },
+      getNativeMap: () => map,
       setTilt: (t: number) => {
         try {
           map.setTilt(t);
@@ -205,6 +371,16 @@ export class GoogleMapsProvider implements IMapProvider {
         }
       },
       destroy: () => {
+        try {
+          if (liveLocationMarker) {
+            liveLocationMarker.setMap(null);
+            liveLocationMarker = null;
+          }
+          if (liveLocationAccuracyCircle) {
+            liveLocationAccuracyCircle.setMap(null);
+            liveLocationAccuracyCircle = null;
+          }
+        } catch {}
         google.maps.event.clearInstanceListeners(map);
         container.innerHTML = '';
       }
@@ -256,11 +432,12 @@ export class GoogleMapsProvider implements IMapProvider {
           return {
             formattedAddress: r.formattedAddress || r.street || 'Kolkata',
             street: r.street || r.formattedAddress || 'Kolkata',
+            building: r.building || '',
             locality: r.locality || 'Kolkata',
             suburb: r.suburb,
             city: r.city || 'Kolkata',
             state: r.state || 'West Bengal',
-            pincode: r.pincode || '700001',
+            pincode: r.pincode || '',
             lat: coords.lat,
             lng: coords.lng,
             provider: 'google' as const
@@ -296,7 +473,7 @@ export class GoogleMapsProvider implements IMapProvider {
             suburb: suburb,
             city: addr.city || addr.state_district || 'Kolkata',
             state: addr.state || 'West Bengal',
-            pincode: postcode || '700001',
+            pincode: postcode || '',
             lat: coords.lat,
             lng: coords.lng,
             provider: 'google' as const

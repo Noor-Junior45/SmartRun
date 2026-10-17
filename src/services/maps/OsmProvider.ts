@@ -76,6 +76,57 @@ export class OsmProvider implements IMapProvider {
       },
       destroy: () => {
         map.remove();
+      },
+      setLiveLocationMarker: (coords: MapCoordinates | null) => {
+        try {
+          if (!coords) {
+            if ((instance as any)._liveMarker) {
+              map.removeLayer((instance as any)._liveMarker);
+              (instance as any)._liveMarker = null;
+            }
+            if ((instance as any)._liveCircle) {
+              map.removeLayer((instance as any)._liveCircle);
+              (instance as any)._liveCircle = null;
+            }
+            return;
+          }
+
+          const latLng: [number, number] = [coords.lat, coords.lng];
+
+          if (!(instance as any)._liveCircle) {
+            (instance as any)._liveCircle = L.circle(latLng, {
+              radius: 35,
+              color: '#2563EB',
+              weight: 1.5,
+              opacity: 0.4,
+              fillColor: '#3B82F6',
+              fillOpacity: 0.16
+            }).addTo(map);
+          } else {
+            (instance as any)._liveCircle.setLatLng(latLng);
+          }
+
+          const blueDotHtml = `
+            <div style="position:relative; width:26px; height:26px; display:flex; align-items:center; justify-content:center;">
+              <div style="position:absolute; inset:0; border-radius:9999px; background-color:#3b82f6; opacity:0.35;"></div>
+              <div style="width:14px; height:14px; border-radius:9999px; background-color:#1d4ed8; border:2.5px solid #ffffff; box-shadow:0 2px 5px rgba(0,0,0,0.35); position:relative; z-index:2;"></div>
+            </div>
+          `;
+          const blueDotIcon = L.divIcon({
+            html: blueDotHtml,
+            className: 'custom-live-blue-dot',
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+          });
+
+          if (!(instance as any)._liveMarker) {
+            (instance as any)._liveMarker = L.marker(latLng, { icon: blueDotIcon, zIndexOffset: 1000 }).addTo(map);
+          } else {
+            (instance as any)._liveMarker.setLatLng(latLng);
+          }
+        } catch (e) {
+          console.warn('[OsmProvider] setLiveLocationMarker notice:', e);
+        }
       }
     };
 

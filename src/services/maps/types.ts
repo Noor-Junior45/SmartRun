@@ -12,7 +12,7 @@ export interface MapSearchResult {
   placeId?: string;
   pincode?: string;
   isMapGeocoded?: boolean;
-  provider: 'google' | 'osm' | 'local';
+  provider: 'google' | 'carto' | 'osm' | 'local';
   building?: string;
   road?: string;
   area?: string;
@@ -22,6 +22,7 @@ export interface MapSearchResult {
 export interface ReverseGeocodeResult {
   formattedAddress: string;
   street: string;
+  building?: string;
   locality: string;
   suburb?: string;
   city: string;
@@ -29,7 +30,7 @@ export interface ReverseGeocodeResult {
   pincode: string;
   lat: number;
   lng: number;
-  provider: 'google' | 'osm';
+  provider: 'google' | 'carto' | 'osm';
 }
 
 export interface MapInitOptions {
@@ -51,13 +52,16 @@ export interface IMapInstance {
   zoomOut(): void;
   invalidateSize(): void;
   destroy(): void;
+  setLiveLocationMarker?(coords: MapCoordinates | null): void;
+  getNativeMap?(): any;
   setTilt?(tilt: number): void;
   getTilt?(): number;
   toggle3D?(): boolean;
+  switchStyle?(style: 'voyager' | 'positron'): void;
 }
 
 export interface IMapProvider {
-  readonly name: 'google' | 'osm';
+  readonly name: 'google' | 'carto' | 'osm';
   isAvailable(): boolean;
   initialize(container: HTMLElement, options: MapInitOptions): Promise<IMapInstance>;
   searchPlaces(query: string, locationBias?: MapCoordinates): Promise<MapSearchResult[]>;

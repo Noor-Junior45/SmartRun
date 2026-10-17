@@ -328,5 +328,35 @@ button[aria-label^="Previous product image"] {
   animation: pin-drop-bounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
+/* Hide Google reCAPTCHA badge overlay completely so it never covers buttons or screen details */
+.grecaptcha-badge {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
+}
 
+#recaptcha-container {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
 
+/* Delivery Motorcycle & Gate Button Animations */
+@keyframes bike-idle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-0.9px);
+  }
+}
+
+.animate-bike-idle {
+  animation: bike-idle 0.35s ease-in-out infinite;
+}

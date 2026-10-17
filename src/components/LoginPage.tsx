@@ -110,7 +110,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   const [identifier, setIdentifier] = useState(''); // Mobile number or email
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [phoneUsePassword, setPhoneUsePassword] = useState(false);
 
   // Phone OTP states
   const [otpSent, setOtpSent] = useState(false);
@@ -242,8 +241,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         setSentToPhone(phone);
         setOtpSent(true);
         setShowSecondField(true);
-        setOtpCooldown(30);
-        setInfoMessage(res.message || `OTP sent to ${phone}. Enter the 6-digit code below.`);
+        setOtpCooldown(60); // 1 minute gap to resend OTP
+        setInfoMessage(null); // Removed "firebase otp code sent to..." message banner as requested
         setOtpCode('');
       }
     } catch (err: unknown) {
@@ -694,10 +693,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     const isPhone = isPhoneInput(cleanId);
 
     if (isPhone) {
-      const clean10 = cleanId.replace(/\D/g, '').slice(-10);
-      if (phoneUsePassword) {
-        await handlePhonePasswordLogin(clean10);
-      } else if (!otpSent || !showSecondField) {
+      if (!otpSent || !showSecondField) {
         await handleSendPhoneOtp();
       } else {
         await handleVerifyPhoneOtp();
@@ -753,20 +749,29 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
 
   const isAnyLoading = isLoading || isGoogleLoading;
   const isPhone = isPhoneInput(identifier);
+  const isFillingSecond = showSecondField;
+  const isTypingSecond = (isPhone && otpCode.length > 0) || (!isPhone && password.length > 0);
+  const isMotorcyclePassing = isLoading && showSecondField;
+
+  // Progressive approach: as user enters digits/chars, rider rolls closer to the bracket gate (0px to 17px)
+  const typingProgress = isPhone
+    ? Math.min((otpCode.length || 0) / 6, 1)
+    : Math.min((password.length || 0) / 6, 1);
+  const riderApproachX = isMotorcyclePassing ? 38 : typingProgress * 17;
 
   return (
-    <div className="min-h-screen bg-white flex flex-col justify-center items-center px-4 py-8 sm:py-12">
+    <div className="min-h-screen bg-white flex flex-col justify-start items-center px-4 pt-1 sm:pt-2 pb-8">
       <SEOHead
         title="Sign In / Register | SmartRun Express Electricals"
         description="Sign in to your SmartRun account with mobile OTP, email, or Google to track express delivery orders, manage addresses, and access wholesale pricing."
         keywords="smartrun login, smartrun signup, electrical depot account, mobile otp login"
       />
 
-      {/* Main Centered Login Container */}
-      <div className="w-full max-w-md bg-white border-0 shadow-none p-4 sm:p-6 space-y-5">
+      {/* Main Login Container - Positioned right at the very top of screen */}
+      <div className="w-full max-w-md bg-white border-0 shadow-none px-4 pt-0 pb-6 space-y-3 sm:space-y-3.5">
         {/* Top Back Navigation Arrow Button */}
         {!isNativeApp && (
-          <div className="w-full flex items-center justify-between -mb-2">
+          <div className="w-full flex items-center justify-between -mb-1">
             <button
               type="button"
               onClick={() => {
@@ -779,7 +784,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   navigate('/');
                 }
               }}
-              className="p-2 -ml-2 text-slate-700 hover:text-black hover:bg-slate-100 rounded-full transition-colors cursor-pointer flex items-center gap-1.5 active:scale-95 text-xs font-bold"
+              className="p-1 -ml-2 text-slate-700 hover:text-black hover:bg-slate-100 rounded-full transition-colors cursor-pointer flex items-center gap-1 active:scale-95 text-xs font-bold"
               title="Back"
             >
               <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
@@ -788,44 +793,44 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           </div>
         )}
 
-        {/* Brand Logo & Name Header */}
-        <div className="flex flex-col items-center justify-center text-center space-y-2">
+        {/* Brand Logo & Name Header - Starts right from top with increased prominent size */}
+        <div className="flex flex-col items-center justify-center text-center space-y-1.5">
           <div>
             <img
               src="/SmartRun.png"
               alt="SmartRun Logo"
-              className="w-16 h-16 object-cover rounded-2xl shadow-sm border border-slate-100 p-0.5 bg-white"
+              className="w-18 h-18 sm:w-22 sm:h-22 object-cover rounded-3xl"
             />
           </div>
 
           <div>
             <div
-              className="text-3xl font-black font-baloo text-black flex items-center justify-center leading-none tracking-tight"
+              className="text-3xl sm:text-4xl font-black font-baloo text-black flex items-center justify-center leading-none tracking-tight"
               style={{ fontFamily: "'Baloo 2', 'Baloo Bhai 2', cursive, sans-serif" }}
             >
               <span className="text-black">SmartRun</span>
             </div>
-            <p className="text-xs text-slate-500 font-semibold mt-1">
+            <p className="text-xs sm:text-sm text-slate-500 font-semibold mt-1">
               Electrical &amp; Construction Materials Hub
             </p>
           </div>
         </div>
 
         {/* Clean Heading */}
-        <div className="text-center pt-1 pb-1">
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+        <div className="text-center pt-0 pb-0">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
             {authStep === 'primary' && 'Sign in'}
             {authStep === 'onboarding_phone' && 'Complete Your Profile'}
             {authStep === 'onboarding_email' && 'Complete Your Profile'}
             {authStep === 'forgot' && 'Reset Password'}
           </h1>
           {authStep === 'onboarding_phone' && (
-            <p className="text-xs text-slate-500 font-medium mt-1">
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
               Mobile number +91 {onboardingPhone} verified. Fill details to finish.
             </p>
           )}
           {authStep === 'onboarding_email' && (
-            <p className="text-xs text-slate-500 font-medium mt-1">
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
               New to SmartRun? Fill in your details to create your account.
             </p>
           )}
@@ -854,7 +859,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
               {/* Field 1: Mobile Number or Email */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  MOBILE NUMBER / EMAIL
+                  MOBILE NO. / EMAIL
                 </label>
                 <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
                   {isPhone ? (
@@ -891,31 +896,13 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 </div>
               </div>
 
-              {/* Toggle between OTP and Password for Mobile Number */}
-              {isPhone && !otpSent && (
-                <div className="flex justify-end pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = !phoneUsePassword;
-                      setPhoneUsePassword(next);
-                      setShowSecondField(next);
-                      resetMessages();
-                    }}
-                    className="text-xs font-bold text-amber-700 hover:text-amber-800 transition-colors cursor-pointer"
-                  >
-                    {phoneUsePassword ? '← Sign in with SMS OTP instead' : 'Sign in with password instead'}
-                  </button>
-                </div>
-              )}
-
-              {/* Second Field: SMS OTP or Password */}
+              {/* Second Field: SMS OTP for Mobile Number, or Password for Email */}
               <div className={showSecondField ? 'space-y-1 block animate-in fade-in duration-200' : 'hidden'}>
                 <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                  {isPhone && !phoneUsePassword ? 'SMS OTP CODE' : 'PASSWORD'}
+                  {isPhone ? 'SMS OTP CODE' : 'PASSWORD'}
                 </label>
 
-                {isPhone && !phoneUsePassword ? (
+                {isPhone ? (
                   /* Mobile OTP Input */
                   <div>
                     <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
@@ -935,7 +922,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                           if (error) setError(null);
                         }}
                         className="w-full bg-transparent py-2 text-sm font-semibold tracking-widest text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                        required={showSecondField && isPhone && !phoneUsePassword}
+                        required={showSecondField && isPhone}
                       />
                       {otpCode.length > 0 && (
                         <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full shrink-0 select-none">
@@ -958,18 +945,28 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                         Change number
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={handleSendPhoneOtp}
-                        disabled={otpCooldown > 0 || isLoading}
-                        className="text-xs font-bold text-amber-700 hover:text-amber-800 disabled:text-slate-400 cursor-pointer"
-                      >
-                        {otpCooldown > 0 ? `Resend OTP (${otpCooldown}s)` : 'Resend OTP'}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-emerald-600">
+                          Otp Sent..
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <button
+                          type="button"
+                          onClick={handleSendPhoneOtp}
+                          disabled={otpCooldown > 0 || isLoading}
+                          className={`text-xs transition-colors ${
+                            otpCooldown > 0 || isLoading
+                              ? 'text-slate-400 font-medium cursor-not-allowed'
+                              : 'text-amber-700 hover:text-amber-800 font-bold cursor-pointer'
+                          }`}
+                        >
+                          {otpCooldown > 0 ? `Resend OTP (${otpCooldown}s)` : 'Resend OTP'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  /* Password Input for Email or Phone */
+                  /* Password Input for Email */
                   <div>
                     <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
                       <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
@@ -980,7 +977,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                        required={showSecondField && (!isPhone || phoneUsePassword)}
+                        required={showSecondField && !isPhone}
                       />
                       <button
                         type="button"
@@ -997,13 +994,12 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                         type="button"
                         onClick={() => {
                           setShowSecondField(false);
-                          setPhoneUsePassword(false);
                           setPassword('');
                           resetMessages();
                         }}
                         className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
                       >
-                        {isPhone ? 'Change number' : 'Change email'}
+                        Change email
                       </button>
 
                       <button
@@ -1022,40 +1018,147 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                 )}
               </div>
 
-              {/* Primary Action Button (Sign In / Get OTP / Verify OTP) */}
+              {/* Primary Action Button with Delivery Motorcycle & Gate Micro-Animation */}
               <button
                 type="submit"
                 disabled={isAnyLoading}
-                className="w-full py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-50 mt-2"
+                className="w-full py-2.5 sm:py-3 px-4 rounded-2xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-sm transition-all flex items-center justify-center cursor-pointer shadow-xs active:scale-[0.99] disabled:opacity-60 mt-2 relative overflow-hidden group"
               >
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    {isPhone && !phoneUsePassword
-                      ? (otpSent ? 'Verifying OTP...' : 'Sending OTP...')
-                      : 'Signing In...'}
+                {/* Center Content: Arrow & Bracket icon placed directly next to text on left side */}
+                <div className="flex items-center justify-center gap-2 font-black truncate px-8">
+                  <LogIn className="w-4 h-4 text-slate-950 shrink-0" />
+                  <span>
+                    {isLoading ? (
+                      isPhone
+                        ? (otpSent ? 'Verifying OTP...' : 'Sending OTP...')
+                        : 'Entering SmartRun...'
+                    ) : isPhone ? (
+                      !showSecondField ? (
+                        'Get OTP'
+                      ) : (
+                        'Verify OTP & Continue'
+                      )
+                    ) : (
+                      'Sign In'
+                    )}
                   </span>
-                ) : isPhone && !phoneUsePassword ? (
-                  !showSecondField ? (
-                    <>
-                      <LogIn className="w-4 h-4" />
-                      <span>Get OTP</span>
-                    </>
-                  ) : (
-                    <>
-                      <LogIn className="w-4 h-4" />
-                      <span>Verify OTP &amp; Continue</span>
-                    </>
-                  )
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    <span>Sign In</span>
-                  </>
-                )}
+                </div>
+
+                {/* Right Side: Delivery Motorcycle & Gate Micro-Animation */}
+                <div className="absolute right-3.5 w-12 h-6 flex items-center justify-end select-none pointer-events-none overflow-hidden">
+                  <svg
+                    viewBox="0 0 52 24"
+                    className="w-12 h-6 overflow-visible"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    {/* Road surface */}
+                    <line
+                      x1="0"
+                      y1="21"
+                      x2="52"
+                      y2="21"
+                      stroke="#0f172a"
+                      strokeWidth="1.5"
+                      strokeDasharray="3 2"
+                      strokeOpacity="0.35"
+                    />
+
+                    {/* Security Gate Post */}
+                    <rect x="38" y="7" width="3.5" height="14" rx="1.5" fill="#0f172a" />
+                    {/* LED Light on Gate: Green when open/passing, Red when waiting/closed */}
+                    <circle
+                      cx="39.75"
+                      cy="6"
+                      r="1.8"
+                      fill={isMotorcyclePassing ? '#16a34a' : (isFillingSecond ? '#ef4444' : '#64748b')}
+                      className="transition-colors duration-300"
+                    />
+
+                    {/* Boom Barrier Gate Arm (Bracket) - Pivots up when open/passing */}
+                    <g
+                      className="transition-transform duration-500 ease-out"
+                      style={{
+                        transformOrigin: '39.75px 10px',
+                        transform: isMotorcyclePassing ? 'rotate(-75deg)' : 'rotate(0deg)'
+                      }}
+                    >
+                      {/* Barrier bar */}
+                      <rect x="17" y="9" width="23" height="2.2" rx="1" fill="#dc2626" />
+                      {/* White reflective stripes on barrier bar */}
+                      <rect x="21" y="9" width="3" height="2.2" fill="#ffffff" />
+                      <rect x="28" y="9" width="3" height="2.2" fill="#ffffff" />
+                      <rect x="35" y="9" width="3" height="2.2" fill="#ffffff" />
+                    </g>
+
+                    {/* Delivery Motorcycle & Courier - Moves closer to bracket during typing, and passes through when enter/submit */}
+                    <g
+                      className={`transition-all ${
+                        isTypingSecond && !isMotorcyclePassing ? 'animate-bike-idle' : ''
+                      }`}
+                      style={{
+                        transform: `translateX(${riderApproachX}px)`,
+                        opacity: isMotorcyclePassing ? 0 : 1,
+                        transition: isMotorcyclePassing
+                          ? 'transform 0.65s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.65s ease-in'
+                          : 'transform 0.25s ease-out, opacity 0.2s ease-out'
+                      }}
+                    >
+                      {/* Headlight beam */}
+                      <polygon
+                        points="16,13 25,10 25,16"
+                        fill="#fef08a"
+                        opacity={isTypingSecond || isMotorcyclePassing ? 0.85 : 0.25}
+                        className="transition-opacity duration-300"
+                      />
+
+                      {/* Rear Wheel */}
+                      <circle cx="5" cy="18.5" r="2.5" stroke="#0f172a" strokeWidth="1.2" fill="#ffffff" />
+                      <circle cx="5" cy="18.5" r="0.8" fill="#0f172a" />
+
+                      {/* Front Wheel */}
+                      <circle cx="15" cy="18.5" r="2.5" stroke="#0f172a" strokeWidth="1.2" fill="#ffffff" />
+                      <circle cx="15" cy="18.5" r="0.8" fill="#0f172a" />
+
+                      {/* Bike Chassis */}
+                      <path
+                        d="M5 18.5 L9 16.5 L12.5 16.5 L15 18.5"
+                        stroke="#0f172a"
+                        strokeWidth="1.3"
+                        strokeLinecap="round"
+                      />
+                      {/* Handlebar & Windshield */}
+                      <path
+                        d="M12.5 16.5 L14 12.5 L15 11.5"
+                        stroke="#0f172a"
+                        strokeWidth="1.3"
+                        strokeLinecap="round"
+                      />
+                      <circle cx="15" cy="13" r="0.9" fill="#eab308" />
+
+                      {/* SmartRun Express Delivery Box on Back */}
+                      <rect x="2.5" y="10" width="5" height="6" rx="1" fill="#e23744" stroke="#0f172a" strokeWidth="0.8" />
+                      <rect x="3.8" y="12" width="2.4" height="0.8" fill="#ffffff" rx="0.4" />
+
+                      {/* Courier Helmet & Silhouette */}
+                      <circle cx="9.5" cy="8.5" r="2.2" fill="#0f172a" />
+                      <path d="M8.2 11 C8.2 11 9.5 10 11.5 12 L13 14.5" stroke="#0f172a" strokeWidth="1.3" strokeLinecap="round" />
+                    </g>
+                  </svg>
+                </div>
               </button>
             </form>
 
-            {/* CONTINUE WITH GOOGLE BUTTON (DIRECTLY BELOW SIGN IN BUTTON WITHOUT ANY TEXT IN BETWEEN) */}
+            {/* DIVIDER: "Or continue with" in middle with compact small lines on both sides */}
+            <div className="flex items-center justify-center my-2 gap-2.5">
+              <div className="w-10 sm:w-14 h-[1px] bg-slate-200" />
+              <span className="text-xs text-slate-400 font-medium whitespace-nowrap select-none">
+                Or continue with
+              </span>
+              <div className="w-10 sm:w-14 h-[1px] bg-slate-200" />
+            </div>
+
+            {/* CONTINUE WITH GOOGLE BUTTON */}
             <div>
               <button
                 type="button"
@@ -1079,9 +1182,9 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
               </button>
             </div>
 
-            {/* TERMS OF SERVICE & PRIVACY POLICY AGREEMENT (BELOW GOOGLE BUTTON, DEFAULT YES, INCREASED TEXT SIZE) */}
+            {/* TERMS OF SERVICE & PRIVACY POLICY AGREEMENT (CENTERED MIDDLE TYPING FORMAT WITH SMALLER TICK) */}
             <div className="pt-2 text-center">
-              <div className="inline-flex items-center justify-center gap-2.5 text-sm font-medium text-slate-700">
+              <div className="inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-medium text-slate-700">
                 <button
                   type="button"
                   id="terms-agreed-tick"
@@ -1089,15 +1192,15 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   aria-checked={termsAgreed}
                   aria-label="Agree to terms of service and privacy policy"
                   onClick={handleToggleTerms}
-                  className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                  className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
                     termsAgreed
                       ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
                       : 'border-slate-300 bg-white hover:border-slate-400'
                   }`}
                 >
-                  {termsAgreed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                  {termsAgreed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                 </button>
-                <span className="leading-snug select-none text-left">
+                <span className="leading-snug select-none text-center">
                   <span onClick={handleToggleTerms} className="cursor-pointer">
                     You agree to our{' '}
                   </span>
@@ -1170,32 +1273,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   onChange={(e) => setOnboardingEmail(e.target.value)}
                   className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
                 />
-              </div>
-            </div>
-
-            {/* Field: Password (Optional) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 tracking-wider uppercase mb-1">
-                PASSWORD <span className="text-slate-400 font-normal">(OPTIONAL)</span>
-              </label>
-              <div className="flex items-center border-b border-slate-300 focus-within:border-slate-800 transition-colors pb-1">
-                <Lock className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                <input
-                  type={showOnboardingPassword ? 'text' : 'password'}
-                  placeholder="Create a password (optional)"
-                  value={onboardingPassword}
-                  onChange={(e) => setOnboardingPassword(e.target.value)}
-                  minLength={6}
-                  className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowOnboardingPassword(!showOnboardingPassword)}
-                  className="p-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shrink-0"
-                  tabIndex={-1}
-                >
-                  {showOnboardingPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
               </div>
             </div>
 

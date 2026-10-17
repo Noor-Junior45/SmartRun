@@ -342,5 +342,30 @@
   - Updated `server.ts` `/api/maps/google/status` to mark Google Maps as `available: true` and `billingEnabled: true` whenever the API key is present.
   - Completely purged all Carto CDN tiles (`basemaps.cartocdn.com`) and Carto references from `LiveOrderRealMap.tsx`; fallback uses pure OpenStreetMap only if authentication explicitly fails.
   - Preserved custom Zomato clean white map styling, 3D User House graphic with animated arrival sonar radar beacon, Store Depot marker, and automatic camera zoom-out when the rider approaches the user's home.
+- [x] **Phone App Mobile Auth Fix (`Hostname match not found for "localhost"`) & Cloud Run Malformed URI 404 Resolution**:
+  - **Phone App Firebase Auth Issue**: In the Android Capacitor APK, `window.location.hostname` is `localhost`. When the web Firebase SDK was invoked, Google invisible reCAPTCHA threw `Firebase Error: Hostname match not found for "localhost"` because `localhost` was not in authorized domains.
+  - **Native Android Firebase Phone Auth**:
+    - Added `'phone'` provider to `FirebaseAuthentication` in `capacitor.config.ts`.
+    - Added `implementation 'com.google.firebase:firebase-auth'` to `android/app/build.gradle` dependencies.
+    - Integrated native `@capacitor-firebase/authentication` inside `sendFirebasePhoneOtp` and verification routines in `src/services/firebaseAuthService.ts`: calls Android's native `FirebaseAuthentication.signInWithPhoneNumber({ phoneNumber })` and listens for `phoneCodeSent` and `phoneVerificationCompleted` events via Play Integrity & SMS Retriever without any web reCAPTCHA or localhost origin restrictions.
+    - Added resilient server-authoritative OTP fallback (`/api/auth/send-phone-otp` & `/api/auth/verify-phone-otp`) if the web reCAPTCHA or domain check fails on local development.
+  - **Cloud Run `URIError: Failed to decode param '/%CO'` Resolution**:
+    - **Root Cause**: Automated bots and vulnerability scanners probe Cloud Run servers with malformed percent-encoded sequences like `/%CO` or `/%C0` (where `%` is followed by non-hex characters or invalid UTF-8). When Express tried to match routes like `app.get("*")`, `decode_param` threw `URIError: Failed to decode param '/%CO'`, which was logged to `stderr` and triggered Google Cloud Run Error Reporting metrics.
+    - **Pre-Routing Interceptor**: Enhanced the top-level sanitizing middleware in `server.ts` to test `decodeURI(req.url)` and `decodeURIComponent(req.path)`. Any malformed scanner probe immediately returns a clean HTTP `404 Not Found` without calling `next()` or emitting an error.
+    - **Silent Error Handler**: Updated the universal Express error middleware to catch any residual `URIError` or `Failed to decode param` errors and respond with a clean HTTP `404 Not Found` without writing stack traces to `stderr`, completely eliminating the Cloud Run "Error count" alert.
+- [x] **Browser-to-App Link Handoff & Google Play Store AI Search Discovery Integration**:
+  - **Browser-to-Native App Handoff (`in.smartrun.app`)**:
+    - Implemented clean, seamless link opening without pop-ups, banners, or modal boxes: Android App Links (Digital Asset Links via `/.well-known/assetlinks.json`) automatically opens links directly in the installed native `in.smartrun.app` app at the OS level; for users without the app, it opens directly on the web with zero interruption or popups.
+    - Updated `InstallAppModal.tsx` with a direct "Already have the app? Open SmartRun" button.
+    - Added standard Android App Links & Smart App Banner meta tags in `index.html` (`<meta name="google-play-app" content="app-id=in.smartrun.app">`, `al:android:package`, `al:android:url`, `al:web:url`).
+  - **Google Play Store AI Search ("Ask Play Store" / Gemini App Discovery) Indexation**:
+    - Added structured `SoftwareApplication` / `MobileApplication` schema in `index.html` JSON-LD `@graph` highlighting 60-minute express SLA, genuine Polycab & Havells wires, Schneider MCBs, UltraTech cement, and licensed electricians.
+    - Created machine-readable AI manifests: `/.well-known/ai-agent-manifest.json` and `/.well-known/ai-plugin.json` served via `server.ts` with CORS and application/json headers for Gemini and Play Store AI crawlers.
+- [x] **Removed Google Play & AI Search Button from Profile & Cleanup**:
+  - Removed `button#btn-profile-playstore-ai` ("Google Play & AI Search") from `ProfileView.tsx`.
+  - Removed `onOpenPlayStoreAI` callback and interface props from `ProfileViewProps` and `App.tsx`.
+  - Removed `PlayStoreAIDiscoveryModal.tsx` and all references (`isPlayStoreAIModalOpen` state, back button listener, and modal JSX in `App.tsx`).
+  - Preserved background Android App Links (`in.smartrun.app` Digital Asset Links) and machine-readable AI metadata (`index.html` schema and manifest routes) without intrusive UI elements.
+
 
 
