@@ -41,6 +41,7 @@ import { createFirestoreOrder, getStoredAddresses, cleanPhoneAutofill, generateU
 import { notifyOrderPlaced } from '../services/emailService';
 import { getFeeSettings, calculateOrderFees, DEFAULT_FEE_SETTINGS } from '../services/feeService';
 import { INDIAN_STANDARD_WIRE_COLORS, PIPE_COLOR_OPTIONS, getProductColorOptions } from '../data/wireColors';
+import { isKolkataServiceable } from '../data/kolkataAreas';
 import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
 import { trackBeginCheckout, trackPurchase } from '../utils/analytics';
 import { SEOHead } from './SEOHead';
@@ -170,11 +171,18 @@ export const CartView = ({
   // Derive the active/effective saved address
   const effectiveAddress = useMemo(() => {
     if (activeAddress) return activeAddress;
+    // If currentArea is explicitly out of Kolkata / non-serviceable, do not override with a stale saved Kolkata address
+    const isCurrentAreaOut = currentArea?.serviceable === false || (currentArea?.pincode && !isKolkataServiceable(currentArea.pincode));
+    if (isCurrentAreaOut) {
+      const matchingSaved = (savedAddresses || []).find((a) => a.area?.pincode === currentArea?.pincode);
+      if (matchingSaved) return matchingSaved;
+      return null;
+    }
     if (savedAddresses && savedAddresses.length > 0) return savedAddresses[0];
     const stored = getStoredAddresses();
     if (stored.length > 0) return stored[0];
     return null;
-  }, [activeAddress, savedAddresses]);
+  }, [activeAddress, savedAddresses, currentArea]);
 
   // Formatted confirmed 1-line address string
   const confirmedAddressOneLine = useMemo(() => {
@@ -189,7 +197,7 @@ export const CartView = ({
       ].filter(Boolean);
       return parts.join(', ');
     }
-    return `${currentArea.exactStreet || currentArea.name}, Kolkata - ${currentArea.pincode}`;
+    return `${currentArea.exactStreet || currentArea.name}${currentArea.pincode ? ` - ${currentArea.pincode}` : ''}`;
   }, [effectiveAddress, currentArea, userProfile]);
 
   // Checkout Form Details
@@ -213,6 +221,95 @@ export const CartView = ({
   const [landmark, setLandmark] = useState(() => {
     return effectiveAddress?.landmark || '';
   });
+
+  // Active Pincode & Kolkata Serviceability Check
+  const activePincode = useMemo(() => {
+    // 1. If currentArea has an unserviceable pincode, prioritize it so restriction triggers
+    if (currentArea?.pincode && !isKolkataServiceable(currentArea.pincode)) {
+      return currentArea.pincode.trim();
+    }
+    // 2. If activeAddress has an unserviceable pincode
+    if (activeAddress?.area?.pincode && !isKolkataServiceable(activeAddress.area.pincode)) {
+      return activeAddress.area.pincode.trim();
+    }
+    if ((activeAddress as any)?.pincode && !isKolkataServiceable(String((activeAddress as any).pincode))) {
+      return String((activeAddress as any).pincode).trim();
+    }
+    // 3. If effectiveAddress has an unserviceable pincode
+    if (effectiveAddress?.area?.pincode && !isKolkataServiceable(effectiveAddress.area.pincode)) {
+      return effectiveAddress.area.pincode.trim();
+    }
+    if ((effectiveAddress as any)?.pincode && !isKolkataServiceable(String((effectiveAddress as any).pincode))) {
+      return String((effectiveAddress as any).pincode).trim();
+    }
+    // 4. Any 6-digit pin in the confirmed address or address string
+    const combinedAddress = [
+      effectiveAddress?.formattedExactAddress,
+      effectiveAddress?.buildingRoad,
+      address,
+      confirmedAddressOneLine
+    ].filter(Boolean).join(' ');
+    const pinMatch = combinedAddress.match(/\b([1-9]\d{5})\b/);
+    if (pinMatch && pinMatch[1] && !isKolkataServiceable(pinMatch[1])) {
+      return pinMatch[1];
+    }
+    // 5. Standard resolution
+    if (activeAddress?.area?.pincode && /^\d{6}$/.test(activeAddress.area.pincode.trim())) {
+      return activeAddress.area.pincode.trim();
+    }
+    if ((activeAddress as any)?.pincode && /^\d{6}$/.test(String((activeAddress as any).pincode).trim())) {
+      return String((activeAddress as any).pincode).trim();
+    }
+    if (effectiveAddress?.area?.pincode && /^\d{6}$/.test(effectiveAddress.area.pincode.trim())) {
+      return effectiveAddress.area.pincode.trim();
+    }
+    if ((effectiveAddress as any)?.pincode && /^\d{6}$/.test(String((effectiveAddress as any).pincode).trim())) {
+      return String((effectiveAddress as any).pincode).trim();
+    }
+    if (pinMatch && pinMatch[1]) {
+      return pinMatch[1];
+    }
+    if (currentArea?.pincode && /^\d{6}$/.test(currentArea.pincode.trim())) {
+      return currentArea.pincode.trim();
+    }
+    return '700042';
+  }, [currentArea, activeAddress, effectiveAddress, address, confirmedAddressOneLine]);
+
+  const isDeliveryServiceable = useMemo(() => {
+    // 1. Explicit serviceable flags
+    if (currentArea?.serviceable === false) return false;
+    if (activeAddress?.area && activeAddress.area.serviceable === false) return false;
+    if (effectiveAddress?.area && effectiveAddress.area.serviceable === false) return false;
+
+    // 2. Distance from central Kolkata if coordinates are present
+    const lat = activeAddress?.lat || effectiveAddress?.lat || currentArea?.lat;
+    const lng = activeAddress?.lng || effectiveAddress?.lng || currentArea?.lng;
+    if (lat && lng) {
+      const distKm = Math.hypot(lat - 22.5726, lng - 88.3639) * 111;
+      if (distKm > 35) return false;
+    }
+
+    // 3. Pincode validation across sources
+    if (currentArea?.pincode && !isKolkataServiceable(currentArea.pincode)) return false;
+    if (activeAddress?.area?.pincode && !isKolkataServiceable(activeAddress.area.pincode)) return false;
+    if ((activeAddress as any)?.pincode && !isKolkataServiceable(String((activeAddress as any).pincode))) return false;
+    if (effectiveAddress?.area?.pincode && !isKolkataServiceable(effectiveAddress.area.pincode)) return false;
+    if ((effectiveAddress as any)?.pincode && !isKolkataServiceable(String((effectiveAddress as any).pincode))) return false;
+
+    // 4. Address string 6-digit pin validation
+    const combinedAddress = [
+      effectiveAddress?.formattedExactAddress,
+      effectiveAddress?.buildingRoad,
+      address,
+      confirmedAddressOneLine
+    ].filter(Boolean).join(' ');
+    const pinMatch = combinedAddress.match(/\b([1-9]\d{5})\b/);
+    if (pinMatch && pinMatch[1] && !isKolkataServiceable(pinMatch[1])) {
+      return false;
+    }
+
+    return isKolkataServiceable(activePincode);
+  }, [currentArea, activeAddress, effectiveAddress, activePincode, address, confirmedAddressOneLine]);
   // Payment method: 'cash' (Cash on Delivery), 'online' (UPI / NetBanking), or 'card' (Debit / Credit Cards)
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online' | 'card'>('cash');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -386,6 +483,12 @@ export const CartView = ({
       return;
     }
 
+    // 3. Gated: Must be serviceable location (Kolkata & Howrah)
+    if (!isDeliveryServiceable) {
+      hapticError();
+      return;
+    }
+
     setSingleCheckoutItem(item);
     setCheckoutMode('single');
     setPaymentMethod('cash'); // Default to cash
@@ -396,7 +499,13 @@ export const CartView = ({
   const handleOpenFullCheckout = () => {
     if (items.length === 0) return;
 
-    // 1. Gated: Must be logged in first
+    // 1. Gated: Delivery must be serviceable (Kolkata & Howrah)
+    if (!isDeliveryServiceable) {
+      hapticError();
+      return;
+    }
+
+    // 2. Gated: Must be logged in first
     const isLoggedIn = Boolean(
       userProfile?.id ||
       userProfile?.phone ||
@@ -410,7 +519,7 @@ export const CartView = ({
       return;
     }
 
-    // 2. Gated: Check delivery address availability
+    // 3. Gated: Check delivery address availability
     const hasAddress = Boolean(
       effectiveAddress ||
       (address && address.trim().length >= 3) ||
@@ -636,7 +745,14 @@ export const CartView = ({
     const addressLine2 = effectiveAddress?.buildingRoad || currentArea.name || 'Kolkata';
     const city = effectiveAddress?.area?.name ? 'Kolkata' : (currentArea.name || 'Kolkata');
     const state = 'West Bengal';
-    const pincode = currentArea.pincode || effectiveAddress?.area?.pincode || '700042';
+    const pincode = activePincode || currentArea.pincode || effectiveAddress?.area?.pincode || '700042';
+
+    if (!isDeliveryServiceable || !isKolkataServiceable(pincode)) {
+      hapticError();
+      setCheckoutError(`Delivery is not available at your place (PIN ${pincode}). We currently deliver only across Kolkata & Howrah.`);
+      setIsSubmitting(false);
+      return;
+    }
     const addressLabel = effectiveAddress?.tagLabel || (effectiveAddress?.tag ? effectiveAddress.tag.toUpperCase() : 'Home');
     const deliveryNotes = landmark.trim() || effectiveAddress?.landmark || undefined;
     const subtotal = totalSellingPrice;
@@ -1268,29 +1384,51 @@ export const CartView = ({
           {/* 2. DELIVERY ADDRESS */}
           <div 
             onClick={onOpenLocationModal}
-            className="p-3.5 sm:p-4 flex items-start justify-between gap-3 hover:bg-slate-50/70 transition-colors cursor-pointer group"
+            className={`p-3.5 sm:p-4 flex items-start justify-between gap-3 transition-colors cursor-pointer group ${
+              !isDeliveryServiceable
+                ? 'bg-rose-50/70 hover:bg-rose-50 border-l-4 border-l-rose-500'
+                : 'hover:bg-slate-50/70'
+            }`}
           >
             <div className="flex items-start gap-3 min-w-0">
-              <div className="p-1.5 bg-slate-100 text-slate-700 rounded-lg shrink-0 mt-0.5 group-hover:bg-amber-100 group-hover:text-amber-700 transition-colors">
+              <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 transition-colors ${
+                !isDeliveryServiceable
+                  ? 'bg-rose-100 text-rose-700'
+                  : 'bg-slate-100 text-slate-700 group-hover:bg-amber-100 group-hover:text-amber-700'
+              }`}>
                 <MapPin className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-xs sm:text-sm font-bold text-slate-900">
-                  Delivery at {effectiveAddress?.tagLabel || (effectiveAddress?.tag ? effectiveAddress.tag.charAt(0).toUpperCase() + effectiveAddress.tag.slice(1) : 'Home')}
+                <div className="flex items-center gap-2">
+                  <div className="text-xs sm:text-sm font-bold text-slate-900">
+                    Delivery at {effectiveAddress?.tagLabel || (effectiveAddress?.tag ? effectiveAddress.tag.charAt(0).toUpperCase() + effectiveAddress.tag.slice(1) : 'Home')}
+                  </div>
+                  {!isDeliveryServiceable && (
+                    <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded border border-rose-200">
+                      Not Serviceable
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-500 truncate mt-0.5 max-w-[280px] sm:max-w-md">
                   {confirmedAddressOneLine}
                 </p>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsEditingInstructionsModal(true);
-                  }}
-                  className="text-xs text-slate-700 hover:text-black font-semibold underline decoration-dashed underline-offset-2 mt-1 cursor-pointer block text-left"
-                >
-                  {deliveryPartnerInstructions ? `Note: ${deliveryPartnerInstructions}` : 'Add instructions for delivery partner'}
-                </button>
+                {!isDeliveryServiceable ? (
+                  <p className="text-xs font-bold text-rose-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    Delivery not available at your place (PIN {activePincode}). Tap to change location.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEditingInstructionsModal(true);
+                    }}
+                    className="text-xs text-slate-700 hover:text-black font-semibold underline decoration-dashed underline-offset-2 mt-1 cursor-pointer block text-left"
+                  >
+                    {deliveryPartnerInstructions ? `Note: ${deliveryPartnerInstructions}` : 'Add instructions for delivery partner'}
+                  </button>
+                )}
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-800 shrink-0 mt-1" />
@@ -1555,16 +1693,27 @@ export const CartView = ({
             <div className="text-lg sm:text-xl font-black text-slate-950 leading-tight">
               ₹{finalTotalAmount.toLocaleString('en-IN')}
             </div>
+            {!isDeliveryServiceable && (
+              <span className="text-[11px] font-bold text-rose-600 block leading-tight mt-0.5">
+                Delivery not available here
+              </span>
+            )}
           </div>
 
           {/* Proceed to Bill & Pay Button */}
           <button
             type="button"
-            onClick={handleOpenFullCheckout}
-            className="bg-[#ff3252] hover:bg-[#e6203f] active:scale-[0.98] transition-all text-white font-black py-3 px-6 sm:px-9 rounded-xl shadow-md cursor-pointer text-sm sm:text-base shrink-0 flex items-center gap-1.5"
+            disabled={!isDeliveryServiceable}
+            onClick={!isDeliveryServiceable ? undefined : handleOpenFullCheckout}
+            aria-disabled={!isDeliveryServiceable}
+            className={
+              !isDeliveryServiceable
+                ? "bg-slate-200 text-slate-400 font-bold py-3 px-5 sm:px-7 rounded-xl text-xs sm:text-sm shrink-0 flex items-center gap-1.5 cursor-not-allowed border border-slate-300/80 shadow-none select-none transition-none"
+                : "bg-[#ff3252] hover:bg-[#e6203f] active:scale-[0.98] transition-all text-white font-black py-3 px-6 sm:px-9 rounded-xl shadow-md cursor-pointer text-sm sm:text-base shrink-0 flex items-center gap-1.5"
+            }
           >
-            <span>Proceed to Pay</span>
-            <ChevronRight className="w-4 h-4" />
+            <span>{!isDeliveryServiceable ? 'Delivery Not Available' : 'Proceed to Pay'}</span>
+            {isDeliveryServiceable && <ChevronRight className="w-4 h-4" />}
           </button>
 
         </div>
@@ -1750,26 +1899,45 @@ export const CartView = ({
           {/* Simple Sticky Bottom Bar */}
           <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200/90 px-4 py-3 shadow-[0_-4px_25px_rgba(0,0,0,0.08)]">
             <div className="max-w-md mx-auto">
-              <button
-                type="button"
-                id="pay-submit-order-btn"
-                onClick={() => handlePlaceOrder()}
-                disabled={isSubmitting}
-                className="w-full bg-[#ff3252] hover:bg-[#e6203f] active:scale-[0.99] transition-all text-white font-bold py-3.5 px-6 rounded-xl shadow-sm cursor-pointer text-base flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                {isSubmitting ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Processing...
-                  </span>
-                ) : (
-                  <span>
-                    {paymentMethod === 'cash'
-                      ? `Place Order • ₹${finalTotalAmount.toLocaleString('en-IN')}`
-                      : `Pay ₹${finalTotalAmount.toLocaleString('en-IN')}`}
-                  </span>
-                )}
-              </button>
+              {!isDeliveryServiceable ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span className="font-semibold leading-tight">
+                      Delivery not available at your place ({activePincode}). We currently deliver only across Kolkata &amp; Howrah.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onOpenLocationModal}
+                    className="w-full bg-slate-100 hover:bg-slate-200 active:scale-[0.99] text-slate-800 font-bold py-3 px-4 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition border border-slate-300"
+                  >
+                    <MapPin className="w-4 h-4 text-slate-600" />
+                    Change Delivery Location
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  id="pay-submit-order-btn"
+                  onClick={() => handlePlaceOrder()}
+                  disabled={isSubmitting}
+                  className="w-full bg-[#ff3252] hover:bg-[#e6203f] active:scale-[0.99] transition-all text-white font-bold py-3.5 px-6 rounded-xl shadow-sm cursor-pointer text-base flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {isSubmitting ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Processing...
+                    </span>
+                  ) : (
+                    <span>
+                      {paymentMethod === 'cash'
+                        ? `Place Order • ₹${finalTotalAmount.toLocaleString('en-IN')}`
+                        : `Pay ₹${finalTotalAmount.toLocaleString('en-IN')}`}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 

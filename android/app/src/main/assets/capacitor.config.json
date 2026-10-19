@@ -28,7 +28,8 @@
 		"FirebaseAuthentication": {
 			"skipNativeAuth": false,
 			"providers": [
-				"google.com"
+				"google.com",
+				"phone"
 			]
 		},
 		"PushNotifications": {
@@ -46,9 +47,9 @@
 			"androidScaleType": "CENTER_CROP",
 			"showSpinner": false
 		},
-		"StatusBar": {
+		"SystemBars": {
 			"style": "DARK",
-			"backgroundColor": "#F9C017"
+			"insetsHandling": "css"
 		}
 	}
 }

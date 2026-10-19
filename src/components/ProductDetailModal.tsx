@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Star, Check, Plus, Minus, Heart, RotateCcw, HelpCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, CheckCircle2, Palette, Share2, MapPin, AlertCircle, Maximize2 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, KolkataArea, SavedAddress } from '../types';
 import { isProductFavorite, toggleProductFavorite } from '../services/favorites';
 import {
   isWireProduct,
@@ -9,7 +9,7 @@ import {
   getDefaultProductColor,
   resolveColorPreviewImage
 } from '../data/wireColors';
-import { checkKolkataDeliveryService } from '../data/kolkataAreas';
+import { checkKolkataDeliveryService, getUserLocationPincode } from '../data/kolkataAreas';
 import { trackProductView } from '../utils/analytics';
 import { hapticLight, hapticMedium } from '../utils/haptics';
 import { shareProductDetails } from '../utils/shareProduct';
@@ -28,6 +28,8 @@ interface ProductDetailModalProps {
   onAddToCart: (product: Product) => void;
   onUpdateQuantity: (productId: string, delta: number, color?: string) => void;
   onOpenAuth?: () => void;
+  currentArea?: KolkataArea | null;
+  activeAddress?: SavedAddress | null;
 }
 
 export const ProductDetailModal = ({
@@ -36,7 +38,9 @@ export const ProductDetailModal = ({
   quantityInCart,
   onAddToCart,
   onUpdateQuantity,
-  onOpenAuth
+  onOpenAuth,
+  currentArea,
+  activeAddress
 }: ProductDetailModalProps) => {
   const [isFav, setIsFav] = useState(() => (product ? isProductFavorite(product.id) : false));
   const [copiedLink, setCopiedLink] = useState(false);
@@ -53,8 +57,23 @@ export const ProductDetailModal = ({
   );
   const [hoveredImage, setHoveredImage] = useState<string | null>(null);
   const [hoveredColor, setHoveredColor] = useState<string | null>(null);
-  const [pincode, setPincode] = useState('700091');
-  const [pincodeChecked, setPincodeChecked] = useState(true);
+
+  // Delivery Pincode Check State - resolved from user chosen/current location (no hardcoded Salt Lake default)
+  const initialUserPincode = useMemo(() => {
+    return getUserLocationPincode(currentArea, activeAddress);
+  }, [currentArea, activeAddress]);
+
+  const [pincode, setPincode] = useState(() => initialUserPincode);
+  const [pincodeChecked, setPincodeChecked] = useState(() => Boolean(initialUserPincode && initialUserPincode.length === 6));
+
+  // Dynamically sync if user chooses/updates their location in Header or Location Modal
+  useEffect(() => {
+    const chosenPin = getUserLocationPincode(currentArea, activeAddress);
+    if (chosenPin && chosenPin.length === 6) {
+      setPincode(chosenPin);
+      setPincodeChecked(true);
+    }
+  }, [currentArea, activeAddress]);
 
   const formattedSpecs = useMemo(() => {
     if (!product) return [];
@@ -790,7 +809,7 @@ export const ProductDetailModal = ({
                         <div className="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-lg space-y-0.5 text-xs animate-in fade-in duration-150">
                           <div className="flex items-center gap-1 text-emerald-800 font-bold text-[11px]">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span>Express Delivery Available in {check.areaName} ({pincode})</span>
+                            <span>Delivery Available to {check.areaName ? `${check.areaName} (${pincode})` : pincode}</span>
                           </div>
                           <p className="text-[10px] text-emerald-700 pl-4.5">
                             Dispatched from {check.hub} • Free delivery on orders above ₹499
@@ -804,9 +823,9 @@ export const ProductDetailModal = ({
                         <div className="flex items-start gap-1.5 text-rose-800 font-bold text-[11px]">
                           <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
                           <div>
-                            <span>Delivery Not Available ({pincode || 'Entered Area'})</span>
+                            <span>Delivery not available at your place ({pincode || 'Entered Area'})</span>
                             <p className="text-[10px] font-normal text-rose-700 mt-0.5 leading-relaxed">
-                              Sorry, we currently do not deliver to this location. We are expanding rapidly and will start delivering to your locality soon!
+                              Sorry, delivery is not available here. We currently deliver only across Kolkata &amp; Howrah.
                             </p>
                           </div>
                         </div>

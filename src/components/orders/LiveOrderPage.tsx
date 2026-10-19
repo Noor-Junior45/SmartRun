@@ -809,7 +809,7 @@ export const LiveOrderPage = ({
     return parts.filter(Boolean).join(', ') || order.area || userLocation.name || 'Kasba, Kolkata';
   }, [order, userLocation]);
 
-  // Split user full details into Line 1 (Customer & Street) and Line 2 (Area, Landmark & Pincode) across whole length of box
+  // Split user delivery address into Line 1 (Street/Premises) and Line 2 (Area, Landmark & Pincode) across whole length of box (no name or number)
   const userDeliveryLines = useMemo(() => {
     if (!order) {
       return {
@@ -817,10 +817,6 @@ export const LiveOrderPage = ({
         line2: 'Kolkata, West Bengal – 700042'
       };
     }
-
-    const name = (order.customerName || order.recipientName || (order as any).userName || '').trim();
-    const phone = (order.phone || order.recipientPhone || (order as any).userPhone || '').trim();
-    const contactStr = name && phone ? `${name} (+91 ${phone})` : name || (phone ? `+91 ${phone}` : '');
 
     const rawAddress = (order.address || [order.addressLine1, order.addressLine2].filter(Boolean).join(', ')).trim();
     const landmarkStr = order.landmark ? `Landmark: ${order.landmark}` : '';
@@ -834,7 +830,6 @@ export const LiveOrderPage = ({
         const streetPart = parts.slice(0, mid).join(', ');
         const remainingPart = parts.slice(mid).join(', ');
         
-        const l1 = contactStr ? `${contactStr} • ${streetPart}` : streetPart;
         const l2Parts = [
           remainingPart,
           landmarkStr,
@@ -843,22 +838,21 @@ export const LiveOrderPage = ({
         ].filter(Boolean);
 
         return {
-          line1: l1,
+          line1: streetPart,
           line2: l2Parts.join(', ') || `${areaStr}, ${pinStr}`
         };
       }
 
-      const l1 = contactStr ? `${contactStr} • ${rawAddress}` : rawAddress;
       const l2 = [landmarkStr, areaStr, pinStr].filter(Boolean).join(', ');
       return {
-        line1: l1,
+        line1: rawAddress,
         line2: l2 || `${areaStr}, ${pinStr}`
       };
     }
 
     return {
-      line1: contactStr ? `${contactStr} • ${areaStr}` : areaStr,
-      line2: [landmarkStr, areaStr, pinStr].filter(Boolean).join(', ')
+      line1: areaStr,
+      line2: [landmarkStr, 'Kolkata', pinStr].filter(Boolean).join(', ')
     };
   }, [order, userLocation]);
 
@@ -1160,35 +1154,25 @@ export const LiveOrderPage = ({
               Customer Details
             </span>
 
-            <div className="space-y-3">
-              {/* Customer Name */}
+            <div className="space-y-2.5">
+              {/* Customer Logo & Name */}
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
                   <User className="w-4 h-4" />
                 </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Customer Name
-                  </span>
-                  <span className="font-black text-slate-900 text-sm truncate block">
-                    {(order as any).userName || order.customerName || order.recipientName || 'Customer'}
-                  </span>
-                </div>
+                <span className="font-bold text-slate-900 text-sm truncate">
+                  {(order as any).userName || order.customerName || order.recipientName || 'Customer'}
+                </span>
               </div>
 
-              {/* Customer Phone Number */}
-              <div className="flex items-center gap-3 pt-2.5 border-t border-slate-100">
+              {/* Contact Logo & Mobile Number */}
+              <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
                 <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center shrink-0">
                   <Phone className="w-4 h-4" />
                 </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Contact Number
-                  </span>
-                  <span className="font-mono font-bold text-slate-800 text-xs sm:text-sm">
-                    {(order as any).userPhone || order.phone || order.recipientPhone || 'Not provided'}
-                  </span>
-                </div>
+                <span className="font-mono font-bold text-slate-800 text-xs sm:text-sm">
+                  {(order as any).userPhone || order.phone || order.recipientPhone || 'Not provided'}
+                </span>
               </div>
             </div>
           </div>

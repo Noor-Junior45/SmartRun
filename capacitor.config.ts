@@ -44,9 +44,9 @@ const config: CapacitorConfig = {
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
     },
-    StatusBar: {
+    SystemBars: {
       style: 'DARK',
-      backgroundColor: '#F9C017',
+      insetsHandling: 'css',
     },
   },
 };

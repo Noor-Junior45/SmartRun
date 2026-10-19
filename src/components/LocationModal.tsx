@@ -19,7 +19,7 @@ import {
   RotateCw,
   Navigation
 } from 'lucide-react';
-import { KOLKATA_AREAS, getKolkataAreaByPincode } from '../data/kolkataAreas';
+import { KOLKATA_AREAS, getKolkataAreaByPincode, isKolkataServiceable } from '../data/kolkataAreas';
 import { KolkataArea, SavedAddress, UserProfile } from '../types';
 import {
   getStoredAddresses,
@@ -290,11 +290,11 @@ export const LocationModal = ({
           }
         });
 
-        // Determine correct pincode:
-        // Priority 1: Valid 6-digit pin from Google Maps reverse geocode
-        // Priority 2: Closest Kolkata area geometric pin
+        // Determine correct pincode and serviceability:
+        const distKm = Math.hypot(lat - 22.5726, lng - 88.3639) * 111;
         const validGooglePin = (result.pincode && /^\d{6}$/.test(result.pincode)) ? result.pincode : null;
-        const resolvedPin = validGooglePin || closest.pincode;
+        const isOutsideKolkata = distKm > 35 || (validGooglePin ? !isKolkataServiceable(validGooglePin) : false);
+        const resolvedPin = validGooglePin || (isOutsideKolkata ? '000000' : closest.pincode);
 
         const areaForPin = validGooglePin ? getKolkataAreaByPincode(validGooglePin) : null;
         const baseArea = areaForPin || closest;
@@ -302,7 +302,8 @@ export const LocationModal = ({
         const resolvedArea: KolkataArea = {
           ...baseArea,
           pincode: resolvedPin,
-          name: areaForPin ? areaForPin.name : (result.locality || baseArea.name),
+          serviceable: !isOutsideKolkata && isKolkataServiceable(resolvedPin),
+          name: isOutsideKolkata ? (result.locality || result.city || 'Outside Delivery Area') : (areaForPin ? areaForPin.name : (result.locality || baseArea.name)),
           exactStreet: street
         };
         setMatchedArea(resolvedArea);
@@ -486,14 +487,18 @@ export const LocationModal = ({
       });
 
       // Use valid 6-digit PIN from Google reverse geocode if present, otherwise closest physical area's PIN
+      const distKm = Math.hypot(coords.lat - 22.5726, coords.lng - 88.3639) * 111;
       const validPin = (revRes.pincode && /^\d{6}$/.test(revRes.pincode)) ? revRes.pincode : null;
-      const resolvedPin = validPin || closest.pincode;
+      const isOutsideKolkata = distKm > 35 || (validPin ? !isKolkataServiceable(validPin) : false);
+      const resolvedPin = validPin || (isOutsideKolkata ? '000000' : closest.pincode);
       const areaForPin = validPin ? getKolkataAreaByPincode(validPin) : null;
       const baseArea = areaForPin || closest;
 
       const updatedArea: KolkataArea = {
         ...baseArea,
         pincode: resolvedPin,
+        serviceable: !isOutsideKolkata && isKolkataServiceable(resolvedPin),
+        name: isOutsideKolkata ? (revRes.locality || 'Outside Delivery Area') : baseArea.name,
         exactStreet: street
       };
       setMatchedArea(updatedArea);
@@ -686,8 +691,10 @@ export const LocationModal = ({
       }
     });
 
+    const distKm = Math.hypot(finalLat - 22.5726, finalLng - 88.3639) * 111;
     const validPin = pin && /^\d{6}$/.test(pin) ? pin : null;
-    const resolvedPin = validPin || closest.pincode;
+    const isOutsideKolkata = distKm > 35 || (validPin ? !isKolkataServiceable(validPin) : false);
+    const resolvedPin = validPin || (isOutsideKolkata ? '000000' : closest.pincode);
     const areaForPin = validPin ? getKolkataAreaByPincode(validPin) : null;
     const baseArea = areaForPin || closest;
 
@@ -695,6 +702,8 @@ export const LocationModal = ({
     const updatedArea: KolkataArea = {
       ...baseArea,
       pincode: resolvedPin,
+      serviceable: !isOutsideKolkata && isKolkataServiceable(resolvedPin),
+      name: isOutsideKolkata ? (result.area || result.name || 'Outside Delivery Area') : (areaForPin ? areaForPin.name : street),
       exactStreet: street
     };
 

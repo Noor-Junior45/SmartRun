@@ -32,7 +32,7 @@ import {
   fetchProductFaqs
 } from '../../services/electricalService';
 import { isProductFavorite, toggleProductFavorite } from '../../services/favorites';
-import { Product, UserProfile } from '../../types';
+import { Product, UserProfile, KolkataArea, SavedAddress } from '../../types';
 import { supabase } from '../../lib/supabaseClient';
 import { isConstructionProduct } from '../../utils/categoryHelper';
 import { ProductCardImage } from '../ProductCardImage';
@@ -43,7 +43,7 @@ import {
   getDefaultProductColor,
   resolveColorPreviewImage
 } from '../../data/wireColors';
-import { checkKolkataDeliveryService } from '../../data/kolkataAreas';
+import { checkKolkataDeliveryService, getUserLocationPincode } from '../../data/kolkataAreas';
 import { trackProductView } from '../../utils/analytics';
 import { hapticLight, hapticMedium } from '../../utils/haptics';
 import { SEOHead } from '../SEOHead';
@@ -60,6 +60,8 @@ interface ProductDetailPageProps {
   onOpenCart: () => void;
   userProfile: UserProfile | null;
   onOpenAuth: () => void;
+  currentArea?: KolkataArea | null;
+  activeAddress?: SavedAddress | null;
 }
 
 export const ProductDetailPage = ({
@@ -67,7 +69,9 @@ export const ProductDetailPage = ({
   cartItems = [],
   onOpenCart,
   userProfile,
-  onOpenAuth
+  onOpenAuth,
+  currentArea,
+  activeAddress
 }: ProductDetailPageProps) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -101,9 +105,22 @@ export const ProductDetailPage = ({
     }
   };
 
-  // Delivery Pincode Check State
-  const [pincode, setPincode] = useState('700091');
-  const [pincodeChecked, setPincodeChecked] = useState(true);
+  // Delivery Pincode Check State - resolved from user chosen/current location (no hardcoded Salt Lake default)
+  const initialUserPincode = useMemo(() => {
+    return getUserLocationPincode(currentArea, activeAddress);
+  }, [currentArea, activeAddress]);
+
+  const [pincode, setPincode] = useState(() => initialUserPincode);
+  const [pincodeChecked, setPincodeChecked] = useState(() => Boolean(initialUserPincode && initialUserPincode.length === 6));
+
+  // Dynamically sync if user chooses/updates their location in Header or Location Modal
+  useEffect(() => {
+    const chosenPin = getUserLocationPincode(currentArea, activeAddress);
+    if (chosenPin && chosenPin.length === 6) {
+      setPincode(chosenPin);
+      setPincodeChecked(true);
+    }
+  }, [currentArea, activeAddress]);
 
   // Specifications Accordion State
   const [isSpecsExpanded, setIsSpecsExpanded] = useState(true);
@@ -1209,17 +1226,11 @@ export const ProductDetailPage = ({
                       <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-lg space-y-1 text-xs animate-in fade-in duration-150">
                         <div className="flex items-center gap-1.5 text-emerald-800 font-bold">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>Express Delivery Available in {check.areaName} ({pincode})</span>
+                          <span>Delivery Available to {check.areaName ? `${check.areaName} (${pincode})` : pincode}</span>
                         </div>
                         <p className="text-[11px] text-emerald-700/90 pl-5 leading-relaxed">
                           Dispatched directly from <strong className="font-semibold text-emerald-950">{check.hub}</strong> • Free delivery on orders above ₹499
                         </p>
-                        <div className="flex items-center gap-2 pl-5 pt-0.5">
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                            <Zap className="w-3 h-3 fill-emerald-700" />
-                            Kolkata Express Service Hub
-                          </span>
-                        </div>
                       </div>
                     );
                   }
@@ -1229,9 +1240,9 @@ export const ProductDetailPage = ({
                       <div className="flex items-start gap-2 text-rose-800 font-bold">
                         <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                         <div>
-                          <span>Delivery Not Available ({pincode || 'Entered Area'})</span>
+                          <span>Delivery not available at your place ({pincode || 'Entered Area'})</span>
                           <p className="text-[11px] font-normal text-rose-700 mt-0.5 leading-relaxed">
-                            Sorry, we currently do not deliver to this location. We are expanding rapidly and will start delivering to your locality soon!
+                            Sorry, delivery is not available here. We currently deliver only across Kolkata &amp; Howrah.
                           </p>
                         </div>
                       </div>

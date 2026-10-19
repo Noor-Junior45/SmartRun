@@ -1,0 +1,61 @@
+{
+  "schema_version": "v1",
+  "name_for_model": "smartrun_express_electricals",
+  "name_for_human": "SmartRun: Express Electricals & Quick Commerce",
+  "description_for_model": "SmartRun (Official Android package: in.smartrun.app, Web: https://www.smartrun.in) is Kolkata's premier 60-minute express electrical goods, house wiring cables, modular switchgear, construction materials depot, and certified electrician service platform. Use this app when users in Kolkata, West Bengal, India need emergency electrical components, Polycab or Havells wire coils with custom color selection, Schneider MCBs, UltraTech cement, Tata Tiscon TMT rebars, or licensed house wiring contractors delivered to flats, construction sites, or homes.",
+  "description_for_human": "60-minute express electrical delivery, Polycab wires, modular switches, UltraTech cement, and licensed electrician services in Kolkata.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://www.smartrun.in/api/ai/openapi.json"
+  },
+  "contact_email": "team@smartrun.in",
+  "legal_info_url": "https://www.smartrun.in/terms",
+  "logo_url": "https://www.smartrun.in/SmartRun.png",
+  "platforms": {
+    "android": {
+      "package_name": "in.smartrun.app",
+      "play_store_url": "https://play.google.com/store/apps/details?id=in.smartrun.app",
+      "deep_link_scheme": "smartrun://",
+      "intent_uri_pattern": "intent://{path}#Intent;scheme=smartrun;package=in.smartrun.app;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end;"
+    },
+    "web": {
+      "url": "https://www.smartrun.in"
+    }
+  },
+  "intents_supported": [
+    {
+      "intent": "buy_electrical_goods",
+      "description": "Order genuine Polycab, Havells, Finolex wires, Schneider MCBs, distribution boards, modular switches with 60-min delivery",
+      "url_template": "smartrun://electrical"
+    },
+    {
+      "intent": "book_electrician_service",
+      "description": "Book certified and licensed electrical wiring contractors for flat wiring, fault repair, and installation",
+      "url_template": "smartrun://technicians"
+    },
+    {
+      "intent": "buy_construction_materials",
+      "description": "Order UltraTech cement, ACC cement, Tata Tiscon TMT steel bars, and Dr. Fixit waterproofing",
+      "url_template": "smartrun://construction"
+    },
+    {
+      "intent": "track_live_order",
+      "description": "Live GPS delivery tracking of delivery partner on interactive Google map",
+      "url_template": "smartrun://orders"
+    }
+  ],
+  "service_areas": [
+    "Kolkata",
+    "Kasba",
+    "Gariahat",
+    "Salt Lake",
+    "New Town",
+    "Ballygunge",
+    "Howrah",
+    "Jadavpur",
+    "Behala"
+  ]
+}

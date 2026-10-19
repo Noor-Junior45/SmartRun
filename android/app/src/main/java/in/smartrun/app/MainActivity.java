@@ -3,8 +3,13 @@ package in.smartrun.app;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.View;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
+import androidx.activity.EdgeToEdge;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 
@@ -17,7 +22,20 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Enable official Android 15 edge-to-edge support with backward compatibility (SDK 35+)
+        EdgeToEdge.enable(this);
         super.onCreate(savedInstanceState);
+
+        // Handle system bars and display cutout insets cleanly
+        View contentView = findViewById(android.R.id.content);
+        if (contentView != null) {
+            ViewCompat.setOnApplyWindowInsetsListener(contentView, (view, windowInsets) -> {
+                Insets insets = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+                );
+                return windowInsets;
+            });
+        }
 
         if (getBridge() != null && getBridge().getWebView() != null) {
             getBridge().getWebView().setWebViewClient(new BridgeWebViewClient(getBridge()) {

@@ -289,7 +289,10 @@ export const Header = ({
   const accountDisplayLabel = effectiveName || effectiveEmail || effectivePhone || 'Account';
 
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 transition-all shadow-2xs">
+    <header
+      className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 transition-all shadow-2xs"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+    >
       {/* Main Brand & Action Bar (collapses smoothly on product detail page scroll) */}
       <div
         className={`overflow-hidden transition-all duration-300 ease-in-out ${

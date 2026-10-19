@@ -3,6 +3,83 @@
   <head>
     <script>
       // Gracefully silence benign [vite] websocket connection errors in AI Studio iframe/sandboxed environments
+      (function() {
+        const origWarn = console.warn;
+        const origError = console.error;
+        const origDebug = console.debug;
+        const origInfo = console.info;
+        const isBenignViteMsg = function(msg) {
+          if (!msg) return false;
+          const str = String(msg);
+          return (
+            str.includes('[vite] connecting...') ||
+            str.includes('[vite] failed to connect to websocket') ||
+            str.includes('WebSocket closed') ||
+            str.includes('WebSocket is closed') ||
+            str.includes('failed to connect to websocket') ||
+            str.includes('vite:ws') ||
+            str.includes('BillingNotEnabledMapError') ||
+            str.includes('billing-not-enabled-map-error')
+          );
+        };
+        console.warn = function(...args) {
+          if (args.some(isBenignViteMsg)) return;
+          origWarn.apply(console, args);
+        };
+        console.error = function(...args) {
+          if (args.some(isBenignViteMsg)) {
+            window.dispatchEvent(new CustomEvent('google_maps_billing_failure'));
+            return;
+          }
+          origError.apply(console, args);
+        };
+        console.debug = function(...args) {
+          if (args.some(isBenignViteMsg)) return;
+          origDebug.apply(console, args);
+        };
+        console.info = function(...args) {
+          if (args.some(isBenignViteMsg)) return;
+          origInfo.apply(console, args);
+        };
+      })();
+
+      // Suppress Google Maps alert modal and notify application components
+      window.gm_authFailure = function() {
+        console.warn('[GoogleMaps] Authentication or Billing notice triggered. Switching to resilient delivery map.');
+        window.dispatchEvent(new CustomEvent('google_maps_billing_failure'));
+      };
+
+      // Neutralize Vite's internal HMR WebSocket in preview iframe where HMR is disabled
+      if (typeof window !== 'undefined' && window.WebSocket) {
+        const RealWebSocket = window.WebSocket;
+        function MockWebSocket(url, protocols) {
+          if (typeof url === 'string' && (url.includes('ais-dev') || url.includes('run.app') || url.includes('/@vite/client') || url.includes('localhost:3000'))) {
+            this.readyState = 1; // OPEN (prevents Vite client from rejecting connection promise)
+            this.OPEN = 1;
+            this.CLOSED = 3;
+            this.url = url;
+            this.close = function() {};
+            this.send = function() {};
+            this.addEventListener = function(event, callback) {
+              if (event === 'open' && typeof callback === 'function') {
+                setTimeout(callback, 0);
+              }
+            };
+            this.removeEventListener = function() {};
+            this.dispatchEvent = function() { return false; };
+            this.onopen = null;
+            this.onclose = null;
+            this.onerror = null;
+            this.onmessage = null;
+            return;
+          }
+          return new RealWebSocket(url, protocols);
+        }
+        MockWebSocket.OPEN = 1;
+        MockWebSocket.CLOSED = 3;
+        window.WebSocket = MockWebSocket;
+      }
+
       window.addEventListener('unhandledrejection', function(event) {
         if (
           event &&
@@ -11,7 +88,8 @@
             String(event.reason).includes('WebSocket closed') ||
             String(event.reason?.message || '').includes('WebSocket closed') ||
             String(event.reason).includes('failed to connect to websocket') ||
-            String(event.reason?.message || '').includes('failed to connect to websocket')
+            String(event.reason?.message || '').includes('failed to connect to websocket') ||
+            String(event.reason?.stack || '').includes('@vite/client')
           )
         ) {
           event.preventDefault();
@@ -22,12 +100,27 @@
           event &&
           (
             String(event.message || '').includes('WebSocket closed') ||
-            String(event.message || '').includes('failed to connect to websocket')
+            String(event.message || '').includes('failed to connect to websocket') ||
+            String(event.filename || '').includes('@vite/client') ||
+            String(event.message || '').includes('BillingNotEnabledMapError') ||
+            String(event.message || '').includes('billing-not-enabled-map-error')
           )
         ) {
           event.preventDefault();
         }
       });
+
+      // Immediate cache & service worker cleanup for dev/preview so stale service workers never hijack requests
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        const h = window.location.hostname || '';
+        if (h.includes('ais-dev') || h.includes('ais-pre') || h.includes('run.app') || h.includes('localhost') || h.includes('127.0.0.1')) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            for (var i = 0; i < regs.length; i++) {
+              regs[i].unregister().catch(function() {});
+            }
+          }).catch(function() {});
+        }
+      }
     </script>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-E3TVJRTKRP"></script>
@@ -50,7 +143,7 @@
     </script>
 
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     
     <!-- Primary SEO Meta Tags -->
     <title>SmartRun | Electrical Goods, Construction Supplies &amp; Wiring Services Kolkata</title>
@@ -84,6 +177,14 @@
     <meta property="og:image:alt" content="SmartRun Logo - Electrical, Construction &amp; Wiring Platform" />
     <meta property="og:locale" content="en_IN" />
     <link rel="canonical" href="https://www.smartrun.in/" />
+
+    <!-- Google Play Store App Links & Smart App Banner (Browser-to-App handoff) -->
+    <meta name="google-play-app" content="app-id=in.smartrun.app" />
+    <meta property="al:android:url" content="smartrun://home" />
+    <meta property="al:android:app_name" content="SmartRun" />
+    <meta property="al:android:package" content="in.smartrun.app" />
+    <meta property="al:web:url" content="https://www.smartrun.in/" />
+    <meta property="al:web:should_fallback" content="true" />
 
     <!-- Twitter Card SEO -->
     <meta name="twitter:card" content="summary_large_image" />
@@ -217,13 +318,45 @@
               { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Earthing & Surge Protection Installation" } }
             ]
           }
+        },
+        {
+          "@type": ["SoftwareApplication", "MobileApplication"],
+          "@id": "https://www.smartrun.in/#android-app",
+          "name": "SmartRun: Express Electricals & Quick Commerce",
+          "alternateName": ["SmartRun", "SmartRun App", "SmartRun Kolkata"],
+          "operatingSystem": "Android 8.0+, iOS, Web",
+          "applicationCategory": "ShoppingApplication",
+          "applicationSubCategory": "Quick Commerce, Electrical Supplies & Construction Depot",
+          "downloadUrl": "https://play.google.com/store/apps/details?id=in.smartrun.app",
+          "installUrl": "https://play.google.com/store/apps/details?id=in.smartrun.app",
+          "sameAs": ["https://play.google.com/store/apps/details?id=in.smartrun.app"],
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "INR"
+          },
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.9",
+            "reviewCount": "1280",
+            "bestRating": "5"
+          },
+          "featureList": [
+            "60-minute express doorstep delivery of electrical components across Kolkata",
+            "Polycab, Havells, Finolex wires with cut-to-length custom order and color swatches",
+            "Schneider Electric MCBs, distribution boards, and Anchor Roma modular switches",
+            "UltraTech Super Cement and Tata Tiscon TMT 550D steel rebars direct site delivery",
+            "Licensed and background-verified electrical contractors for flat wiring & emergency repairs",
+            "Real-time delivery partner live GPS tracking on interactive Google map",
+            "Seamless Fast2SMS OTP mobile authentication and instant Razorpay UPI checkout"
+          ],
+          "description": "SmartRun (Official Android package: in.smartrun.app) is Kolkata's premier 60-minute express electrical goods, house wiring cables, modular switchgear, construction materials depot, and certified electrician service app. Optimized for Google Play AI search discovery for quick commerce electrical supplies, genuine Polycab copper cables, Schneider switchgear, and licensed house wiring contractors in Kolkata, West Bengal."
         }
       ]
     }
     </script>
 
-    <!-- Leaflet CSS for Map Rendering -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <!-- Leaflet CSS is bundled locally from npm in src/main.tsx -->
 
     <!-- PWA & Mobile Web App Capabilities -->
     <link rel="manifest" href="/manifest.json" />
@@ -245,13 +378,13 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png" />
 
-    <!-- Google Fonts -->
+    <!-- Google Fonts (Optimized for First Contentful Paint & Performance) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Libre+Bodoni:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
-
-    <!-- Razorpay Checkout Gateway SDK -->
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Libre+Bodoni:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" media="print" onload="this.media='all'">
+    <noscript>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Libre+Bodoni:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap">
+    </noscript>
 
     <!-- Global Scrollbar Removal: Hide scrollbar universally everywhere across the app -->
     <style>
@@ -276,12 +409,47 @@
         display: none !important;
         background: transparent !important;
       }
+      @keyframes smartrun-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(0.96); }
+      }
+      @keyframes smartrun-dot {
+        0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
+        40% { transform: scale(1); opacity: 1; }
+      }
     </style>
-    <script type="module" crossorigin src="/assets/index-BSL1pk3l.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-rEMT0M5b.css">
+    <script type="module" crossorigin src="/assets/index-CHDBZ4JE.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CoDFgY_R.css">
   </head>
   <body class="bg-white text-slate-900 font-sans antialiased selection:bg-yellow-400 selection:text-black">
-    <div id="root"></div>
+    <div id="root">
+      <!-- Instant Branded Preloader: Pure white background, zero box behind logo -->
+      <div id="initial-smartrun-loader" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #ffffff; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; padding: 24px;">
+        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 16px; background: transparent !important; background-color: transparent !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; animation: smartrun-pulse 2s ease-in-out infinite;">
+          <img src="/SmartRun.png" alt="SmartRun" style="width: 64px; height: 64px; object-fit: contain; background: transparent !important; background-color: transparent !important; border: none !important; box-shadow: none !important; mix-blend-mode: multiply;" />
+        </div>
+        <div style="font-size: 22px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px;">SmartRun</div>
+        <div style="font-size: 12px; color: #64748b; font-weight: 600; margin-top: 4px; letter-spacing: 0.2px;">Kolkata's Express Electrical &amp; Construction Hub</div>
+        <div style="margin-top: 24px; display: flex; gap: 8px; align-items: center;">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background-color: #f59e0b; animation: smartrun-dot 1.4s infinite ease-in-out both; animation-delay: -0.32s;"></div>
+          <div style="width: 8px; height: 8px; border-radius: 50%; background-color: #f59e0b; animation: smartrun-dot 1.4s infinite ease-in-out both; animation-delay: -0.16s;"></div>
+          <div style="width: 8px; height: 8px; border-radius: 50%; background-color: #f59e0b; animation: smartrun-dot 1.4s infinite ease-in-out both;"></div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Watchdog: Ensure preloader element is gracefully dismissed once React mounts or after 1.5s max
+      setTimeout(function() {
+        var loader = document.getElementById('initial-smartrun-loader');
+        if (loader && loader.parentNode) {
+          loader.style.transition = 'opacity 0.25s ease';
+          loader.style.opacity = '0';
+          setTimeout(function() {
+            try { if (loader && loader.parentNode) loader.parentNode.removeChild(loader); } catch(e) {}
+          }, 250);
+        }
+      }, 1500);
+    </script>
   </body>
 </html>
 

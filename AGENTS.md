@@ -368,9 +368,53 @@
 - [x] **Live Order Details Delivery Card Layout Refinement**:
   - Redesigned the Delivery Destination card with a unified single-line top header: Bike icon, "Delivery Destination" heading, and the "60 mins" tag badge (`displayDeliveryTime`) positioned next to each other on one line.
   - Removed "From Warehouse ~29 min" from the right side, giving the user details 100% full width across the entire box.
-  - Positioned user full details across the full length of the box in two clean, distinct lines:
-    - Line 1: Customer contact (`Name (+91 Phone)`) and primary premises / street address.
+  - Positioned user delivery address across the full length of the box in two clean, distinct lines (no name or phone number, which are shown separately in Customer Details below):
+    - Line 1: Primary premises / street address.
     - Line 2: Landmark, Area, Kolkata, and Pincode.
-
-
+- [x] **Live Order Tracking Map Zoom Control Removal & Backend Approach Framing**:
+  - Completely removed manual zoom in / zoom out controls and gestures (`zoomControl: false`, `scrollwheel: false`, `disableDoubleClickZoom: true`, `gestureHandling: 'none'`, and scoped CSS rules hiding `.gm-bundled-control` / zoom widgets) from the user view on `#live-order-tracking-map`.
+  - Added programmatic backend camera framing: as the rider approaches and reaches the customer's house/home, the map automatically keeps the zoom framed out comfortably (`maxZoom: 16` with generous neighborhood bounds margin of ~400m around destination) so the user sees the rider, the approach path, the house, and the surrounding streets without hyper-zooming.
+- [x] **Live Order Customer Details Card Simplification**:
+  - Removed the redundant "Customer Name" and "Contact Number" sub-headings from the Customer Details card on `LiveOrderPage.tsx`.
+  - Streamlined each row to strictly display the logo and value: User icon with Customer Name, and Phone icon with Contact Mobile Number.
+- [x] **Out-of-Kolkata Pincode Serviceability & Cart Order Restriction**:
+  - In `CartView.tsx`, added active pincode resolution and Kolkata metropolitan area serviceability check via `isKolkataServiceable(activePincode)`.
+  - When an out-of-Kolkata pincode or non-serviceable delivery area is selected:
+    - Delivery Address card indicates `Not Serviceable` with notice: `Delivery not available at your place (PIN <pincode>). Tap to change location.`
+    - Main Cart sticky bottom bar disables the `Proceed to Pay` button, styles it in disabled grey (`bg-slate-200 text-slate-400 cursor-not-allowed border-slate-300`), displays `Delivery Not Available`, shows `Delivery not available here` beneath Total Payable, and strictly blocks opening the payment checkout page.
+    - Inside the order payment page, the Place Order button is replaced with an alert and `Change Delivery Location` button.
+    - `handleOpenFullCheckout`, `handleBuyThisNow`, and `handlePlaceOrder` enforce strict guards preventing checkout navigation or order placement if `!isDeliveryServiceable`.
+    - Added serviceability checking in `LocationModal.tsx` for GPS detection, map dragging, and Google Places search results outside Kolkata (> 35 km or non-Kolkata pincode).
+  - In `ProductDetailPage.tsx` and `ProductDetailModal.tsx` Delivery sections: when an out-of-Kolkata pincode is entered/checked, displays `Delivery not available at your place (<pincode>)` with `Sorry, delivery is not available here. We currently deliver only across Kolkata & Howrah.` without extraneous elements.
+- [x] **Product Card Delivery Box User Location Pincode Sync & Default Salt Lake Removal**:
+  - Removed initial/default pin code (`700091`) from `ProductDetailPage.tsx` and `ProductDetailModal.tsx`.
+  - Replaced with the user's chosen location or current location pin code via `getUserLocationPincode(currentArea, activeAddress)`.
+  - If the user has not chosen a location yet, the pincode input starts clean and empty (`''`) without displaying any hardcoded default.
+  - Removed the default "Express Delivery Available in Salt Lake Sector V (IT Hub) (700091)" banner.
+  - When the user chooses or checks a location:
+    - If serviceable: cleanly displays `Delivery Available to <area> (<pincode>)` with dispatch hub info.
+    - If outside Kolkata: displays `Delivery not available at your place (<pincode>)`.
+  - Automatically synchronizes when the user changes or detects their location in the Header or Location Modal.
+- [x] **Floating Live Order Tracking Circle Button Delivery Scooter PNG Design**:
+  - Replaced the previous GIF and old map design inside `FloatingLiveOrderButton.tsx` (`button#live-order-map-circle-btn`) with the custom delivery rider on yellow scooter design (`/delivery-scooter.png`) based on user uploaded illustration.
+  - Preserved the circular border styling (`rounded-full border-2 border-white shadow-xl`), hover/tap animations, and completely removed the green indicator dot to match the clean design of the user's PNG.
+- [x] **Google Maps Routes API Migration (`Route.computeRoutes`) & Deprecated `DirectionsService` Removal**:
+  - Replaced legacy `google.maps.DirectionsService` and `directionsService.route(...)` in `src/components/orders/LiveOrderRealMap.tsx` with the recommended modern Google Maps Routes API `Route.computeRoutes(...)` via `@vis.gl/react-google-maps` `useMapsLibrary('routes')` and dynamic library fallback (`google.maps.importLibrary('routes')`).
+  - Completely eliminated the terminal/console deprecation warning (`google.maps.DirectionsService is deprecated as of February 25th, 2026. Please use google.maps.routes.Route.computeRoutes instead.`).
+- [x] **Android 15 Edge-to-Edge Compliance & Deprecated API Cleanup (SDK 35+)**:
+  - Resolved Google Play Store notification: *"Edge-to-edge may not display for all users... Your app uses deprecated APIs or parameters for edge-to-edge"*.
+  - **`EdgeToEdge.enable(this)`**: Integrated official `androidx.activity.EdgeToEdge.enable(this)` inside `MainActivity.java` `onCreate()` before `super.onCreate(savedInstanceState)` for native edge-to-edge enforcement and backward compatibility across Android 10-15.
+  - **Window Insets Management**: Added `ViewCompat.setOnApplyWindowInsetsListener` on the root view to dispatch `WindowInsetsCompat.Type.systemBars()` and `displayCutout()` to the view hierarchy and Capacitor WebView.
+  - **Soft Keyboard Inset Handling**: Added `android:windowSoftInputMode="adjustResize"` to `.MainActivity` in `AndroidManifest.xml` so IME insets resize properly on Android 15+.
+  - **Deprecated API Cleanup**: Removed deprecated `android:statusBarColor` and `android:navigationBarColor` attributes from `AppTheme.NoActionBar` in `android/app/src/main/res/values/styles.xml` (which triggered the Play Store deprecation flag for Android 15).
+  - Switched `capacitor.config.ts` to modern `SystemBars` plugin configuration (`style: 'DARK'`, `insetsHandling: 'css'`).
+  - **Viewport Safe-Area Insets**: Verified `viewport-fit=cover` in `<meta name="viewport">` in `index.html` and safe-area padding (`env(safe-area-inset-top)`) for native display cutouts.
+- [x] **Centered Sign-In Screen & Snug Terms Tick Button**:
+  - **Vertical Viewport Centering**: Centered the sign-in container vertically and horizontally in the middle of the viewport (`min-h-screen flex flex-col justify-center items-center py-8 sm:py-12 my-auto`).
+  - **Top-Left Back Navigation**: Positioned the back navigation button (`ArrowLeft`) at the top-left of the screen (`absolute top-4 left-4 sm:top-6 sm:left-6 z-10`), keeping the sign-in card centered without shifting.
+  - **Snug Terms Tick Button**: Formatted the entire agreement into a single clean row (`whitespace-nowrap inline-flex items-center justify-center`) across phone screens with crisp, clearly visible text (`text-slate-800 font-medium`, bold links `text-slate-950 underline`). The tick button (`button#terms-agreed-tick`) is styled circular (`rounded-full border-[1.5px] border-slate-700`, `w-3.5 h-3.5 sm:w-4 sm:h-4`) sitting directly beside "You agree to our".
+- [x] **Server-Side Authentication Architecture**:
+  - **Dedicated Backend Endpoints**: Added `POST /api/auth/login` and `POST /api/auth/register` to `server.ts` to handle user verification, password checks, Supabase Admin service-role execution, and Firestore sync on the server side.
+  - **Server-Authoritative Phone OTP**: Made `/api/auth/send-phone-otp` and `/api/auth/verify-phone-otp` the primary flow on Web, eliminating client-side reCAPTCHA and domain mismatch errors.
+  - **Client Session Synchronization**: On successful server authentication, client Supabase Auth is synchronized via `supabase.auth.setSession(data.session)` for seamless local reactivity.
 

@@ -112,7 +112,23 @@ export default function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const isNativeApp = isNativePhoneApp();
   const [products, setProducts] = useState<Product[]>([]);
-  const [currentArea, setCurrentArea] = useState<KolkataArea>(KOLKATA_AREAS[3]); // Default: Salt Lake Sector V
+  const [currentArea, setCurrentArea] = useState<KolkataArea>(() => {
+    try {
+      const storedArea = safeGetItem('smartrun_selected_area');
+      if (storedArea) {
+        const parsed = JSON.parse(storedArea);
+        if (parsed && parsed.pincode) return parsed;
+      }
+      const storedAddr = safeGetItem(getActiveAddressStorageKey()) || safeGetItem(ACTIVE_SAVED_ADDRESS_KEY);
+      if (storedAddr) {
+        const parsed = JSON.parse(storedAddr);
+        if (parsed?.area && parsed.area.pincode) return parsed.area;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return KOLKATA_AREAS[0];
+  });
   const [activeSavedAddress, setActiveSavedAddress] = useState<SavedAddress | null>(() => {
     try {
       const stored = safeGetItem(getActiveAddressStorageKey());
@@ -1659,6 +1675,8 @@ export default function App() {
                   onOpenCart={() => navigate('/cart')}
                   userProfile={userProfile}
                   onOpenAuth={() => navigate('/login')}
+                  currentArea={currentArea}
+                  activeAddress={activeSavedAddress}
                 />
               )
             }
@@ -1675,6 +1693,8 @@ export default function App() {
                   onOpenCart={() => navigate('/cart')}
                   userProfile={userProfile}
                   onOpenAuth={() => navigate('/login')}
+                  currentArea={currentArea}
+                  activeAddress={activeSavedAddress}
                 />
               )
             }
@@ -1691,6 +1711,8 @@ export default function App() {
                   onOpenCart={() => navigate('/cart')}
                   userProfile={userProfile}
                   onOpenAuth={() => navigate('/login')}
+                  currentArea={currentArea}
+                  activeAddress={activeSavedAddress}
                 />
               )
             }
@@ -2059,6 +2081,12 @@ export default function App() {
         activeAddress={activeSavedAddress}
         onSelectArea={(area, addr) => {
           setCurrentArea(area);
+          try {
+            safeSetItem('smartrun_selected_area', JSON.stringify(area));
+            if (area?.pincode) {
+              safeSetItem('smartrun_user_pincode', area.pincode);
+            }
+          } catch (e) {}
           if (addr) {
             setActiveSavedAddress(addr);
           } else {
@@ -2085,6 +2113,12 @@ export default function App() {
         userPhone={userPhone}
         onSelectArea={(area, addr) => {
           setCurrentArea(area);
+          try {
+            safeSetItem('smartrun_selected_area', JSON.stringify(area));
+            if (area?.pincode) {
+              safeSetItem('smartrun_user_pincode', area.pincode);
+            }
+          } catch (e) {}
           if (addr) {
             setActiveSavedAddress(addr);
           } else {
@@ -2107,6 +2141,8 @@ export default function App() {
         onAddToCart={handleAddToCart}
         onUpdateQuantity={handleUpdateCartQuantity}
         onOpenAuth={() => navigate('/auth')}
+        currentArea={currentArea}
+        activeAddress={activeSavedAddress}
       />
 
       <MapsGroundingAssistant

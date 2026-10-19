@@ -66,7 +66,7 @@ export function checkKolkataDeliveryService(pincode: string): {
       areaName,
       deliveryMins,
       hub,
-      message: `Express Delivery Available in ${areaName}`
+      message: `Delivery Available in ${areaName}`
     };
   }
 
@@ -75,6 +75,76 @@ export function checkKolkataDeliveryService(pincode: string): {
     areaName: '',
     deliveryMins: 0,
     hub: '',
-    message: 'Currently, Giriraj Power delivers exclusively across Kolkata & Howrah (PIN 700001–700160 & 711101–711106). Delivery is not available for this area.'
+    message: 'Delivery not available here. We currently deliver only across Kolkata & Howrah.'
   };
+}
+
+/**
+ * Resolves the user's active/chosen location pincode.
+ * Returns empty string if no user location has been chosen yet (never returns a hardcoded default).
+ */
+export function getUserLocationPincode(
+  currentArea?: KolkataArea | null,
+  activeAddress?: any | null
+): string {
+  // 1. Check active address area pincode or top-level pincode
+  if (activeAddress?.area?.pincode && /^\d{6}$/.test(activeAddress.area.pincode.trim())) {
+    return activeAddress.area.pincode.trim();
+  }
+  if (activeAddress?.pincode && /^\d{6}$/.test(String(activeAddress.pincode).trim())) {
+    return String(activeAddress.pincode).trim();
+  }
+
+  // 2. Check localStorage for active saved address
+  try {
+    if (typeof window !== 'undefined') {
+      const raw = window.localStorage.getItem('giriraj_active_saved_address') || window.localStorage.getItem('smartrun_user_pincode');
+      if (raw) {
+        if (/^\d{6}$/.test(raw.trim())) {
+          return raw.trim();
+        }
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed?.area?.pincode && /^\d{6}$/.test(parsed.area.pincode.trim())) {
+            return parsed.area.pincode.trim();
+          }
+          if (parsed?.pincode && /^\d{6}$/.test(String(parsed.pincode).trim())) {
+            return String(parsed.pincode).trim();
+          }
+        } catch {}
+      }
+    }
+  } catch (e) {}
+
+  // 3. Check explicitly chosen area in localStorage
+  try {
+    if (typeof window !== 'undefined') {
+      const selectedRaw = window.localStorage.getItem('smartrun_selected_area');
+      if (selectedRaw) {
+        const parsed = JSON.parse(selectedRaw);
+        if (parsed?.pincode && /^\d{6}$/.test(parsed.pincode.trim())) {
+          return parsed.pincode.trim();
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 4. Check currentArea if provided and user has chosen it
+  if (currentArea?.pincode && /^\d{6}$/.test(currentArea.pincode.trim())) {
+    try {
+      if (typeof window !== 'undefined') {
+        const userHasChosen = Boolean(
+          window.localStorage.getItem('smartrun_selected_area') ||
+          window.localStorage.getItem('smartrun_user_pincode') ||
+          window.localStorage.getItem('giriraj_active_saved_address')
+        );
+        if (userHasChosen) {
+          return currentArea.pincode.trim();
+        }
+      }
+    } catch {}
+  }
+
+  // If no user location is chosen yet, return empty string (never return hardcoded 700091)
+  return '';
 }

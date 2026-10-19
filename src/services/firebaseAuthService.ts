@@ -379,7 +379,36 @@ export async function sendFirebasePhoneOtp(
     }
   }
 
-  // 2. Web Firebase Phone Auth (Standard browser)
+  // 2. Server-Authoritative Phone Auth (Direct Server-Side Dispatch)
+  try {
+    console.log(`[Phone Auth] Requesting server-side OTP dispatch for ${formattedPhone}...`);
+    const resp = await fetch(apiUrl('/api/auth/send-phone-otp'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: digits })
+    });
+    const serverData = await resp.json().catch(() => null);
+    if (serverData && serverData.success) {
+      activeBackendOtpToken = serverData.token || null;
+      activeBackendOtpPhone = digits;
+      return {
+        success: true,
+        formattedPhone,
+        provider: 'firebase',
+        message: `OTP verification code dispatched to ${formattedPhone}. Enter the 6-digit code below.`
+      };
+    } else if (serverData?.error) {
+      return {
+        success: false,
+        formattedPhone,
+        error: serverData.error
+      };
+    }
+  } catch (serverErr) {
+    console.warn('[Phone Auth] Server-side OTP dispatch error, attempting Web SDK fallback:', serverErr);
+  }
+
+  // 3. Fallback: Web Firebase Phone Auth SDK
   try {
     const appVerifier = getOrCreateRecaptchaVerifier(containerId);
     console.log(`[Firebase Phone Auth] Requesting Web SDK OTP dispatch for ${formattedPhone}...`);
@@ -396,39 +425,11 @@ export async function sendFirebasePhoneOtp(
     console.error('[Firebase Phone Auth] Web SDK Dispatch error:', err);
     resetRecaptchaVerifier();
 
-    const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'smartrun.in';
-    const isLocalOrApp = currentHost === 'localhost' || currentHost === '127.0.0.1' || Capacitor.isNativePlatform();
-
-    // 3. Fallback for localhost or app where Firebase Web domain verification fails ("Hostname match not found for localhost")
-    if (isLocalOrApp || String(err?.message || '').toLowerCase().includes('hostname match not found')) {
-      console.warn(`[Firebase Phone Auth] Hostname match issue detected for "${currentHost}", activating server OTP session fallback...`);
-      try {
-        const resp = await fetch(apiUrl('/api/auth/send-phone-otp'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: digits })
-        });
-        const serverData = await resp.json();
-        if (serverData.success) {
-          activeBackendOtpToken = serverData.token || null;
-          activeBackendOtpPhone = digits;
-          return {
-            success: true,
-            formattedPhone,
-            provider: 'firebase',
-            message: `OTP verification code dispatched to ${formattedPhone}. Enter the 6-digit code below.`
-          };
-        }
-      } catch (serverFallbackErr) {
-        console.warn('[Firebase Phone Auth] Server OTP fallback error:', serverFallbackErr);
-      }
-    }
-
     const diagnostic = formatFirebasePhoneError(err);
     return {
       success: false,
       formattedPhone,
-      error: diagnostic.userMessage || err?.message || 'Failed to send OTP via Firebase.',
+      error: diagnostic.userMessage || err?.message || 'Failed to dispatch OTP verification code.',
       diagnostic
     };
   }

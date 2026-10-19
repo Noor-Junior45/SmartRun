@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, AdvancedMarker, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import L from 'leaflet';
 import { Navigation, Store, CheckCircle, Zap } from 'lucide-react';
 import { getGoogleMapsStatus, getSynchronousGoogleMapsKey, GoogleMapsStatus } from '../../services/maps/googleMapsConfig';
@@ -180,10 +180,47 @@ let cachedRouteKey = '';
 let cachedRoutePath: { lat: number; lng: number }[] | null = null;
 let cachedDistanceKm = 0;
 
+// Decode Google encoded polyline points
+function decodePolylinePath(encoded: string): { lat: number; lng: number }[] {
+  if (typeof google !== 'undefined' && google.maps?.geometry?.encoding) {
+    try {
+      const decoded = google.maps.geometry.encoding.decodePath(encoded);
+      return decoded.map((pt) => ({ lat: pt.lat(), lng: pt.lng() }));
+    } catch {}
+  }
+  const points: { lat: number; lng: number }[] = [];
+  let index = 0, len = encoded.length;
+  let lat = 0, lng = 0;
+
+  while (index < len) {
+    let b, shift = 0, result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
+}
+
 /**
  * Inner component to manage the official Google Maps road route connecting line.
- * Uses Google DirectionsService directly so the line is 100% on actual streets,
- * perfectly smooth without straight-line flickering.
+ * Uses modern Google Routes API (computeRoutes) and server REST proxy,
+ * completely avoiding the deprecated google.maps.DirectionsService.
  */
 const DeliveryRouteOverlay = ({
   warehouse,
@@ -201,6 +238,7 @@ const DeliveryRouteOverlay = ({
   onRouteCalculated?: (data: { distanceKm: number; transitDurationMinutes: number }) => void;
 }) => {
   const map = useMap();
+  const routesLib = useMapsLibrary('routes');
   const routePolylineRef = useRef<google.maps.Polyline | null>(null);
   const glowPolylineRef = useRef<google.maps.Polyline | null>(null);
   const hasFittedInitialBoundsRef = useRef(false);
@@ -245,12 +283,21 @@ const DeliveryRouteOverlay = ({
     }
 
     // Auto-frame camera bounds:
-    // When rider nears destination (<900m / arriving), focus on rider & user house with comfortable padding
+    // When rider nears destination or reaches user house, automatically keep zoom out comfortably from backend
+    // so the entire neighborhood context, road approach, and user house are visible.
     if (isNearDestination && hasRealRider) {
       const nearBounds = new google.maps.LatLngBounds();
       nearBounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng });
       nearBounds.extend({ lat: destination.lat, lng: destination.lng });
-      map.fitBounds(nearBounds, { top: 80, right: 65, bottom: 80, left: 65 });
+      // Keep zoomed out with neighborhood buffer around destination (~400m)
+      nearBounds.extend({ lat: destination.lat + 0.0035, lng: destination.lng + 0.0035 });
+      nearBounds.extend({ lat: destination.lat - 0.0035, lng: destination.lng - 0.0035 });
+      map.fitBounds(nearBounds, { top: 75, right: 60, bottom: 75, left: 60 });
+      google.maps.event.addListenerOnce(map, 'idle', () => {
+        if (map.getZoom() && map.getZoom()! > 16) {
+          map.setZoom(16);
+        }
+      });
     } else if (!hasFittedInitialBoundsRef.current) {
       const initialBounds = new google.maps.LatLngBounds();
       initialBounds.extend({ lat: warehouse.lat, lng: warehouse.lng });
@@ -262,54 +309,61 @@ const DeliveryRouteOverlay = ({
       hasFittedInitialBoundsRef.current = true;
     }
 
-    // Fetch official Google Directions route
+    // Fetch official Google road route using modern Routes API (Route.computeRoutes)
     const fetchGoogleRoute = async () => {
-      // 1. First attempt: Direct client-side Google Maps DirectionsService
-      if (typeof google !== 'undefined' && google.maps && google.maps.DirectionsService) {
-        try {
-          const directionsService = new google.maps.DirectionsService();
-          const waypoints = hasRealRider
-            ? [
-                {
-                  location: new google.maps.LatLng(riderLocation.lat, riderLocation.lng),
-                  stopover: false
-                }
-              ]
-            : undefined;
+      // 1. First attempt: Modern Google Maps Routes API (Route.computeRoutes)
+      // Eliminates deprecated google.maps.DirectionsService
+      try {
+        const routesModule =
+          routesLib ||
+          (typeof google !== 'undefined' && google.maps?.importLibrary
+            ? await google.maps.importLibrary('routes')
+            : (typeof google !== 'undefined' ? (google.maps as any).routes : null));
+        const Route = routesModule?.Route || (typeof google !== 'undefined' ? (google.maps as any)?.routes?.Route : null);
 
-          const request: google.maps.DirectionsRequest = {
-            origin: new google.maps.LatLng(warehouse.lat, warehouse.lng),
-            destination: new google.maps.LatLng(destination.lat, destination.lng),
-            travelMode: google.maps.TravelMode.DRIVING,
-            waypoints
+        if (Route && typeof Route.computeRoutes === 'function') {
+          const request: any = {
+            origin: { lat: warehouse.lat, lng: warehouse.lng },
+            destination: { lat: destination.lat, lng: destination.lng },
+            travelMode: 'DRIVE',
+            fields: ['path', 'distanceMeters', 'durationMillis', 'legs'],
+            polylineQuality: 'HIGH_QUALITY'
           };
 
-          const response = await new Promise<google.maps.DirectionsResult | null>((resolve) => {
-            directionsService.route(request, (result, status) => {
-              if (status === google.maps.DirectionsStatus.OK && result) {
-                resolve(result);
-              } else {
-                resolve(null);
+          if (hasRealRider) {
+            request.intermediates = [
+              {
+                location: { lat: riderLocation.lat, lng: riderLocation.lng }
               }
-            });
-          });
+            ];
+          }
 
-          if (response && response.routes?.[0]?.overview_path?.length) {
-            const path = response.routes[0].overview_path.map((pt) => ({
-              lat: pt.lat(),
-              lng: pt.lng()
-            }));
+          const response = await Route.computeRoutes(request);
+          const primaryRoute = response?.routes?.[0];
 
-            let totalMeters = 0;
-            let totalSeconds = 0;
-            response.routes[0].legs.forEach((leg) => {
-              totalMeters += leg.distance?.value || 0;
-              totalSeconds += leg.duration?.value || 0;
-            });
+          if (primaryRoute) {
+            let path: { lat: number; lng: number }[] = [];
+            if (Array.isArray(primaryRoute.path) && primaryRoute.path.length > 0) {
+              path = primaryRoute.path.map((pt: any) => ({
+                lat: typeof pt.lat === 'function' ? pt.lat() : Number(pt.lat),
+                lng: typeof pt.lng === 'function' ? pt.lng() : Number(pt.lng)
+              }));
+            }
+
+            let totalMeters = primaryRoute.distanceMeters || 0;
+            let totalSeconds = primaryRoute.durationMillis ? Math.round(primaryRoute.durationMillis / 1000) : 0;
+
+            if ((!totalMeters || !totalSeconds) && Array.isArray(primaryRoute.legs)) {
+              primaryRoute.legs.forEach((leg: any) => {
+                totalMeters += leg.distanceMeters || leg.distance?.value || 0;
+                totalSeconds += leg.durationMillis ? Math.round(leg.durationMillis / 1000) : (leg.duration?.value || 0);
+              });
+            }
+
             const distKm = Math.round((totalMeters / 1000) * 10) / 10;
             const transitDurationMinutes = Math.max(1, Math.round(totalSeconds / 60));
 
-            if (isMounted) {
+            if (isMounted && path.length > 0) {
               cachedRouteKey = currentRouteKey;
               cachedRoutePath = path;
               cachedDistanceKm = distKm;
@@ -324,12 +378,12 @@ const DeliveryRouteOverlay = ({
               if (onRouteCalculated) {
                 onRouteCalculated({ distanceKm: distKm, transitDurationMinutes });
               }
+              return;
             }
-            return;
           }
-        } catch {
-          // Proceed to server directions proxy
         }
+      } catch {
+        // Proceed to server directions proxy
       }
 
       // 2. Second attempt: Server-authoritative Google Directions proxy
@@ -390,6 +444,7 @@ const DeliveryRouteOverlay = ({
     };
   }, [
     map,
+    routesLib,
     warehouse.lat,
     warehouse.lng,
     destination.lat,
@@ -421,7 +476,15 @@ const MapInstanceSync = ({ onMap }: { onMap: (map: google.maps.Map | null) => vo
   useEffect(() => {
     if (map) {
       try {
-        map.setOptions({ styles: ZOMATO_MAP_STYLES });
+        map.setOptions({
+          styles: ZOMATO_MAP_STYLES,
+          disableDefaultUI: true,
+          zoomControl: false,
+          scrollwheel: false,
+          disableDoubleClickZoom: true,
+          gestureHandling: 'none',
+          maxZoom: 16
+        });
       } catch {}
     }
     onMap(map);
@@ -560,8 +623,13 @@ const ResilientOpenStreetMap = ({
       center: [(warehouse.lat + destination.lat) / 2, (warehouse.lng + destination.lng) / 2],
       zoom: 13,
       minZoom: 8,
-      maxZoom: 19,
+      maxZoom: 16,
       zoomControl: false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      touchZoom: false,
+      boxZoom: false,
+      dragging: true,
       attributionControl: false
     });
     mapInstanceRef.current = map;
@@ -681,18 +749,20 @@ const ResilientOpenStreetMap = ({
       }
 
       // AUTO-ZOOM WHEN RIDER REACHES AREA:
-      // When rider comes near the customer's house (< 900m or near_destination), automatically frame both
-      // the approaching rider and the customer's house with comfortable padding so the full neighborhood is revealed.
+      // When rider comes near the customer's house, automatically keep zoom out comfortably
+      // so the approaching rider, user house, and surrounding streets are visible.
       if (isNearDestination) {
         if (!hasAutoZoomedNearRef.current) {
           hasAutoZoomedNearRef.current = true;
           const nearBounds = L.latLngBounds([
             [riderLocation.lat, riderLocation.lng],
-            [destination.lat, destination.lng]
+            [destination.lat, destination.lng],
+            [destination.lat + 0.0035, destination.lng + 0.0035],
+            [destination.lat - 0.0035, destination.lng - 0.0035]
           ]);
           map.flyToBounds(nearBounds, {
             padding: [65, 65],
-            maxZoom: 17,
+            maxZoom: 16,
             duration: 1.2
           });
         }
@@ -807,7 +877,14 @@ export const LiveOrderRealMap = ({
         const bounds = new google.maps.LatLngBounds();
         bounds.extend({ lat: riderLocation.lat, lng: riderLocation.lng });
         bounds.extend({ lat: destination.lat, lng: destination.lng });
-        mapInstance.fitBounds(bounds, { top: 70, right: 60, bottom: 70, left: 60 });
+        bounds.extend({ lat: destination.lat + 0.0035, lng: destination.lng + 0.0035 });
+        bounds.extend({ lat: destination.lat - 0.0035, lng: destination.lng - 0.0035 });
+        mapInstance.fitBounds(bounds, { top: 75, right: 60, bottom: 75, left: 60 });
+        google.maps.event.addListenerOnce(mapInstance, 'idle', () => {
+          if (mapInstance.getZoom() && mapInstance.getZoom()! > 16) {
+            mapInstance.setZoom(16);
+          }
+        });
       } else {
         const bounds = new google.maps.LatLngBounds();
         bounds.extend({ lat: warehouse.lat, lng: warehouse.lng });
@@ -843,9 +920,12 @@ export const LiveOrderRealMap = ({
             defaultCenter={{ lat: centerLat, lng: centerLng }}
             defaultZoom={13}
             minZoom={7}
-            maxZoom={20}
-            gestureHandling="greedy"
+            maxZoom={16}
+            gestureHandling="none"
             disableDefaultUI={true}
+            zoomControl={false}
+            scrollwheel={false}
+            disableDoubleClickZoom={true}
             internalUsageAttributionIds={[ATTRIBUTION_ID]}
             className="w-full h-full"
           >

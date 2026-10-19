@@ -435,6 +435,39 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     setIsLoading(true);
     resetMessages();
     try {
+      const formattedPhone = `+91${clean10}`;
+      // 1. Primary: Server-side authentication
+      try {
+        const srvRes = await fetch(apiUrl('/api/auth/login'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: clean10, password })
+        });
+        const srvData = await srvRes.json().catch(() => null);
+
+        if (srvData && srvData.success && srvData.user) {
+          if (srvData.session) {
+            await supabase.auth.setSession(srvData.session).catch(() => {});
+          }
+          const resolvedName = srvData.profile?.full_name || srvData.profile?.name || srvData.user?.user_metadata?.full_name || 'Customer';
+          const finalEmail = srvData.profile?.email && !srvData.profile.email.includes('@girirajpower.internal')
+            ? srvData.profile.email
+            : undefined;
+
+          saveTermsAgreed(true);
+          navigate(getPostAuthRedirect(), { replace: true });
+          onAuthSuccess(formattedPhone, resolvedName, finalEmail, srvData.user);
+          return;
+        } else if (srvData && !srvData.success && srvRes.status === 401) {
+          setError(srvData.error || 'Incorrect password or account not found. Please sign in with SMS OTP instead.');
+          setIsLoading(false);
+          return;
+        }
+      } catch (srvErr) {
+        console.warn('[Server Auth Login] Server unreachable, attempting client fallback:', srvErr);
+      }
+
+      // 2. Client fallback
       let targetEmail = `p${clean10}@girirajpower.internal`;
       let userFullName = '';
 
@@ -478,7 +511,6 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         setError('Incorrect password or account not found. Please sign in with SMS OTP instead.');
       } else if (data?.user) {
         const resolvedName = userFullName || data.user.user_metadata?.full_name || 'Customer';
-        const formattedPhone = `+91${clean10}`;
         const finalEmail = targetEmail.includes('@girirajpower.internal') ? undefined : targetEmail;
 
         saveTermsAgreed(true);
@@ -503,6 +535,37 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     setIsLoading(true);
     resetMessages();
     try {
+      // 1. Primary: Server-side authentication
+      try {
+        const srvRes = await fetch(apiUrl('/api/auth/login'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: cleanEmail, password })
+        });
+        const srvData = await srvRes.json().catch(() => null);
+
+        if (srvData && srvData.success && srvData.user) {
+          if (srvData.session) {
+            await supabase.auth.setSession(srvData.session).catch(() => {});
+          }
+          const userFullName =
+            srvData.profile?.full_name ||
+            srvData.profile?.name ||
+            srvData.user.user_metadata?.full_name ||
+            cleanEmail.split('@')[0] ||
+            'Customer';
+          const finalPhone = srvData.profile?.phone || srvData.user.phone || srvData.user.user_metadata?.phone || '';
+
+          saveTermsAgreed(true);
+          navigate(getPostAuthRedirect(), { replace: true });
+          onAuthSuccess(finalPhone, userFullName, cleanEmail, srvData.user);
+          return;
+        }
+      } catch (srvErr) {
+        console.warn('[Server Auth Login] Server unreachable, attempting client fallback:', srvErr);
+      }
+
+      // 2. Client fallback
       const { data, error: loginError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password: password,
@@ -594,25 +657,52 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       const formattedPhone = `+91${clean10}`;
       const cleanEmail = onboardingEmailAddr.trim().toLowerCase();
 
-      // 1. Sign up user in Supabase
-      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: onboardingEmailPw,
-        options: {
-          data: {
-            full_name: cleanName,
-            phone: formattedPhone
+      // 1. Primary: Server-side registration endpoint
+      let regUser: any = null;
+      try {
+        const regRes = await fetch(apiUrl('/api/auth/register'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanEmail,
+            phone: formattedPhone,
+            fullName: cleanName,
+            password: onboardingEmailPw
+          })
+        });
+        const regData = await regRes.json().catch(() => null);
+        if (regData && regData.success && regData.user) {
+          regUser = regData.user;
+          if (regData.session) {
+            await supabase.auth.setSession(regData.session).catch(() => {});
           }
         }
-      });
-
-      if (signUpErr && !signUpErr.message.includes('already registered')) {
-        setError(signUpErr.message || 'Failed to create account.');
-        setIsLoading(false);
-        return;
+      } catch (regErr) {
+        console.warn('[Server Auth Register] Server unreachable, attempting client fallback:', regErr);
       }
 
-      const userId = signUpData?.user?.id || `uid_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      // 2. Client fallback if server registration was not used
+      if (!regUser) {
+        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password: onboardingEmailPw,
+          options: {
+            data: {
+              full_name: cleanName,
+              phone: formattedPhone
+            }
+          }
+        });
+
+        if (signUpErr && !signUpErr.message.includes('already registered')) {
+          setError(signUpErr.message || 'Failed to create account.');
+          setIsLoading(false);
+          return;
+        }
+        regUser = signUpData?.user;
+      }
+
+      const userId = regUser?.id || `uid_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
       // 2. Save profile in Supabase
       const finalizedProfile: UserProfile = {
@@ -669,7 +759,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       }).catch(() => {});
 
       saveTermsAgreed(true);
-      onAuthSuccess(formattedPhone, cleanName, cleanEmail, signUpData?.user);
+      onAuthSuccess(formattedPhone, cleanName, cleanEmail, regUser);
       navigate(getPostAuthRedirect(), { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save account.';
@@ -760,38 +850,39 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   const riderApproachX = isMotorcyclePassing ? 38 : typingProgress * 17;
 
   return (
-    <div className="min-h-screen bg-white flex flex-col justify-start items-center px-4 pt-1 sm:pt-2 pb-8">
+    <div className="min-h-screen bg-white flex flex-col justify-center items-center px-4 py-8 sm:py-12 relative">
       <SEOHead
         title="Sign In / Register | SmartRun Express Electricals"
         description="Sign in to your SmartRun account with mobile OTP, email, or Google to track express delivery orders, manage addresses, and access wholesale pricing."
         keywords="smartrun login, smartrun signup, electrical depot account, mobile otp login"
       />
 
-      {/* Main Login Container - Positioned right at the very top of screen */}
-      <div className="w-full max-w-md bg-white border-0 shadow-none px-4 pt-0 pb-6 space-y-3 sm:space-y-3.5">
-        {/* Top Back Navigation Arrow Button */}
-        {!isNativeApp && (
-          <div className="w-full flex items-center justify-between -mb-1">
-            <button
-              type="button"
-              onClick={() => {
-                if (authStep !== 'primary') {
-                  setAuthStep('primary');
-                  resetMessages();
-                } else if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
-                  navigate(-1);
-                } else {
-                  navigate('/');
-                }
-              }}
-              className="p-1 -ml-2 text-slate-700 hover:text-black hover:bg-slate-100 rounded-full transition-colors cursor-pointer flex items-center gap-1 active:scale-95 text-xs font-bold"
-              title="Back"
-            >
-              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
-              <span>{authStep !== 'primary' ? 'Back' : 'Store'}</span>
-            </button>
-          </div>
-        )}
+      {/* Top Back Navigation Arrow Button */}
+      {!isNativeApp && (
+        <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10">
+          <button
+            type="button"
+            onClick={() => {
+              if (authStep !== 'primary') {
+                setAuthStep('primary');
+                resetMessages();
+              } else if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+                navigate(-1);
+              } else {
+                navigate('/');
+              }
+            }}
+            className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-full transition-colors cursor-pointer flex items-center gap-1 active:scale-95 text-xs font-bold"
+            title="Back"
+          >
+            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+            <span>{authStep !== 'primary' ? 'Back' : 'Store'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Main Login Container - Positioned in the middle of screen */}
+      <div className="w-full max-w-md bg-white border-0 shadow-none px-4 py-2 space-y-3 sm:space-y-3.5 my-auto">
 
         {/* Brand Logo & Name Header - Starts right from top with increased prominent size */}
         <div className="flex flex-col items-center justify-center text-center space-y-1.5">
@@ -1182,9 +1273,12 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
               </button>
             </div>
 
-            {/* TERMS OF SERVICE & PRIVACY POLICY AGREEMENT (CENTERED MIDDLE TYPING FORMAT WITH SMALLER TICK) */}
-            <div className="pt-2 text-center">
-              <div className="inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-medium text-slate-700">
+            {/* TERMS OF SERVICE & PRIVACY POLICY AGREEMENT */}
+            <div className="pt-2 text-center flex justify-center w-full overflow-hidden">
+              <label
+                htmlFor="terms-agreed-tick"
+                className="inline-flex items-center justify-center gap-1 sm:gap-1.5 text-[10.5px] min-[360px]:text-[11px] sm:text-xs font-medium text-slate-800 cursor-pointer select-none whitespace-nowrap"
+              >
                 <button
                   type="button"
                   id="terms-agreed-tick"
@@ -1192,33 +1286,35 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   aria-checked={termsAgreed}
                   aria-label="Agree to terms of service and privacy policy"
                   onClick={handleToggleTerms}
-                  className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border-[1.5px] flex items-center justify-center transition-all cursor-pointer shrink-0 ${
                     termsAgreed
                       ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
-                      : 'border-slate-300 bg-white hover:border-slate-400'
+                      : 'border-slate-700 bg-white hover:border-slate-900 shadow-2xs'
                   }`}
                 >
-                  {termsAgreed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                  {termsAgreed && <Check className="w-2 h-2 sm:w-2.5 sm:h-2.5 stroke-[3.5]" />}
                 </button>
-                <span className="leading-snug select-none text-center">
+                <span className="leading-none text-slate-800 tracking-tight">
                   <span onClick={handleToggleTerms} className="cursor-pointer">
                     You agree to our{' '}
                   </span>
                   <Link
                     to="/terms"
-                    className="text-slate-900 font-semibold underline underline-offset-2 decoration-slate-400 hover:decoration-slate-800 transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-slate-950 font-bold underline underline-offset-2 decoration-slate-400 hover:decoration-slate-900 transition-colors"
                   >
                     Terms of service
                   </Link>
                   {' '}and{' '}
                   <Link
                     to="/privacy"
-                    className="text-slate-900 font-semibold underline underline-offset-2 decoration-slate-400 hover:decoration-slate-800 transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-slate-950 font-bold underline underline-offset-2 decoration-slate-400 hover:decoration-slate-900 transition-colors"
                   >
                     Privacy policy
                   </Link>
                 </span>
-              </div>
+              </label>
             </div>
           </div>
         )}

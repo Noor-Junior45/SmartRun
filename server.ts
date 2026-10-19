@@ -7601,6 +7601,262 @@ Knowledge Base & Service Details:
     }
   });
 
+  /**
+   * Server-Side Universal User Login Endpoint
+   * POST /api/auth/login
+   * Body: { identifier: "phone or email", password: "..." }
+   * Authenticates user entirely on the server using Supabase and account resolution,
+   * returning authenticated session, user details, and profile.
+   */
+  app.post("/api/auth/login", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { identifier, password } = req.body || {};
+      const cleanIdent = String(identifier || "").trim();
+      const cleanPw = String(password || "").trim();
+
+      if (!cleanIdent || !cleanPw) {
+        return res.status(400).json({ success: false, error: "Identifier and password are required." });
+      }
+
+      const sb = getServerSupabase();
+      if (!sb) {
+        return res.status(500).json({ success: false, error: "Authentication service unavailable." });
+      }
+
+      let targetEmail = cleanIdent;
+      let userPhone = "";
+      let userFullName = "";
+      const isPhone = !cleanIdent.includes("@") && cleanIdent.replace(/\D/g, "").length >= 7;
+
+      if (isPhone) {
+        const clean10 = cleanIdent.replace(/\D/g, "").slice(-10);
+        userPhone = `+91${clean10}`;
+        targetEmail = `p${clean10}@girirajpower.internal`;
+
+        // Check if there is an existing email associated with this phone
+        const existing = await resolvePhoneUser(clean10);
+        if (existing?.email && !existing.email.includes("@girirajpower.internal")) {
+          targetEmail = existing.email;
+        }
+        if (existing?.full_name) {
+          userFullName = existing.full_name;
+        }
+      } else {
+        targetEmail = cleanIdent.toLowerCase();
+      }
+
+      let { data, error } = await sb.auth.signInWithPassword({
+        email: targetEmail,
+        password: cleanPw
+      });
+
+      // If phone candidate failed with resolved email, try fallback candidate emails
+      if (error && isPhone) {
+        const clean10 = cleanIdent.replace(/\D/g, "").slice(-10);
+        const candidates = [`p${clean10}@girirajpower.internal`, `phone_${clean10}@girirajpower.internal`];
+        for (const candidate of candidates) {
+          if (candidate === targetEmail) continue;
+          const retry = await sb.auth.signInWithPassword({
+            email: candidate,
+            password: cleanPw
+          });
+          if (!retry.error && retry.data?.user) {
+            data = retry.data;
+            error = null;
+            targetEmail = candidate;
+            break;
+          }
+        }
+      }
+
+      if (error || !data?.user) {
+        return res.status(401).json({
+          success: false,
+          error: "Incorrect password or account not found. Please check your credentials or sign in with OTP."
+        });
+      }
+
+      const resolvedName = userFullName || data.user.user_metadata?.full_name || data.user.user_metadata?.name || "Customer";
+      const resolvedPhone = userPhone || data.user.phone || data.user.user_metadata?.phone || "";
+
+      // Fetch or sync user profile
+      let userProfile = null;
+      try {
+        const { data: prof } = await sb.from("user_profiles").select("*").eq("user_id", data.user.id).single();
+        if (prof) userProfile = prof;
+      } catch {}
+
+      return res.json({
+        success: true,
+        user: data.user,
+        session: data.session,
+        profile: userProfile || {
+          id: data.user.id,
+          name: resolvedName,
+          phone: resolvedPhone,
+          email: targetEmail.includes("@girirajpower.internal") ? null : targetEmail
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Server authentication error."
+      });
+    }
+  });
+
+  /**
+   * Server-Side User Registration Endpoint
+   * POST /api/auth/register
+   * Body: { email, phone, fullName, password }
+   * Registers user on the server using admin client, configures profile, and provisions session.
+   */
+  app.post("/api/auth/register", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { email, phone, fullName, password } = req.body || {};
+      const cleanEmail = String(email || "").trim().toLowerCase();
+      const cleanPhone = String(phone || "").replace(/\D/g, "").slice(-10);
+      const cleanName = String(fullName || "").trim();
+      const cleanPw = String(password || "").trim();
+
+      if (!cleanName) {
+        return res.status(400).json({ success: false, error: "Full name is required." });
+      }
+      if (!cleanEmail || !cleanEmail.includes("@")) {
+        return res.status(400).json({ success: false, error: "Valid email address is required." });
+      }
+      if (!cleanPw || cleanPw.length < 6) {
+        return res.status(400).json({ success: false, error: "Password must be at least 6 characters." });
+      }
+
+      const formattedPhone = cleanPhone ? `+91${cleanPhone}` : "";
+      const sb = getServerSupabase();
+      if (!sb) {
+        return res.status(500).json({ success: false, error: "Authentication service unavailable." });
+      }
+
+      let userId = "";
+      let authUser: any = null;
+      let authSession: any = null;
+
+      // 1. Create or register user via Supabase Auth
+      if (sb.auth?.admin) {
+        const { data: createData, error: createErr } = await sb.auth.admin.createUser({
+          email: cleanEmail,
+          password: cleanPw,
+          email_confirm: true,
+          user_metadata: {
+            full_name: cleanName,
+            name: cleanName,
+            phone: formattedPhone,
+            contact_number: formattedPhone
+          }
+        });
+
+        if (!createErr && createData?.user) {
+          authUser = createData.user;
+          userId = createData.user.id;
+        } else if (createErr) {
+          // If already exists, attempt to sign in
+          const { data: loginData, error: loginErr } = await sb.auth.signInWithPassword({
+            email: cleanEmail,
+            password: cleanPw
+          });
+          if (!loginErr && loginData?.user) {
+            authUser = loginData.user;
+            authSession = loginData.session;
+            userId = loginData.user.id;
+          } else {
+            return res.status(400).json({
+              success: false,
+              error: createErr.message || "An account with this email already exists."
+            });
+          }
+        }
+      } else {
+        const { data: signUpData, error: signUpErr } = await sb.auth.signUp({
+          email: cleanEmail,
+          password: cleanPw,
+          options: {
+            data: {
+              full_name: cleanName,
+              phone: formattedPhone
+            }
+          }
+        });
+        if (signUpErr) {
+          return res.status(400).json({ success: false, error: signUpErr.message });
+        }
+        authUser = signUpData.user;
+        authSession = signUpData.session;
+        userId = authUser?.id || "";
+      }
+
+      // If we don't have session yet, sign in on server to generate tokens
+      if (!authSession && userId) {
+        const { data: loginData } = await sb.auth.signInWithPassword({
+          email: cleanEmail,
+          password: cleanPw
+        });
+        if (loginData?.session) {
+          authSession = loginData.session;
+          authUser = loginData.user;
+        }
+      }
+
+      // 2. Upsert user_profiles record
+      if (userId) {
+        try {
+          await sb.from("user_profiles").upsert(
+            {
+              user_id: userId,
+              full_name: cleanName,
+              email: cleanEmail,
+              phone: formattedPhone || null,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: "user_id" }
+          );
+        } catch (dbErr) {
+          console.debug("[Register Profile Upsert]:", dbErr);
+        }
+      }
+
+      // 3. Sync to Firebase Firestore on server
+      if (serverFirestore && userId) {
+        try {
+          const docRef = firestoreDoc(serverFirestore, "users", userId);
+          await firestoreSetDoc(docRef, {
+            id: userId,
+            email: cleanEmail,
+            full_name: cleanName,
+            phone: formattedPhone || null,
+            updated_at: new Date().toISOString()
+          }, { merge: true });
+        } catch {}
+      }
+
+      return res.json({
+        success: true,
+        user: authUser,
+        session: authSession,
+        profile: {
+          id: userId,
+          name: cleanName,
+          email: cleanEmail,
+          phone: formattedPhone
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to register user."
+      });
+    }
+  });
+
   // Phone Auth Gateway Status Endpoint (Firebase Backend)
   app.get("/api/sms/providers-status", (req, res) => {
     return res.json({
