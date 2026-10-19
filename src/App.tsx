@@ -24,7 +24,7 @@ import { TechnicianDetailPage } from './components/technicians/TechnicianDetailP
 import { FloatingBottomNav } from './components/FloatingBottomNav';
 import { InstallAppModal } from './components/InstallAppModal';
 import { AddProductModal } from './components/AddProductModal';
-import { FloatingLiveOrderButton } from './components/orders/FloatingLiveOrderButton';
+import { FloatingLiveOrderButton, isProfileOrSubpage } from './components/orders/FloatingLiveOrderButton';
 import { LiveOrderDetailsModal } from './components/orders/LiveOrderDetailsModal';
 import { LiveOrderPage } from './components/orders/LiveOrderPage';
 import { AccountDeletionPage } from './components/AccountDeletionPage';
@@ -1155,6 +1155,8 @@ export default function App() {
         p === '/refunds' ||
         p === '/shipping-policy' ||
         p === '/shipping' ||
+        p === '/faq' ||
+        p === '/faqs' ||
         p === '/delete' ||
         p === '/account-deletion';
       if (!isPublicExemptPath) {
@@ -1614,6 +1616,8 @@ export default function App() {
         !location.pathname.startsWith('/how-to-use') &&
         !location.pathname.startsWith('/privacy') &&
         !location.pathname.startsWith('/terms') &&
+        !location.pathname.startsWith('/faq') &&
+        !location.pathname.startsWith('/faqs') &&
         activeTab !== 'cart' &&
         !selectedProductQuickView && (
         <Header
@@ -1914,8 +1918,36 @@ export default function App() {
           {/* LEGAL & COMPANY VIEWS */}
           <Route path="/about" element={<LegalView onBack={() => navigate('/')} type="about" />} />
           <Route path="/about-us" element={<LegalView onBack={() => navigate('/')} type="about" />} />
-          <Route path="/faqs" element={<LegalView onBack={() => navigate('/')} type="faqs" />} />
-          <Route path="/faq" element={<LegalView onBack={() => navigate('/')} type="faqs" />} />
+          <Route
+            path="/faqs"
+            element={
+              <LegalView
+                onBack={() => {
+                  if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+                    navigate(-1);
+                  } else {
+                    navigate('/profile');
+                  }
+                }}
+                type="faqs"
+              />
+            }
+          />
+          <Route
+            path="/faq"
+            element={
+              <LegalView
+                onBack={() => {
+                  if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+                    navigate(-1);
+                  } else {
+                    navigate('/profile');
+                  }
+                }}
+                type="faqs"
+              />
+            }
+          />
           <Route path="/refund-policy" element={<LegalView onBack={() => navigate('/')} type="refund" />} />
           <Route path="/refunds" element={<LegalView onBack={() => navigate('/')} type="refund" />} />
           <Route path="/shipping-policy" element={<LegalView onBack={() => navigate('/')} type="shipping" />} />
@@ -2167,12 +2199,8 @@ export default function App() {
         }}
       />
 
-      {/* Zomato-style Floating Map Route Circle Button for Current Active Order (Navigates directly to dedicated live order page, hidden on profile tab, cart page, product details, and live-order sub-pages) */}
-      {!location.pathname.startsWith('/live-order') &&
-        !location.pathname.startsWith('/profile') &&
-        !location.pathname.startsWith('/cart') &&
-        !location.pathname.includes('/product/') &&
-        activeTab !== 'cart' && (
+      {/* Zomato-style Floating Map Route Circle Button for Current Active Order (Navigates directly to dedicated live order page, hidden on profile tab, all pages opened from profile buttons, cart page, product details, and live-order pages) */}
+      {!isProfileOrSubpage(location.pathname) && activeTab !== 'cart' && (
         <FloatingLiveOrderButton
           order={activeLiveOrder}
           onClick={() => navigate('/live-order')}

@@ -11,10 +11,51 @@ declare global {
 export type AnyProduct = Product | ElectricalProduct | Record<string, any>;
 
 /**
- * Safe wrapper to invoke gtag
+ * Check if user consent is currently granted for analytics and app tracking
+ */
+export function isConsentGranted(): boolean {
+  try {
+    if (typeof window === 'undefined') return true;
+    const val = localStorage.getItem('smartrun_consent_granted') ?? localStorage.getItem('smartrun_terms_agreed');
+    if (val === 'false') return false;
+    return true; // Default granted
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Update Google Analytics Consent Mode & App Consent State
+ */
+export function updateGAConsent(granted: boolean) {
+  try {
+    const status = granted ? 'granted' : 'denied';
+    if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+      window.gtag('consent', 'update', {
+        analytics_storage: status,
+        ad_storage: status,
+        ad_user_data: status,
+        ad_personalization: status,
+        functionality_storage: 'granted',
+        security_storage: 'granted'
+      });
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('smartrun_consent_granted', String(granted));
+      localStorage.setItem('smartrun_terms_agreed', String(granted));
+      window.dispatchEvent(new CustomEvent('smartrun_consent_change', { detail: { granted } }));
+    }
+  } catch (err) {
+    console.debug('Consent update notice:', err);
+  }
+}
+
+/**
+ * Safe wrapper to invoke gtag with consent check
  */
 export function sendGAEvent(eventName: string, eventParams: Record<string, any> = {}) {
   try {
+    if (!isConsentGranted()) return;
     if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
       window.gtag('event', eventName, eventParams);
     }

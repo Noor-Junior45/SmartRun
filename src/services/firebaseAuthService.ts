@@ -158,16 +158,16 @@ export function formatFirebasePhoneError(err: any): FirebaseDiagnostic {
     case 'auth/invalid-phone-number':
       return {
         code,
-        userMessage: 'Firebase Error (auth/invalid-phone-number): Please enter a valid 10-digit Indian mobile number.',
-        technicalCause: 'Phone number did not match E.164 international format.',
-        resolution: 'Enter 10 numeric digits.'
+        userMessage: 'Please enter a valid 10-digit mobile number.',
+        technicalCause: 'Phone number did not match standard 10-digit format.',
+        resolution: 'Enter 10 numeric digits (e.g. 9876543210).'
       };
 
     case 'auth/missing-phone-number':
       return {
         code,
-        userMessage: 'Firebase Error: Phone number is missing.',
-        technicalCause: 'Empty phone number supplied to Firebase.',
+        userMessage: 'Please enter your 10-digit mobile number.',
+        technicalCause: 'Empty phone number supplied.',
         resolution: 'Enter your 10-digit mobile number.'
       };
 
@@ -182,7 +182,7 @@ export function formatFirebasePhoneError(err: any): FirebaseDiagnostic {
       }
       return {
         code: code || 'auth/unknown',
-        userMessage: `Firebase Phone Auth (${code || 'error'}): ${rawMsg || 'Failed to dispatch SMS.'}`,
+        userMessage: rawMsg ? `Firebase Phone Auth: ${rawMsg}` : 'Failed to dispatch SMS verification code.',
         technicalCause: rawMsg,
         resolution: 'Check Firebase Console Authentication logs for more details.'
       };
@@ -226,25 +226,17 @@ export function getOrCreateRecaptchaVerifier(containerId = 'recaptcha-container'
     containerEl = document.createElement('div');
     containerEl.id = containerId;
     containerEl.style.position = 'fixed';
-    containerEl.style.bottom = '-9999px';
-    containerEl.style.right = '-9999px';
-    containerEl.style.width = '0px';
-    containerEl.style.height = '0px';
-    containerEl.style.overflow = 'hidden';
-    containerEl.style.visibility = 'hidden';
-    containerEl.style.opacity = '0';
-    containerEl.style.pointerEvents = 'none';
-    containerEl.style.zIndex = '-99999';
+    containerEl.style.bottom = '0';
+    containerEl.style.right = '0';
+    containerEl.style.zIndex = '9999';
     document.body.appendChild(containerEl);
-  } else {
-    containerEl.innerHTML = '';
   }
 
   if (activeRecaptchaVerifier) {
     return activeRecaptchaVerifier;
   }
 
-  activeRecaptchaVerifier = new RecaptchaVerifier(firebaseAuth, containerId, {
+  activeRecaptchaVerifier = new RecaptchaVerifier(firebaseAuth, containerEl, {
     size: 'invisible',
     callback: () => {
       console.log('[Firebase Auth] Invisible reCAPTCHA verification passed');
@@ -379,36 +371,7 @@ export async function sendFirebasePhoneOtp(
     }
   }
 
-  // 2. Server-Authoritative Phone Auth (Direct Server-Side Dispatch)
-  try {
-    console.log(`[Phone Auth] Requesting server-side OTP dispatch for ${formattedPhone}...`);
-    const resp = await fetch(apiUrl('/api/auth/send-phone-otp'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: digits })
-    });
-    const serverData = await resp.json().catch(() => null);
-    if (serverData && serverData.success) {
-      activeBackendOtpToken = serverData.token || null;
-      activeBackendOtpPhone = digits;
-      return {
-        success: true,
-        formattedPhone,
-        provider: 'firebase',
-        message: `OTP verification code dispatched to ${formattedPhone}. Enter the 6-digit code below.`
-      };
-    } else if (serverData?.error) {
-      return {
-        success: false,
-        formattedPhone,
-        error: serverData.error
-      };
-    }
-  } catch (serverErr) {
-    console.warn('[Phone Auth] Server-side OTP dispatch error, attempting Web SDK fallback:', serverErr);
-  }
-
-  // 3. Fallback: Web Firebase Phone Auth SDK
+  // 2. Web Firebase Phone Auth SDK (Direct Google Firebase SMS Dispatch via reCAPTCHA)
   try {
     const appVerifier = getOrCreateRecaptchaVerifier(containerId);
     console.log(`[Firebase Phone Auth] Requesting Web SDK OTP dispatch for ${formattedPhone}...`);
@@ -421,15 +384,44 @@ export async function sendFirebasePhoneOtp(
       provider: 'firebase',
       message: `Firebase OTP code sent to ${formattedPhone}. Enter the 6-digit code below.`
     };
-  } catch (err: any) {
-    console.error('[Firebase Phone Auth] Web SDK Dispatch error:', err);
+  } catch (webErr: any) {
+    console.warn('[Firebase Phone Auth] Web SDK notice, attempting server-side fallback:', webErr);
     resetRecaptchaVerifier();
 
-    const diagnostic = formatFirebasePhoneError(err);
+    // 3. Fallback: Server-Authoritative Phone Auth
+    try {
+      console.log(`[Phone Auth] Requesting server-side fallback OTP for ${formattedPhone}...`);
+      const resp = await fetch(apiUrl('/api/auth/send-phone-otp'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: digits })
+      });
+      const serverData = await resp.json().catch(() => null);
+      if (serverData && serverData.success) {
+        activeBackendOtpToken = serverData.token || null;
+        activeBackendOtpPhone = digits;
+        return {
+          success: true,
+          formattedPhone,
+          provider: 'firebase',
+          message: `OTP verification code dispatched to ${formattedPhone}. Enter the 6-digit code below.`
+        };
+      } else if (serverData?.error) {
+        return {
+          success: false,
+          formattedPhone,
+          error: serverData.error
+        };
+      }
+    } catch (serverErr) {
+      console.warn('[Phone Auth] Server-side fallback also encountered an issue:', serverErr);
+    }
+
+    const diagnostic = formatFirebasePhoneError(webErr);
     return {
       success: false,
       formattedPhone,
-      error: diagnostic.userMessage || err?.message || 'Failed to dispatch OTP verification code.',
+      error: diagnostic.userMessage || webErr?.message || 'Failed to dispatch OTP verification code.',
       diagnostic
     };
   }

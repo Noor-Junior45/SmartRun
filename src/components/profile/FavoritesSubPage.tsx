@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Heart, ShoppingBag, ShoppingCart } from 'lucide-react';
+import { ChevronLeft, Heart, ShoppingBag, ShoppingCart } from 'lucide-react';
 import { Product, CartItem } from '../../types';
 import { SwipeableItem } from '../SwipeableItem';
 import { useEdgeSwipeBack } from '../../hooks/useEdgeSwipeBack';
@@ -35,10 +35,11 @@ export const FavoritesSubPage = ({
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="p-1.5 rounded-full hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
+            className="p-1 -ml-1 rounded-full hover:bg-slate-100 text-slate-800 hover:text-black transition-colors cursor-pointer"
             title="Back to Profile"
+            aria-label="Back"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
           </button>
           <div>
             <h1 className="text-lg font-black text-slate-900 flex items-center gap-2">

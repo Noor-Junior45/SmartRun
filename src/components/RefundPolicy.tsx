@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ArrowLeft,
+  ChevronLeft,
   PhoneCall
 } from 'lucide-react';
 import { SEOHead } from './SEOHead';

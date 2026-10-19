@@ -8,7 +8,7 @@ import {
   Lock,
   FileText,
   Trash2,
-  ArrowLeft,
+  ChevronLeft,
   AlertCircle,
   Calendar,
   UserCheck,
@@ -241,10 +241,10 @@ export const AccountDeletionPage = ({
                 navigate('/');
               }
             }}
-            className="p-1.5 -ml-1.5 rounded-full hover:bg-slate-100 active:bg-slate-200 text-slate-700 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+            className="p-1 -ml-1 rounded-full hover:bg-slate-100 active:bg-slate-200 text-slate-800 hover:text-black transition-colors cursor-pointer flex items-center justify-center shrink-0"
             aria-label="Go back"
           >
-            <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
+            <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
           </button>
           <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight whitespace-nowrap">
             Account delete

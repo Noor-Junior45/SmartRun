@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 
 interface ServicesSubPageProps {
   onBack: () => void;
@@ -8,13 +8,14 @@ interface ServicesSubPageProps {
 export const ServicesSubPage = ({ onBack }: ServicesSubPageProps) => {
   return (
     <div className="min-h-screen bg-white text-black pb-20">
-      <div className="border-b border-slate-200 px-4 py-3.5 flex items-center gap-3">
+      <div className="border-b border-slate-200 px-4 py-3.5 flex items-center gap-2.5">
         <button
           onClick={onBack}
-          className="p-1.5 rounded-full hover:bg-slate-100 text-black transition-colors cursor-pointer"
+          className="p-1 -ml-1 rounded-full hover:bg-slate-100 text-slate-800 hover:text-black transition-colors cursor-pointer"
           title="Back to Profile"
+          aria-label="Back"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
         </button>
       </div>
 

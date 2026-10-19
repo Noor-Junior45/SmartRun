@@ -8,7 +8,7 @@ import {
   Clock,
   HelpCircle,
   User,
-  ArrowLeft,
+  ChevronLeft,
   Sparkles,
   Wifi,
   WifiOff,
@@ -459,7 +459,7 @@ export const HelpCenterChat = ({
               title="Back to Profile"
               aria-label="Back to Profile"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
             </button>
           )}
 
@@ -468,20 +468,8 @@ export const HelpCenterChat = ({
           </h1>
         </div>
 
-        {/* Right Header Actions: FAQ button & Refresh button */}
+        {/* Right Header Actions: Reset Chat Button */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* FAQ Button */}
-          <button
-            type="button"
-            onClick={() => setIsFaqDrawerOpen(!isFaqDrawerOpen)}
-            className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold"
-            title="Browse All FAQs"
-            aria-label="Browse All FAQs"
-          >
-            <HelpCircle className="w-4 h-4 text-amber-500" />
-            <span className="hidden xs:inline sm:inline">FAQs</span>
-          </button>
-
           {/* Reset Chat Button */}
           <button
             type="button"

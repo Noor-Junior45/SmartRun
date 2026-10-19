@@ -25,7 +25,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     storageKey: 'giriraj_supabase_auth_session',
-    storage: durableAuthStorage
+    storage: durableAuthStorage,
+    experimental: {
+      passkey: true
+    }
   }
 });
 

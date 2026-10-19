@@ -2,6 +2,7 @@ import React from 'react';
 import { RefundPolicy } from './RefundPolicy';
 import { PrivacyPolicyPage } from './PrivacyPolicyPage';
 import { TermsOfServicePage } from './TermsOfServicePage';
+import { FAQPage } from './FAQPage';
 import {
   ArrowLeft,
   ShieldCheck,
@@ -89,6 +90,10 @@ export const LegalView = ({ onBack, type }: LegalViewProps) => {
 
   if (type === 'refund') {
     return <RefundPolicy onBack={onBack} />;
+  }
+
+  if (type === 'faqs') {
+    return <FAQPage onBack={onBack} />;
   }
 
   if (type === 'privacy') {
@@ -208,51 +213,7 @@ export const LegalView = ({ onBack, type }: LegalViewProps) => {
           )}
 
           {/* =========================================================================
-              2. FAQ VIEW
-              ========================================================================= */}
-          {type === 'faqs' && (
-            <div className="space-y-6">
-              <section className="space-y-3">
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#00875a]"></span>
-                  Frequently Asked Questions
-                </h3>
-                
-                <div className="space-y-3">
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                    <p className="font-bold text-slate-900 text-xs">Q: What is SmartRun?</p>
-                    <p className="text-slate-600 text-xs">
-                      SmartRun is an express quick-commerce platform in Kolkata providing 100% genuine electrical goods, building materials, and on-demand certified electrician services with 60-minute doorstep dispatch.
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                    <p className="font-bold text-slate-900 text-xs">Q: Are all electrical items genuine and certified?</p>
-                    <p className="text-slate-600 text-xs">
-                      Yes. Every coil of wire, MCB, and switch sold on SmartRun is 100% authentic, sourced directly from authorized brand distributors, and carries genuine ISI marks and OEM batch numbers.
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                    <p className="font-bold text-slate-900 text-xs">Q: How do refunds work if I cancel an order?</p>
-                    <p className="text-slate-600 text-xs">
-                      When cancelled within the 2-minute cancellation window or if an item is returned under our 7-day policy, 100% of your payment is refunded directly to your original payment method (bank account, UPI, or card) via Razorpay. We do not lock funds into store credits.
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                    <p className="font-bold text-slate-900 text-xs">Q: Can I get an official GST tax invoice for business input credit?</p>
-                    <p className="text-slate-600 text-xs">
-                      Yes. Every order generates an official GST tax invoice with valid HSN codes, SAC codes, and breakdown of CGST/SGST. You can download your invoice PDF directly from the Order History page.
-                    </p>
-                  </div>
-                </div>
-              </section>
-            </div>
-          )}
-
-          {/* =========================================================================
-              3. SHIPPING POLICY VIEW
+              2. SHIPPING POLICY VIEW
               ========================================================================= */}
           {type === 'shipping' && (
             <div className="space-y-6">

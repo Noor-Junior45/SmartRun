@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, Palette, MapPin, Wrench, ShoppingBag, Truck, User, MessageCircle } from 'lucide-react';
+import { ChevronLeft, Search, Palette, MapPin, Wrench, ShoppingBag, Truck, User, MessageCircle } from 'lucide-react';
 import { SEOHead } from './SEOHead';
 
 interface HowToUseAppPageProps {
@@ -46,10 +46,10 @@ export const HowToUseAppPage: React.FC<HowToUseAppPageProps> = ({ onBack }) => {
             id="btn-how-to-use-back"
             type="button"
             onClick={handleBack}
-            className="p-1.5 -ml-1.5 rounded-full hover:bg-[#EFE9DC] active:bg-[#E5DEC7] text-[#2C261E] transition-colors cursor-pointer flex items-center justify-center shrink-0"
+            className="p-1 -ml-1 rounded-full hover:bg-[#EFE9DC] active:bg-[#E5DEC7] text-[#2C261E] transition-colors cursor-pointer flex items-center justify-center shrink-0"
             aria-label="Go back"
           >
-            <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
+            <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
           </button>
           <h1 className="text-lg sm:text-xl font-bold text-[#2C261E] tracking-tight whitespace-nowrap">
             How to use app

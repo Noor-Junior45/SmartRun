@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { requestPushNotificationPermission } from '../../services/pushNotificationService';
 
 interface NotificationsSubPageProps {
@@ -29,15 +29,16 @@ export const NotificationsSubPage = ({
 }: NotificationsSubPageProps) => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
-      <div className="bg-white border-b border-slate-200 px-4 py-3.5 flex items-center gap-3 shadow-2xs">
+      <div className="bg-white border-b border-slate-200 px-4 py-3.5 flex items-center gap-2.5 shadow-2xs">
         <button
           onClick={onBack}
-          className="p-1.5 rounded-full hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
+          className="p-1 -ml-1 rounded-full hover:bg-slate-100 text-slate-800 hover:text-black transition-colors cursor-pointer"
           title="Back to Profile"
+          aria-label="Back"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
         </button>
-        <h1 className="text-lg font-black text-slate-900">Setting</h1>
+        <h1 className="text-lg font-black text-slate-900 leading-none">Setting</h1>
       </div>
 
       <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-5">

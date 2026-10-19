@@ -12,9 +12,16 @@ import {
   Phone,
   User,
   ArrowLeft,
-  ShieldCheck
+  ShieldCheck,
+  Fingerprint,
+  Loader2
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
+import {
+  startAuthentication,
+  browserSupportsWebAuthnAutofill,
+  WebAuthnAbortService
+} from '@simplewebauthn/browser';
 import { supabase } from '../lib/supabaseClient';
 import { apiUrl } from '../lib/apiBase';
 import { isAndroidAppEnvironment, isNativePhoneApp } from '../utils/platformDetection';
@@ -30,6 +37,7 @@ import {
   verifyFirebaseOtpAndBridgeToSupabase,
   formatToE164Phone
 } from '../services/firebaseAuthService';
+import { updateGAConsent } from '../utils/analytics';
 
 interface LoginPageProps {
   onAuthSuccess: (phone: string, name: string, email?: string, userObj?: any) => void;
@@ -63,6 +71,7 @@ const isTermsAgreedSaved = (): boolean => {
   try {
     const val =
       localStorage.getItem('smartrun_terms_agreed') ??
+      localStorage.getItem('smartrun_consent_granted') ??
       localStorage.getItem('gp_terms_agreed') ??
       localStorage.getItem('terms_agreed');
     // If the user has explicitly unticked it, return false
@@ -80,8 +89,10 @@ const saveTermsAgreed = (agreed: boolean): void => {
   try {
     const val = String(agreed);
     localStorage.setItem('smartrun_terms_agreed', val);
+    localStorage.setItem('smartrun_consent_granted', val);
     localStorage.setItem('gp_terms_agreed', val);
     localStorage.setItem('terms_agreed', val);
+    updateGAConsent(agreed);
   } catch {
     // Ignore storage quota errors
   }
@@ -138,6 +149,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   // UI status
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
@@ -164,6 +176,113 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     return () => clearInterval(interval);
   }, [otpCooldown]);
 
+  // Google Autofill WebOTP API integration for SMS OTP auto-detection
+  useEffect(() => {
+    if (!otpSent || !showSecondField || !isPhoneInput(identifier)) return;
+    if (typeof window === 'undefined' || !('OTPCredential' in window)) return;
+
+    const ac = new AbortController();
+    try {
+      (navigator.credentials as any)
+        ?.get({
+          otp: { transport: ['sms'] },
+          signal: ac.signal
+        })
+        .then((content: any) => {
+          if (content && content.code) {
+            const codeDigits = content.code.replace(/\D/g, '').slice(0, 6);
+            if (codeDigits.length === 6) {
+              setOtpCode(codeDigits);
+              handleVerifyPhoneOtp(codeDigits);
+            }
+          }
+        })
+        .catch((err: any) => {
+          if (err?.name !== 'AbortError') {
+            console.debug('[WebOTP notice]:', err);
+          }
+        });
+    } catch {
+      // Ignore if WebOTP not supported
+    }
+
+    return () => {
+      try {
+        ac.abort();
+      } catch {}
+    };
+  }, [otpSent, showSecondField, identifier]);
+
+  // WebAuthn Passkey Conditional Autofill (zero UI intrusion - pops up in browser autofill dropdown)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let isCancelled = false;
+
+    async function initPasskeyAutofill() {
+      try {
+        const isAutofillAvailable = await browserSupportsWebAuthnAutofill();
+        if (!isAutofillAvailable || isCancelled) return;
+
+        const res = await fetch(apiUrl('/api/auth/passkey/login-options'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const data = await res.json().catch(() => null);
+        if (!data || !data.success || !data.options || isCancelled) return;
+
+        // Start conditional mediation without prompt popup: waits for user to select from autofill
+        const authResp = await startAuthentication({
+          optionsJSON: data.options,
+          useBrowserAutofill: true
+        });
+
+        if (authResp && !isCancelled) {
+          setIsLoading(true);
+          const verifyRes = await fetch(apiUrl('/api/auth/passkey/login-verify'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              response: authResp,
+              challengeToken: data.challengeToken
+            })
+          });
+          const verifyData = await verifyRes.json().catch(() => null);
+          if (verifyData && verifyData.success && verifyData.user) {
+            if (verifyData.session) {
+              await supabase.auth.setSession(verifyData.session).catch(() => {});
+            }
+            saveTermsAgreed(true);
+            const userPhone = verifyData.profile?.phone || verifyData.user?.phone || '';
+            const userName = verifyData.profile?.name || verifyData.profile?.full_name || 'Customer';
+            const userEmail = verifyData.profile?.email || verifyData.user?.email || '';
+            onAuthSuccess(userPhone, userName, userEmail, verifyData.user);
+            navigate(getPostAuthRedirect(), { replace: true });
+          } else if (verifyData?.error) {
+            setError(verifyData.error);
+          }
+        }
+      } catch (e: any) {
+        if (e?.name !== 'AbortError' && !e?.message?.includes('aborted')) {
+          console.debug('[Passkey Autofill notice]:', e);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    initPasskeyAutofill();
+
+    return () => {
+      isCancelled = true;
+      try {
+        WebAuthnAbortService.cancelCeremony();
+      } catch {}
+    };
+  }, []);
+
   const resetMessages = () => {
     setError(null);
     setInfoMessage(null);
@@ -173,7 +292,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     const next = !termsAgreed;
     setTermsAgreed(next);
     saveTermsAgreed(next);
-    if (next && error && error.includes('Terms')) {
+    if (next && error && (error.includes('Terms') || error.includes('Privacy') || error.includes('agree') || error.includes('consent'))) {
       setError(null);
     }
   };
@@ -181,7 +300,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   // --- 1. GOOGLE SIGN IN ---
   const handleGoogleSignIn = async () => {
     if (!termsAgreed) {
-      setError('Please agree to the Terms of service and Privacy policy to continue.');
+      setError('Please agree to the Privacy Policy and Terms of Service of SmartRun to continue.');
       return;
     }
     setIsGoogleLoading(true);
@@ -213,6 +332,83 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
       setError(err?.message || 'Google Sign-In encountered an issue.');
     } finally {
       setIsGoogleLoading(false);
+    }
+  };
+
+  // --- 1B. PASSKEY SIGN IN ---
+  const handlePasskeySignIn = async () => {
+    if (!termsAgreed) {
+      setError('Please agree to the Privacy Policy and Terms of Service of SmartRun to continue.');
+      return;
+    }
+    setIsPasskeyLoading(true);
+    resetMessages();
+    try {
+      // 1. Fetch passkey login options
+      const res = await fetch(apiUrl('/api/auth/passkey/login-options'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json().catch(() => null);
+      if (!data || !data.success || !data.options) {
+        throw new Error(data?.error || 'Failed to start passkey sign in.');
+      }
+
+      // 2. Open biometric / security key prompt
+      const authResp = await startAuthentication({
+        optionsJSON: data.options
+      });
+
+      // 3. Verify passkey on server
+      const verifyRes = await fetch(apiUrl('/api/auth/passkey/login-verify'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          response: authResp,
+          challengeToken: data.challengeToken
+        })
+      });
+
+      const verifyData = await verifyRes.json().catch(() => null);
+      if (verifyData && verifyData.success && verifyData.user) {
+        if (verifyData.session) {
+          await supabase.auth.setSession(verifyData.session).catch(() => {});
+        }
+        saveTermsAgreed(true);
+
+        // Resolve user identity
+        let finalPhone = verifyData.profile?.phone || verifyData.user?.phone || '';
+        let finalEmail = verifyData.profile?.email || verifyData.user?.email || '';
+        let finalName = verifyData.profile?.name || verifyData.profile?.full_name || 'Customer';
+
+        // Check if phone or email can be cross-linked
+        if (finalPhone && (!finalEmail || finalEmail.includes('@girirajpower.internal'))) {
+          try {
+            const clean10 = finalPhone.replace(/\D/g, '').slice(-10);
+            const rRes = await fetch(apiUrl('/api/auth/resolve-phone-user'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ phone: clean10 })
+            });
+            const rData = await rRes.json().catch(() => null);
+            if (rData?.profile?.email && !rData.profile.email.includes('@girirajpower.internal')) {
+              finalEmail = rData.profile.email;
+            }
+          } catch {}
+        }
+
+        onAuthSuccess(finalPhone, finalName, finalEmail, verifyData.user);
+        navigate(getPostAuthRedirect(), { replace: true });
+      } else {
+        setError(verifyData?.error || 'Passkey verification failed. Please try again or use another login method.');
+      }
+    } catch (e: any) {
+      if (e?.name !== 'NotAllowedError' && !e?.message?.includes('cancel') && !e?.message?.includes('aborted')) {
+        setError(e?.message || 'Could not complete passkey sign-in.');
+      }
+    } finally {
+      setIsPasskeyLoading(false);
     }
   };
 
@@ -254,10 +450,10 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   };
 
   // --- 3. VERIFY PHONE OTP & DETECT IF NEW OR EXISTING USER ---
-  const handleVerifyPhoneOtp = async () => {
+  const handleVerifyPhoneOtp = async (overrideOtp?: string) => {
     resetMessages();
     const phone = sentToPhone || formatToE164Phone(identifier);
-    const cleanOtp = otpCode.replace(/\D/g, '');
+    const cleanOtp = (overrideOtp ?? otpCode).replace(/\D/g, '');
     const clean10 = phone.replace(/\D/g, '').slice(-10);
 
     if (!cleanOtp || cleanOtp.length < 6) {
@@ -775,7 +971,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     resetMessages();
 
     if (!termsAgreed) {
-      setError('Please agree to the Terms of service and Privacy policy to continue.');
+      setError('Please agree to the Privacy Policy and Terms of Service of SmartRun to continue.');
       return;
     }
 
@@ -837,7 +1033,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
   };
 
-  const isAnyLoading = isLoading || isGoogleLoading;
+  const isAnyLoading = isLoading || isGoogleLoading || isPasskeyLoading;
   const isPhone = isPhoneInput(identifier);
   const isFillingSecond = showSecondField;
   const isTypingSecond = (isPhone && otpCode.length > 0) || (!isPhone && password.length > 0);
@@ -960,7 +1156,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                   )}
                   <input
                     type={isPhone ? 'tel' : 'text'}
-                    autoComplete="username tel email"
+                    autoComplete={isPhone ? 'tel webauthn' : 'username webauthn'}
                     placeholder="10-digit mobile number or email"
                     value={identifier}
                     onChange={(e) => {
@@ -1011,6 +1207,9 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                           const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
                           setOtpCode(digits);
                           if (error) setError(null);
+                          if (digits.length === 6) {
+                            handleVerifyPhoneOtp(digits);
+                          }
                         }}
                         className="w-full bg-transparent py-2 text-sm font-semibold tracking-widest text-slate-900 placeholder:text-slate-400 focus:outline-none"
                         required={showSecondField && isPhone}
@@ -1249,16 +1448,20 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
               <div className="w-10 sm:w-14 h-[1px] bg-slate-200" />
             </div>
 
-            {/* CONTINUE WITH GOOGLE BUTTON */}
-            <div>
+            {/* GOOGLE & PASSKEY AUTH BUTTONS (SAME ROW, SMALL & EQUAL) */}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+              {/* GOOGLE BUTTON */}
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isAnyLoading}
-                className="w-full py-2.5 px-4 rounded-2xl border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2.5 bg-white cursor-pointer active:scale-[0.99] disabled:opacity-50 shadow-2xs"
+                className="w-full py-2.5 px-3 rounded-2xl border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 bg-white cursor-pointer active:scale-[0.99] disabled:opacity-50 shadow-2xs"
               >
                 {isGoogleLoading ? (
-                  <span className="flex items-center gap-2 text-xs text-slate-600">Connecting Google...</span>
+                  <span className="flex items-center gap-1.5 text-xs text-slate-600">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-600" />
+                    <span>Connecting...</span>
+                  </span>
                 ) : (
                   <>
                     <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
@@ -1267,52 +1470,77 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                       <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                     </svg>
-                    <span>Continue with Google</span>
+                    <span>Google</span>
+                  </>
+                )}
+              </button>
+
+              {/* PASSKEY BUTTON */}
+              <button
+                type="button"
+                onClick={handlePasskeySignIn}
+                disabled={isAnyLoading}
+                className="w-full py-2.5 px-3 rounded-2xl border border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 bg-white cursor-pointer active:scale-[0.99] disabled:opacity-50 shadow-2xs"
+              >
+                {isPasskeyLoading ? (
+                  <span className="flex items-center gap-1.5 text-xs text-slate-600">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                    <span>Connecting...</span>
+                  </span>
+                ) : (
+                  <>
+                    <Fingerprint className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Passkey</span>
                   </>
                 )}
               </button>
             </div>
 
-            {/* TERMS OF SERVICE & PRIVACY POLICY AGREEMENT */}
-            <div className="pt-2 text-center flex justify-center w-full overflow-hidden">
+            {/* USER CONSENT & PRIVACY AGREEMENT */}
+            <div className="mt-3.5 w-full flex justify-center">
               <label
                 htmlFor="terms-agreed-tick"
-                className="inline-flex items-center justify-center gap-1 sm:gap-1.5 text-[10.5px] min-[360px]:text-[11px] sm:text-xs font-medium text-slate-800 cursor-pointer select-none whitespace-nowrap"
+                className="inline-flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] leading-normal text-slate-700 cursor-pointer select-none"
               >
+                {/* Circle Tick Box: smaller circular button, filled with black when ticked */}
                 <button
                   type="button"
                   id="terms-agreed-tick"
                   role="checkbox"
                   aria-checked={termsAgreed}
-                  aria-label="Agree to terms of service and privacy policy"
+                  aria-label="I have read and agree to Privacy Policy and Terms of Service of SmartRun"
                   onClick={handleToggleTerms}
-                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border-[1.5px] flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                  className={`w-3 h-3 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 select-none ${
                     termsAgreed
-                      ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
-                      : 'border-slate-700 bg-white hover:border-slate-900 shadow-2xs'
+                      ? 'bg-black border-black text-white shadow-2xs'
+                      : 'border-slate-500 bg-white hover:border-black'
                   }`}
                 >
-                  {termsAgreed && <Check className="w-2 h-2 sm:w-2.5 sm:h-2.5 stroke-[3.5]" />}
+                  {termsAgreed && (
+                    <Check className="w-2.5 h-2.5 text-white stroke-[3.5]" />
+                  )}
                 </button>
-                <span className="leading-none text-slate-800 tracking-tight">
+
+                <span className="text-slate-700">
                   <span onClick={handleToggleTerms} className="cursor-pointer">
-                    You agree to our{' '}
+                    I have read and agree to the{' '}
                   </span>
-                  <Link
-                    to="/terms"
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-slate-950 font-bold underline underline-offset-2 decoration-slate-400 hover:decoration-slate-900 transition-colors"
-                  >
-                    Terms of service
-                  </Link>
-                  {' '}and{' '}
                   <Link
                     to="/privacy"
                     onClick={(e) => e.stopPropagation()}
-                    className="text-slate-950 font-bold underline underline-offset-2 decoration-slate-400 hover:decoration-slate-900 transition-colors"
+                    className="text-slate-900 font-bold underline underline-offset-2 decoration-slate-300 hover:decoration-slate-900 transition-colors"
                   >
-                    Privacy policy
+                    Privacy Policy
                   </Link>
+                  {' '}and{' '}
+                  <Link
+                    to="/terms"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-slate-900 font-bold underline underline-offset-2 decoration-slate-300 hover:decoration-slate-900 transition-colors"
+                  >
+                    Terms of Service
+                  </Link>
+                  {' '}of <strong className="text-slate-950 font-extrabold">SmartRun</strong>.
                 </span>
               </label>
             </div>

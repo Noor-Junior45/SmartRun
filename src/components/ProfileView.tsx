@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  ArrowLeft,
+  ChevronLeft,
   HelpCircle,
   MapPin,
   CreditCard,
@@ -20,8 +20,14 @@ import {
   Trash2,
   Loader2,
   BookOpen,
-  Smartphone
+  Smartphone,
+  Fingerprint,
+  ShieldCheck
 } from 'lucide-react';
+import { PasskeysSubPage } from './profile/PasskeysSubPage';
+import { SecuritySubPage } from './profile/SecuritySubPage';
+import { UpdateMobileSubPage } from './profile/UpdateMobileSubPage';
+import { UpdateEmailSubPage } from './profile/UpdateEmailSubPage';
 import { useNavigate } from 'react-router-dom';
 import { Order, SavedAddress, UserProfile, CartItem, Product, WalletTransaction } from '../types';
 import { OrderHistoryView } from './OrderHistoryView';
@@ -49,6 +55,7 @@ import { PrivacyPolicySubPage } from './profile/PrivacyPolicySubPage';
 import { TermsOfServiceSubPage } from './profile/TermsOfServiceSubPage';
 import { RefundPolicySubPage } from './profile/RefundPolicySubPage';
 import { EditProfileModal } from './profile/EditProfileModal';
+import { FAQPage } from './FAQPage';
 
 interface ProfileViewProps {
   userProfile: UserProfile | null;
@@ -94,9 +101,9 @@ export const ProfileView = ({
     };
   }, []);
 
-  // Current active sub-page view: 'main' | 'orders' | 'addresses' | 'payments' | 'wallet' | 'services' | 'membership' | 'help' | 'notifications' | 'privacy' | 'terms' | 'favorites' | 'refund-policy' | 'how-to-use'
+  // Current active sub-page view: 'main' | 'orders' | 'addresses' | 'payments' | 'wallet' | 'services' | 'membership' | 'help' | 'faq' | 'notifications' | 'privacy' | 'terms' | 'favorites' | 'refund-policy' | 'how-to-use' | 'security' | 'passkeys' | 'update-mobile' | 'update-email'
   const [subPage, setSubPage] = useState<
-    'main' | 'orders' | 'addresses' | 'payments' | 'wallet' | 'services' | 'membership' | 'help' | 'notifications' | 'privacy' | 'terms' | 'favorites' | 'refund-policy' | 'how-to-use'
+    'main' | 'orders' | 'addresses' | 'payments' | 'wallet' | 'services' | 'membership' | 'help' | 'faq' | 'notifications' | 'privacy' | 'terms' | 'favorites' | 'refund-policy' | 'how-to-use' | 'security' | 'passkeys' | 'update-mobile' | 'update-email'
   >('main');
 
   // Favorites state
@@ -372,6 +379,13 @@ export const ProfileView = ({
   }
 
   // -------------------------------------------------------------
+  // SUB-PAGE: FAQ (FREQUENTLY ASKED QUESTIONS)
+  // -------------------------------------------------------------
+  if (subPage === 'faq') {
+    return <FAQPage onBack={handleSubPageBack} />;
+  }
+
+  // -------------------------------------------------------------
   // SUB-PAGE 7: COMMUNICATION PREFERENCES
   // -------------------------------------------------------------
   if (subPage === 'notifications') {
@@ -446,6 +460,53 @@ export const ProfileView = ({
   }
 
   // -------------------------------------------------------------
+  // SUB-PAGE 13: SECURITY (PASSKEY & ACCOUNT SECURITY)
+  // -------------------------------------------------------------
+  if (subPage === 'security') {
+    return (
+      <SecuritySubPage
+        onBack={handleSubPageBack}
+        onOpenPasskeys={() => setSubPage('passkeys')}
+        onOpenMobileUpdate={() => setSubPage('update-mobile')}
+        onOpenEmailUpdate={() => setSubPage('update-email')}
+      />
+    );
+  }
+
+  // -------------------------------------------------------------
+  // SUB-PAGE 14: PASSKEYS & BIOMETRICS (WEBAUTHN / FIDO2)
+  // -------------------------------------------------------------
+  if (subPage === 'passkeys') {
+    return <PasskeysSubPage userProfile={userProfile} onBack={() => setSubPage('security')} />;
+  }
+
+  // -------------------------------------------------------------
+  // SUB-PAGE 15: MOBILE NUMBER UPDATE
+  // -------------------------------------------------------------
+  if (subPage === 'update-mobile') {
+    return (
+      <UpdateMobileSubPage
+        userProfile={userProfile}
+        onBack={() => setSubPage('security')}
+        onProfileUpdated={onProfileUpdated}
+      />
+    );
+  }
+
+  // -------------------------------------------------------------
+  // SUB-PAGE 16: EMAIL UPDATE
+  // -------------------------------------------------------------
+  if (subPage === 'update-email') {
+    return (
+      <UpdateEmailSubPage
+        userProfile={userProfile}
+        onBack={() => setSubPage('security')}
+        onProfileUpdated={onProfileUpdated}
+      />
+    );
+  }
+
+  // -------------------------------------------------------------
   // PRIMARY VIEW: SWIGGY-STYLE PROFILE DASHBOARD
   // -------------------------------------------------------------
   return (
@@ -468,7 +529,7 @@ export const ProfileView = ({
             className="p-1.5 -ml-1 rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 text-white transition-all cursor-pointer flex items-center gap-1.5"
             aria-label="Go back"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ChevronLeft className="w-5 h-5 stroke-[2.2]" />
             <span className="text-xs font-medium sm:inline hidden">Back</span>
           </button>
 
@@ -544,7 +605,7 @@ export const ProfileView = ({
                   </p>
                 ) : (
                   <button
-                    onClick={handleOpenEdit}
+                    onClick={() => setSubPage('update-mobile')}
                     className="flex items-center gap-1.5 text-left text-amber-200 hover:text-white transition-colors cursor-pointer group"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 ring-2 ring-yellow-200/50 shrink-0 group-hover:scale-110 transition-transform" />
@@ -592,8 +653,8 @@ export const ProfileView = ({
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-3 sm:px-6 mt-4 sm:mt-5 space-y-4">
-        {/* VERTICAL MENU BUTTON LIST */}
+      <div className="max-w-3xl mx-auto px-3 sm:px-6 mt-4 sm:mt-5 space-y-3.5 sm:space-y-4">
+        {/* SECTION 1: FAVOURITES, ORDERS, WALLET, PAYMENT, ADDRESSES */}
         <div className="bg-white rounded-2xl border border-slate-200/80 divide-y divide-slate-100 overflow-hidden shadow-2xs">
           {/* 1. Favourites */}
           <button
@@ -687,25 +748,13 @@ export const ProfileView = ({
             </div>
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
+        </div>
 
-          {/* 6. Setting */}
+        {/* NEW SECTION: HELP CENTER & FAQ */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 divide-y divide-slate-100 overflow-hidden shadow-2xs">
+          {/* Help Center */}
           <button
-            onClick={() => setSubPage('notifications')}
-            className="w-full p-4 sm:p-4.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left cursor-pointer group"
-          >
-            <div className="flex items-center gap-3.5 sm:gap-4">
-              <div className="w-10 h-10 rounded-2xl bg-cyan-100 border border-cyan-200 text-cyan-600 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                <Settings className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-base sm:text-lg font-normal text-slate-800">Setting</p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
-          </button>
-
-          {/* 7. Help Center */}
-          <button
+            id="btn-profile-help-center"
             onClick={() => setSubPage('help')}
             className="w-full p-4 sm:p-4.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left cursor-pointer group"
           >
@@ -720,7 +769,64 @@ export const ProfileView = ({
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
 
-          {/* 8. How to Use App (User Guide) */}
+          {/* FAQ */}
+          <button
+            id="btn-profile-faq"
+            onClick={() => navigate('/faq')}
+            className="w-full p-4 sm:p-4.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left cursor-pointer group"
+          >
+            <div className="flex items-center gap-3.5 sm:gap-4">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                <HelpCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-base sm:text-lg font-normal text-slate-800">FAQ</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+          </button>
+        </div>
+
+        {/* SECTION 2: SECURITY, SETTING */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 divide-y divide-slate-100 overflow-hidden shadow-2xs">
+          {/* 6. Security */}
+          <button
+            id="btn-profile-security"
+            onClick={() => setSubPage('security')}
+            className="w-full p-4 sm:p-4.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left cursor-pointer group"
+          >
+            <div className="flex items-center gap-3.5 sm:gap-4">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-100 border border-indigo-200 text-indigo-700 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-base sm:text-lg font-normal text-slate-800">Security</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+          </button>
+
+          {/* 7. Setting */}
+          <button
+            id="btn-profile-setting"
+            onClick={() => setSubPage('notifications')}
+            className="w-full p-4 sm:p-4.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left cursor-pointer group"
+          >
+            <div className="flex items-center gap-3.5 sm:gap-4">
+              <div className="w-10 h-10 rounded-2xl bg-cyan-100 border border-cyan-200 text-cyan-600 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                <Settings className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-base sm:text-lg font-normal text-slate-800">Setting</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
+          </button>
+        </div>
+
+        {/* SECTION 3: HOW TO USE APP, PRIVACY POLICY, TERMS OF SERVICE, REFUND POLICY */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 divide-y divide-slate-100 overflow-hidden shadow-2xs">
+          {/* 9. How to Use App (User Guide) */}
           <button
             id="btn-profile-how-to-use"
             onClick={() => setSubPage('how-to-use')}
@@ -737,8 +843,7 @@ export const ProfileView = ({
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
 
-
-          {/* 9. Privacy Policy */}
+          {/* 10. Privacy Policy */}
           <button
             onClick={() => setSubPage('privacy')}
             className="w-full p-4 sm:p-4.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left cursor-pointer group"
@@ -754,7 +859,7 @@ export const ProfileView = ({
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
 
-          {/* 10. Terms of Service */}
+          {/* 11. Terms of Service */}
           <button
             onClick={() => setSubPage('terms')}
             className="w-full p-4 sm:p-4.5 flex items-center justify-between hover:bg-slate-50/80 transition-colors text-left cursor-pointer group"
@@ -770,7 +875,7 @@ export const ProfileView = ({
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
 
-          {/* 11. Refund Policy */}
+          {/* 12. Refund Policy */}
           <button
             id="btn-profile-refund-policy"
             onClick={() => setSubPage('refund-policy')}
@@ -786,8 +891,11 @@ export const ProfileView = ({
             </div>
             <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors" />
           </button>
+        </div>
 
-          {/* 12. Account Delete (Google Play Store Policy Compliant) */}
+        {/* SECTION 4: ACCOUNT DELETE */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 divide-y divide-slate-100 overflow-hidden shadow-2xs">
+          {/* 13. Account Delete (Google Play Store Policy Compliant) */}
           <button
             id="btn-profile-delete-account"
             onClick={() => navigate('/delete')}

@@ -412,9 +412,29 @@
 - [x] **Centered Sign-In Screen & Snug Terms Tick Button**:
   - **Vertical Viewport Centering**: Centered the sign-in container vertically and horizontally in the middle of the viewport (`min-h-screen flex flex-col justify-center items-center py-8 sm:py-12 my-auto`).
   - **Top-Left Back Navigation**: Positioned the back navigation button (`ArrowLeft`) at the top-left of the screen (`absolute top-4 left-4 sm:top-6 sm:left-6 z-10`), keeping the sign-in card centered without shifting.
-  - **Snug Terms Tick Button**: Formatted the entire agreement into a single clean row (`whitespace-nowrap inline-flex items-center justify-center`) across phone screens with crisp, clearly visible text (`text-slate-800 font-medium`, bold links `text-slate-950 underline`). The tick button (`button#terms-agreed-tick`) is styled circular (`rounded-full border-[1.5px] border-slate-700`, `w-3.5 h-3.5 sm:w-4 sm:h-4`) sitting directly beside "You agree to our".
+- [x] **Login Page Terms Text Size Enlargement & WebOTP / Passkey Autofill Setup**:
+  - **Enlarged Terms Text**: Increased font size of the agreement line (`You agree to our Terms of service and Privacy policy`) to `text-xs sm:text-sm` with a circular tick box (`w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full border-[1.5px] border-slate-700`) and high-contrast styling (`text-slate-800 font-medium`, bold links `text-slate-950 underline`).
+  - **Passkey Conditional UI Autofill**: Configured `autoComplete={isPhone ? 'tel' : 'username webauthn email'}` on the login identifier input so browsers and password managers (Chrome, Safari, Google Password Manager) natively display saved Passkey autofill suggestions without requiring any extra UI buttons.
+  - **Google SMS Autofill (WebOTP API)**: Integrated the official browser WebOTP API (`navigator.credentials.get({ otp: { transport: ['sms'] } })`) in `LoginPage.tsx` so Android and Chrome prompt a 1-tap "Autofill from Messages" sheet when the verification SMS arrives.
+
 - [x] **Server-Side Authentication Architecture**:
   - **Dedicated Backend Endpoints**: Added `POST /api/auth/login` and `POST /api/auth/register` to `server.ts` to handle user verification, password checks, Supabase Admin service-role execution, and Firestore sync on the server side.
   - **Server-Authoritative Phone OTP**: Made `/api/auth/send-phone-otp` and `/api/auth/verify-phone-otp` the primary flow on Web, eliminating client-side reCAPTCHA and domain mismatch errors.
   - **Client Session Synchronization**: On successful server authentication, client Supabase Auth is synchronized via `supabase.auth.setSession(data.session)` for seamless local reactivity.
+- [x] **Profile Section Reorganization & Dedicated Minimal FAQ Page**:
+  - **Profile Sections Redesign**: Reorganized profile into 5 clean sections with consistent gaps and zero extra background boxes:
+    - Section 1: Favourites, Orders, Wallet, Payment, Addresses
+    - New Section (between Section 1 & 2): Help Center button, followed directly below by the new FAQ button
+    - Section 2: Security, Setting (Help Center removed)
+    - Section 3: How to Use App, Privacy Policy, Terms of Service, Refund Policy
+    - Section 4: Account Delete
+  - **Dedicated Minimal FAQ Page (`/faq` & `FAQPage.tsx`)**:
+    - Opens in a clean dedicated page on `/faq` (and `/faqs`).
+    - Sticky top header features tailless arrow back button (`ChevronLeft`) aligned with the "FAQ" heading on the same line.
+    - Clean typography: lists all essential SmartRun questions and answers with subtle dividers (`divide-slate-100`).
+    - Zero box design (no border cards or container boxes) and no extraneous info, banners, or disclaimers.
+    - Smart onBack history navigation returning seamlessly to `/profile` or the previous route.
+- [x] **Hide Floating Order Tracking Button on Profile & All Profile Sub-Pages**:
+  - Implemented `isProfileOrSubpage` across both `FloatingLiveOrderButton.tsx` and `App.tsx`.
+  - The floating order tracking button (`div#floating-live-order-tracker > button#live-order-map-circle-btn`) is strictly hidden across the profile view and any page opened via profile buttons, including `/faq`, `/faqs`, `/delete`, `/account-deletion`, `/how-to-use`, `/guide`, `/privacy`, `/terms`, `/refund`, `/shipping`, `/about`, `/orders`, `/sitemap`, `/reset-password`, etc.
 

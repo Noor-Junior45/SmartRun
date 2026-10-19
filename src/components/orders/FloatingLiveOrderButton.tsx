@@ -7,18 +7,43 @@ interface FloatingLiveOrderButtonProps {
   onClick: () => void;
 }
 
+export const isProfileOrSubpage = (pathname: string): boolean => {
+  const p = pathname.toLowerCase();
+  return (
+    p.startsWith('/profile') ||
+    p.startsWith('/orders') ||
+    p.startsWith('/live-order') ||
+    p.startsWith('/track-order') ||
+    p.startsWith('/cart') ||
+    p.startsWith('/faq') ||
+    p.startsWith('/faqs') ||
+    p.startsWith('/delete') ||
+    p.startsWith('/account-deletion') ||
+    p.startsWith('/how-to-use') ||
+    p.startsWith('/guide') ||
+    p.startsWith('/privacy') ||
+    p.startsWith('/terms') ||
+    p.startsWith('/refund') ||
+    p.startsWith('/shipping') ||
+    p.startsWith('/about') ||
+    p.startsWith('/sitemap') ||
+    p.startsWith('/reset-password') ||
+    p.startsWith('/login') ||
+    p.startsWith('/auth') ||
+    p.includes('/product/')
+  );
+};
+
 export const FloatingLiveOrderButton = ({
   order,
   onClick
 }: FloatingLiveOrderButtonProps) => {
   const location = useLocation();
 
-  // Condition: Only show when order exists, NOT on profile, live-order, or cart pages, and NOT yet delivered or cancelled/failed
+  // Condition: Only show when order exists, NOT on profile or any page opened from profile buttons, NOT on live-order or cart, and NOT yet delivered or cancelled/failed
   if (
     !order ||
-    location.pathname.startsWith('/profile') ||
-    location.pathname.startsWith('/live-order') ||
-    location.pathname.startsWith('/cart') ||
+    isProfileOrSubpage(location.pathname) ||
     order.status === 'delivered' ||
     order.status === 'cancelled' ||
     order.status === 'failed'

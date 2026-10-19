@@ -122,11 +122,29 @@
         }
       }
     </script>
-    <!-- Google tag (gtag.js) -->
+    <!-- Google tag (gtag.js) with Consent Mode -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-E3TVJRTKRP"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
+      
+      // Default consent state: Check saved user consent from localStorage
+      var savedConsent = 'granted';
+      try {
+        if (localStorage.getItem('smartrun_consent_granted') === 'false' || localStorage.getItem('smartrun_terms_agreed') === 'false') {
+          savedConsent = 'denied';
+        }
+      } catch (e) {}
+
+      gtag('consent', 'default', {
+        'analytics_storage': savedConsent,
+        'ad_storage': savedConsent,
+        'ad_user_data': savedConsent,
+        'ad_personalization': savedConsent,
+        'functionality_storage': 'granted',
+        'security_storage': 'granted'
+      });
+
       gtag('js', new Date());
 
       gtag('config', 'G-E3TVJRTKRP', {
@@ -448,6 +466,8 @@
         }
       }, 1500);
     </script>
+    <!-- Container for Firebase Phone Auth reCAPTCHA verification -->
+    <div id="recaptcha-container"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

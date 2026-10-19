@@ -1060,6 +1060,86 @@ export async function linkEmailToUser(
   }
 }
 
+/**
+ * Sends an email verification OTP for updating the email address using Supabase Auth with server fallback.
+ */
+export async function sendEmailChangeOtp(
+  newEmail: string
+): Promise<{ success: boolean; error?: string }> {
+  const cleanEmail = newEmail.trim().toLowerCase();
+  try {
+    // 1. Primary: Trigger Supabase Auth updateUser which dispatches email confirmation/OTP
+    const { error } = await supabase.auth.updateUser({ email: cleanEmail });
+    if (!error) {
+      return { success: true };
+    }
+
+    // If Supabase returned an error (e.g. rate limit), try fallback server email OTP
+    const srvRes = await fetch(apiUrl('/api/auth/send-email-otp'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail })
+    });
+    const srvData = await srvRes.json().catch(() => null);
+    if (srvRes.ok && srvData?.success) {
+      return { success: true };
+    }
+
+    return { success: false, error: error.message };
+  } catch (err: any) {
+    try {
+      const srvRes = await fetch(apiUrl('/api/auth/send-email-otp'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail })
+      });
+      const srvData = await srvRes.json().catch(() => null);
+      if (srvRes.ok && srvData?.success) {
+        return { success: true };
+      }
+    } catch {}
+    return { success: false, error: err?.message || 'Failed to dispatch email verification OTP.' };
+  }
+}
+
+/**
+ * Verifies email change OTP with Supabase verifyOtp (type: 'email_change') with server fallback.
+ */
+export async function verifyEmailChangeOtp(
+  newEmail: string,
+  token: string
+): Promise<{ success: boolean; error?: string }> {
+  const cleanEmail = newEmail.trim().toLowerCase();
+  const cleanToken = token.trim();
+  try {
+    // 1. Primary: Verify with Supabase Auth email_change OTP
+    const { error } = await supabase.auth.verifyOtp({
+      email: cleanEmail,
+      token: cleanToken,
+      type: 'email_change'
+    });
+
+    if (!error) {
+      return { success: true };
+    }
+
+    // 2. Secondary fallback: Verify with server-side email OTP
+    const srvRes = await fetch(apiUrl('/api/auth/verify-email-otp'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, otp: cleanToken })
+    });
+    const srvData = await srvRes.json().catch(() => null);
+    if (srvRes.ok && srvData?.success) {
+      return { success: true };
+    }
+
+    return { success: false, error: error.message || 'Invalid or expired OTP code.' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Error verifying email code.' };
+  }
+}
+
 let isLoggingOut = false;
 
 export function isUserLoggingOut(): boolean {
