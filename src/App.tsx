@@ -7,6 +7,7 @@ import { Header } from './components/Header';
 import { LocationModal } from './components/LocationModal';
 import { DeviceLocationPromptModal } from './components/DeviceLocationPromptModal';
 import { LoginPage } from './components/LoginPage';
+import { PersonalInfoPage } from './components/PersonalInfoPage';
 import { ProfileView } from './components/ProfileView';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { CartView } from './components/CartView';
@@ -2044,6 +2045,29 @@ export default function App() {
             path="/auth"
             element={<Navigate to="/login" replace />}
           />
+          <Route
+            path="/personal-info"
+            element={
+              <PersonalInfoPage
+                initialPhone={userPhone || userProfile?.phone || ''}
+                initialName={userName && userName !== 'Customer' ? userName : ''}
+                initialEmail={userProfile?.email || ''}
+                initialDob={userProfile?.dob || ''}
+                isPhoneVerified={Boolean(userPhone || userProfile?.phone)}
+                onSuccess={(phone, name, email, userObj) => {
+                  handleAuthSuccess(phone, name, email, userObj);
+                  navigate('/', { replace: true });
+                }}
+                onBack={() => {
+                  if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
+                    navigate(-1);
+                  } else {
+                    navigate('/');
+                  }
+                }}
+              />
+            }
+          />
 
           {/* HOME / DEFAULT ROUTE - MODERN WHOLESALE B2B & B2C HOME */}
           <Route
@@ -2200,7 +2224,7 @@ export default function App() {
       />
 
       {/* Zomato-style Floating Map Route Circle Button for Current Active Order (Navigates directly to dedicated live order page, hidden on profile tab, all pages opened from profile buttons, cart page, product details, and live-order pages) */}
-      {!isProfileOrSubpage(location.pathname) && activeTab !== 'cart' && (
+      {!isProfileOrSubpage(location.pathname) && activeTab !== 'cart' && activeTab !== 'profile' && (
         <FloatingLiveOrderButton
           order={activeLiveOrder}
           onClick={() => navigate('/live-order')}

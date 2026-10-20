@@ -435,6 +435,37 @@
     - Zero box design (no border cards or container boxes) and no extraneous info, banners, or disclaimers.
     - Smart onBack history navigation returning seamlessly to `/profile` or the previous route.
 - [x] **Hide Floating Order Tracking Button on Profile & All Profile Sub-Pages**:
-  - Implemented `isProfileOrSubpage` across both `FloatingLiveOrderButton.tsx` and `App.tsx`.
+  - Implemented `isProfileOrSubpage` and `activeTab !== 'profile'` across both `FloatingLiveOrderButton.tsx` and `App.tsx`.
   - The floating order tracking button (`div#floating-live-order-tracker > button#live-order-map-circle-btn`) is strictly hidden across the profile view and any page opened via profile buttons, including `/faq`, `/faqs`, `/delete`, `/account-deletion`, `/how-to-use`, `/guide`, `/privacy`, `/terms`, `/refund`, `/shipping`, `/about`, `/orders`, `/sitemap`, `/reset-password`, etc.
+- [x] **Tailless Arrow Back Button Across All Profile Sub-Pages**:
+  - Standardized all top headers across every page and sub-page accessible from Profile buttons to use the clean tailless arrow back button (`ChevronLeft className="w-6 h-6 stroke-[2.2]"`).
+  - Replaced `ArrowLeft` with `ChevronLeft` across `PrivacyPolicyPage.tsx`, `TermsOfServicePage.tsx`, `RefundPolicy.tsx`, `LegalViews.tsx`, and `SitemapPage.tsx`, establishing 100% visual uniformity across Favourites, Orders, Wallet, Payment, Addresses, Help Center, FAQ, Security, Settings, How to Use App, Privacy Policy, Terms of Service, Refund Policy, and Account Deletion.
+- [x] **Setting Tab Redesign (Clean Notification Section & Short Format)**:
+  - Removed "Communication Alerts" header box and message text line completely.
+  - Added standalone normal `Notification` heading at the starting alone without any background box or extraneous design.
+  - Removed descriptions from all 4 buttons/toggles.
+  - Renamed all button labels into clean short format (`Push notification`, `WhatsApp`, `SMS`, `Email`).
+  - Preserved identical toggle switch design, smooth animations, and interactive state handlers.
+- [x] **Edit Profile Modal Input Dimensions & Tablet Equalization**:
+  - Diagnosed that `input[type="date"]` (Date of Birth) and `input[type="text"]` (Full Name) had unequal rendered heights on tablets/WebKit due to date-picker pseudo-element font metrics and absence of explicit height constraints.
+  - Standardized both inputs with strictly equal dimensions: `w-full h-11 min-h-[44px] max-h-[44px] px-3.5 py-0 rounded-xl border border-slate-300 text-xs font-bold font-sans box-border appearance-none leading-[42px]`.
+  - Added symmetrical label headers (`h-5 mb-1.5`) featuring matching icons (`User` and `Calendar`).
+  - Added `appearance-none` and WebKit date-picker normalization (`[&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:m-0 [&::-webkit-date-and-time-value]:p-0 [&::-webkit-date-and-time-value]:min-h-0 [&::-webkit-date-and-time-value]:leading-[42px] [&::-webkit-calendar-picker-indicator]:cursor-pointer`) to guarantee both boxes are visually and dimensionally identical across tablet, mobile, and desktop viewports.
+  - Standardized the bottom action buttons (`Cancel` and `Save Changes`) with `h-11 min-h-[44px]` for consistent vertical rhythm.
+- [x] **Official Email Sender Updated to `team@smartrun.in`**:
+  - Tested and verified that the official production domain `smartrun.in` is fully verified in Resend.
+  - Updated `getSenderFromEmail()` and `dispatchResendEmail()` in `server.ts` to use `SmartRun <team@smartrun.in>` as the primary production sender for all application emails, notifications, and OTP verification dispatches.
+  - Updated `/api/auth/send-email-otp` to dispatch from `SmartRun <team@smartrun.in>`, verified live with HTTP 200 delivery to external inboxes.
+- [x] **Header & Search Bar Scroll Flicker Elimination**:
+  - **Root Cause**:
+    1. A single strict `scrollY > 20` threshold without hysteresis caused rapid state flipping between expanded and collapsed states whenever users scrolled up or stopped between 15px and 25px.
+    2. `<header>` had `transition-all` which forced the entire navigation bar to re-animate dimensions and layout on active scroll.
+    3. Triple-nested `backdrop-blur` filters (`<header backdrop-blur-md>`, `Row 2 backdrop-blur-md`, and `search input backdrop-blur-xl`) triggered GPU composite layer thrashing and subpixel jitter in WebKit and Chromium.
+  - **Resolution**:
+    1. Added scroll hysteresis with `requestAnimationFrame`: collapses only when scrolling down past 75px, and re-expands only when scrolling up near the very top (under 25px). The 50px deadband completely eliminates threshold oscillation when the page stops at any scroll point.
+    2. Removed `transition-all` from `<header>` root; isolated it onto its own hardware-accelerated GPU layer with `[transform:translateZ(0)] [backface-visibility:hidden] will-change-transform`.
+    3. Eliminated conflicting nested backdrop blurs on Row 2 (`bg-white/95 [transform:translateZ(0)]`) and replaced search bar `transition-all` with targeted `transition-colors duration-150`, delivering zero-jitter, fluid scrolling.
+
+
+
 

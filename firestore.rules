@@ -115,6 +115,11 @@ service cloud.firestore {
       allow read, write: if isValidId(phone);
     }
 
+    // Email Lookup Index for Identity Resolution
+    match /users_by_email/{emailKey} {
+      allow read, write: if isValidId(emailKey);
+    }
+
     // Phone OTP Verification Tracking
     match /phone_otps/{phone} {
       allow read, write: if isValidId(phone);

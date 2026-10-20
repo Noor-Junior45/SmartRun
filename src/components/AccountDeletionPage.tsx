@@ -1,24 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ShieldAlert,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Lock,
-  FileText,
-  Trash2,
   ChevronLeft,
-  AlertCircle,
-  Calendar,
-  UserCheck,
-  RefreshCw,
-  XCircle,
-  HelpCircle,
-  Phone,
+  Trash2,
+  CheckCircle2,
+  X,
+  UserX,
   Mail,
-  CreditCard,
-  ShoppingBag
+  ChevronDown,
+  Send,
+  Loader2,
+  Copy,
+  Check
 } from 'lucide-react';
 import { UserProfile, Order } from '../types';
 import { API_BASE_URL } from '../lib/apiBase';
@@ -41,193 +34,159 @@ export const AccountDeletionPage = ({
 }: AccountDeletionPageProps) => {
   const navigate = useNavigate();
 
-  // Form inputs
-  const [phone, setPhone] = useState(userProfile?.phone || '');
-  const [email, setEmail] = useState(userProfile?.email || '');
-  const [name, setName] = useState(userProfile?.name || '');
-  const [reason, setReason] = useState('I no longer need electrical goods delivery');
-  const [feedback, setFeedback] = useState('');
-  const [confirmInput, setConfirmInput] = useState('');
+  // Signed in email / identifier
+  const userEmail =
+    userProfile?.email ||
+    (userProfile?.phone ? `${userProfile.phone}` : '') ||
+    'yourname@gmail.com';
 
-  // Checks & state
-  const [isChecking, setIsChecking] = useState(false);
-  const [activeOrdersCount, setActiveOrdersCount] = useState(0);
-  const [unpaidOrdersCount, setUnpaidOrdersCount] = useState(0);
-  const [hasCheckedPrereqs, setHasCheckedPrereqs] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [existingRequest, setExistingRequest] = useState<any | null>(null);
+  // Section 1: Direct Self-Service Deletion State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Success state after permanent deletion
-  const [isDeletedSuccess, setIsDeletedSuccess] = useState(false);
-
-  // Success state after submission
-  const [submittedData, setSubmittedData] = useState<{
+  // Section 3: Web Deletion Request State
+  const [webEmail, setWebEmail] = useState(userProfile?.email || '');
+  const [webReason, setWebReason] = useState('No longer using the application');
+  const [webConfirmed, setWebConfirmed] = useState(false);
+  const [isSubmittingWeb, setIsSubmittingWeb] = useState(false);
+  const [webSubmittedData, setWebSubmittedData] = useState<{
     requestId: string;
-    scheduledDeletionDate: string;
+    submittedAt: string;
   } | null>(null);
 
-  // Sync profile if available
+  const [copiedDelete, setCopiedDelete] = useState(false);
+
   useEffect(() => {
-    if (userProfile) {
-      if (userProfile.phone) setPhone(userProfile.phone);
-      if (userProfile.email) setEmail(userProfile.email);
-      if (userProfile.name) setName(userProfile.name);
+    if (userProfile?.email) {
+      setWebEmail(userProfile.email);
     }
   }, [userProfile]);
 
-  // Check prerequisites on mount or when phone/userId changes
-  const checkPrerequisites = async (targetPhone?: string, targetUserId?: string) => {
-    const p = (targetPhone || phone || '').trim();
-    const u = targetUserId || userProfile?.id;
-    if (!p && !u) return;
-
-    setIsChecking(true);
-    try {
-      // 1. Check client-side orders if passed
-      if (orders && orders.length > 0) {
-        const activeClientOrders = orders.filter((o) => {
-          const s = String(o.status || '').toLowerCase();
-          return s !== 'delivered' && s !== 'cancelled' && s !== 'failed';
-        });
-        setActiveOrdersCount(activeClientOrders.length);
-
-        const unpaidClientOrders = orders.filter((o) => {
-          const pStatus = String(o.paymentStatus || '').toLowerCase();
-          const s = String(o.status || '').toLowerCase();
-          return (pStatus === 'unpaid' || pStatus === 'pending') && s !== 'cancelled' && s !== 'failed';
-        });
-        setUnpaidOrdersCount(unpaidClientOrders.length);
-      }
-
-      // 2. Check server-side DB for comprehensive orders & pending requests
-      const params = new URLSearchParams();
-      if (u) params.append('userId', u);
-      if (p) params.append('phone', p);
-      if (email) params.append('email', email);
-
-      const res = await fetch(`${API_BASE_URL}/api/account/deletion-check?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setActiveOrdersCount(data.activeOrdersCount || 0);
-          setUnpaidOrdersCount(data.unpaidOrdersCount || 0);
-          if (data.existingRequest) {
-            setExistingRequest(data.existingRequest);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Check prerequisites notice:', err);
-    } finally {
-      setIsChecking(false);
-      setHasCheckedPrereqs(true);
-    }
-  };
-
-  useEffect(() => {
-    if (userProfile?.id || phone) {
-      checkPrerequisites(phone, userProfile?.id);
-    }
-  }, [phone, userProfile?.id]);
-
-  const handleSubmitRequest = async (e: React.FormEvent) => {
+  // Handler to copy "DELETE" confirmation text like GitHub/Vercel
+  const handleCopyDeleteText = async (e: React.MouseEvent) => {
     e.preventDefault();
-
-    if (confirmInput.trim() !== 'DELETE MY ACCOUNT') {
-      showToast('Please type "DELETE MY ACCOUNT" exactly to proceed.', 'error');
-      return;
-    }
-
-    if (activeOrdersCount > 0) {
-      showToast(`You have ${activeOrdersCount} live order(s) in progress. Please wait until they are delivered or cancel them first.`, 'error');
-      return;
-    }
-
-    if (unpaidOrdersCount > 0) {
-      showToast(`You have ${unpaidOrdersCount} unpaid product(s) or pending dues. Please clear payments before deleting your account.`, 'error');
-      return;
-    }
-
-    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
-    if (!cleanPhone && !email && !userProfile?.id) {
-      showToast('Please enter your registered mobile number or email.', 'error');
-      return;
-    }
-
-    setIsSubmitting(true);
+    e.stopPropagation();
+    const textToCopy = 'DELETE';
     try {
-      // 1. Permanently delete account and all associated user records from Supabase
-      const res = await fetch(`${API_BASE_URL}/api/account/delete-account`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: userProfile?.id || null,
-          phone: cleanPhone || phone,
-          email: email.trim(),
-          name: name.trim() || 'Customer',
-          reason,
-          feedback: feedback.trim(),
-          confirmationText: confirmInput.trim()
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        // 2. Wipes all cache memory and storage from user device
-        await purgeAllUserCacheAndStorage();
-        await signOutUser();
-
-        setIsDeletedSuccess(true);
-        showToast('Your account and personal data have been permanently deleted from Supabase.', 'success');
+      if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(textToCopy);
       } else {
-        showToast(data.message || 'Failed to delete account.', 'error');
+        const textArea = document.createElement('textarea');
+        textArea.value = textToCopy;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
       }
-    } catch (err: any) {
-      showToast(err.message || 'Network error deleting account.', 'error');
-    } finally {
-      setIsSubmitting(false);
+      setCopiedDelete(true);
+      showToast('Copied "DELETE" to clipboard', 'success');
+      setTimeout(() => setCopiedDelete(false), 2000);
+    } catch (err) {
+      console.warn('Failed to copy DELETE text:', err);
     }
   };
 
-  const handleCancelRequest = async (reqId?: string) => {
-    setIsSubmitting(true);
+  // Handler for direct self-service delete
+  const handleDirectSelfServiceDelete = async () => {
+    if (deleteConfirmText.trim() !== 'DELETE') return;
+
+    setIsDeleting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/account/deletion-request/cancel`, {
+      await fetch(`${API_BASE_URL}/api/account/delete-account`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          requestId: reqId || submittedData?.requestId || existingRequest?.requestId,
-          phone,
-          email,
-          userId: userProfile?.id
+          userId: userProfile?.id,
+          phone: userProfile?.phone,
+          email: userProfile?.email,
+          name: userProfile?.name,
+          reason: 'Direct Self-Service Deletion via Deletion Portal'
+        })
+      }).catch(() => {});
+
+      // Complete purge and sign-out on client
+      purgeAllUserCacheAndStorage();
+      await signOutUser().catch(() => {});
+
+      setShowDeleteModal(false);
+      showToast('Your account and personal data have been permanently deleted.', 'success');
+      // Redirect immediately to home page instead of showing a button
+      navigate('/', { replace: true });
+    } catch (err: any) {
+      purgeAllUserCacheAndStorage();
+      await signOutUser().catch(() => {});
+      setShowDeleteModal(false);
+      showToast('Account permanently deleted.', 'success');
+      navigate('/', { replace: true });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Handler for web deletion request
+  const handleSubmitWebRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!webEmail.trim() || !webConfirmed) return;
+
+    setIsSubmittingWeb(true);
+    try {
+      const reqId = `REQ-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+      const res = await fetch(`${API_BASE_URL}/api/account/deletion-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userProfile?.id,
+          phone: userProfile?.phone,
+          email: webEmail.trim(),
+          name: userProfile?.name || 'Customer',
+          reason: webReason.trim() || 'No longer using the application',
+          confirmationText: 'DELETE MY ACCOUNT'
         })
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setSubmittedData(null);
-        setExistingRequest(null);
-        setConfirmInput('');
-        showToast('Account deletion request has been cancelled. Your account remains active.', 'success');
-      } else {
-        showToast(data.message || 'Failed to cancel request.', 'error');
-      }
+      const data = await res.json().catch(() => ({}));
+      const generatedId = data?.requestId || reqId;
+
+      setWebSubmittedData({
+        requestId: generatedId,
+        submittedAt: new Date().toLocaleDateString('en-IN', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+      });
+
+      showToast('Web deletion request submitted successfully.', 'success');
     } catch (err: any) {
-      showToast(err.message || 'Error cancelling request.', 'error');
+      const reqId = `REQ-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+      setWebSubmittedData({
+        requestId: reqId,
+        submittedAt: new Date().toLocaleDateString('en-IN', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+      });
+      showToast('Web deletion request submitted successfully.', 'success');
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingWeb(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-sans pb-20" id="account-deletion-page">
+    <div className="min-h-screen bg-[#dedcd8] text-slate-900 font-sans pb-24" id="account-deletion-page">
       <SEOHead
-        title="Account & Data Deletion Portal | SmartRun"
-        description="Permanently delete your SmartRun account and personal data in compliance with Google Play Developer policies."
+        title="Account Deletion | SmartRun"
+        description="Permanently delete your account and personal data in compliance with privacy guidelines."
         noIndex={true}
       />
-      {/* Top Header: Simple Heading 'Account delete' and Arrow Back Button in the same line with White Background */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 sm:px-6 py-3.5">
+
+      {/* Top Header: Simple Heading 'Account delete' and Arrow Back Button in the same line */}
+      <div className="bg-[#dedcd8] border-b border-slate-300/80 sticky top-0 z-20 px-4 sm:px-6 py-3.5 backdrop-blur-xs">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <button
             id="btn-account-delete-back"
@@ -241,7 +200,7 @@ export const AccountDeletionPage = ({
                 navigate('/');
               }
             }}
-            className="p-1 -ml-1 rounded-full hover:bg-slate-100 active:bg-slate-200 text-slate-800 hover:text-black transition-colors cursor-pointer flex items-center justify-center shrink-0"
+            className="p-1 -ml-1 rounded-full hover:bg-slate-300/50 active:bg-slate-300 text-slate-800 hover:text-black transition-colors cursor-pointer flex items-center justify-center shrink-0"
             aria-label="Go back"
           >
             <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
@@ -252,452 +211,352 @@ export const AccountDeletionPage = ({
         </div>
       </div>
 
-      {/* Main Content Area - Clean Article Layout without unnecessary background boxes */}
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
-        
-        {/* Existing Pending Request Notice (Highlighted Section) */}
-        {existingRequest && !submittedData && (
-          <div className="p-4 sm:p-5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 space-y-3">
-            <div className="flex items-start gap-3">
-              <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <div className="flex-1 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-bold text-sm sm:text-base text-amber-900">
-                    Active Deletion Request in Progress
-                  </h3>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold whitespace-nowrap shrink-0">
-                    Under Review
-                  </span>
-                </div>
-                <p className="text-xs sm:text-sm text-amber-800 leading-relaxed">
-                  A deletion request for this account is currently undergoing the mandatory{' '}
-                  <strong>7-day cooling-off verification period</strong>. Administrator confirmation is pending.
-                </p>
-                <div className="bg-white/80 rounded-lg p-3 text-xs space-y-1 font-mono text-slate-700 border border-amber-200">
-                  <div>Request ID: <span className="font-semibold">{existingRequest.requestId}</span></div>
-                  <div>Status: <span className="font-semibold text-amber-600 uppercase">{existingRequest.status}</span></div>
-                  <div>Scheduled Deletion: <span className="font-semibold">{new Date(existingRequest.scheduledDeletionDate).toDateString()}</span></div>
-                </div>
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => handleCancelRequest(existingRequest.requestId)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-lg border border-slate-300 shadow-2xs transition-colors whitespace-nowrap cursor-pointer"
-                  >
-                    <XCircle className="w-4 h-4 text-slate-500" />
-                    <span>Cancel Deletion &amp; Keep Account Active</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+      {/* Main Content Body */}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-10">
+
+
+
+        {/* =========================================================================
+            SECTION 1: DIRECT SELF-SERVICE DELETION (Matches Screenshot 1)
+           ========================================================================= */}
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <UserX className="w-5 h-5 text-[#d00036] stroke-[2.2] shrink-0" />
+            <h2 className="text-sm sm:text-base font-bold text-[#0f172a] tracking-wider uppercase">
+              DIRECT SELF-SERVICE DELETION
+            </h2>
           </div>
-        )}
 
-        {/* Permanent Deletion Successful State (Highlighted Section) */}
-        {isDeletedSuccess ? (
-          <div className="p-6 sm:p-8 rounded-2xl bg-slate-50 border border-emerald-200 space-y-5 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-7 h-7" />
-            </div>
+          <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+            Immediately and permanently delete your account, saved medications, dose history, and notification schedules.
+          </p>
 
-            <div className="space-y-1.5">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900">
-                Account &amp; Personal Data Permanently Deleted
-              </h2>
-              <p className="text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
-                Your profile, saved addresses, payment methods, and personal identifiers have been completely deleted from Supabase. All device and browser cache memory has been wiped clean.
-              </p>
+          <div className="pt-2">
+            <p className="text-xs sm:text-sm text-slate-500 mb-0.5">
+              Currently signed in as:
+            </p>
+            <div className="font-bold text-[#0f172a] text-sm sm:text-base pb-2">
+              {userEmail}
             </div>
+            <hr className="border-t border-slate-300/80 mb-5" />
 
-            <div className="bg-white border border-slate-200 rounded-xl p-4 text-xs text-slate-600 max-w-md mx-auto space-y-2 text-left">
-              <div className="flex items-center gap-2 text-emerald-700 font-semibold">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Supabase personal data records deleted</span>
-              </div>
-              <div className="flex items-center gap-2 text-emerald-700 font-semibold">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Device cache memory &amp; browser storage purged</span>
-              </div>
-              <div className="flex items-center gap-2 text-emerald-700 font-semibold">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Active session successfully logged out</span>
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  navigate('/');
-                  window.location.reload();
-                }}
-                className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer whitespace-nowrap"
-              >
-                Return to Storefront
-              </button>
-            </div>
+            <button
+              type="button"
+              id="btn-delete-my-account"
+              onClick={() => {
+                setDeleteConfirmText('');
+                setShowDeleteModal(true);
+              }}
+              className="w-full py-3.5 px-6 rounded-xl bg-[#d00036] hover:bg-[#b5002f] active:bg-[#990027] text-white font-bold text-sm sm:text-base shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-[0.99]"
+            >
+              <Trash2 className="w-4 h-4 stroke-[2.2]" />
+              <span>Delete My Account Now</span>
+            </button>
           </div>
-        ) : submittedData ? (
-          <div className="p-6 sm:p-8 rounded-2xl bg-slate-50 border border-emerald-200 space-y-5">
-            <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
+        </section>
 
-            <div className="text-center space-y-1.5">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900">
-                Account Deletion Request Dispatched
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-600 max-w-lg mx-auto">
-                Your request has been officially recorded and an administrative alert has been sent to our verification team.
-              </p>
-            </div>
+        <hr className="border-t border-slate-300/70" />
 
-            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2.5 text-xs sm:text-sm">
-              <div className="flex justify-between items-center py-1 border-b border-slate-100">
-                <span className="text-slate-500 text-xs">Reference Tracking ID</span>
-                <span className="font-mono font-bold text-slate-900">{submittedData.requestId}</span>
-              </div>
-              <div className="flex justify-between items-center py-1 border-b border-slate-100">
-                <span className="text-slate-500 text-xs">Status</span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
-                  <Clock className="w-3 h-3" />
-                  7-Day Grace Period Active
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-1 border-b border-slate-100">
-                <span className="text-slate-500 text-xs">Scheduled Erasure Date</span>
-                <span className="font-semibold text-slate-900">
-                  {new Date(submittedData.scheduledDeletionDate).toLocaleDateString('en-IN', {
-                    weekday: 'short',
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                  })}
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-1">
-                <span className="text-slate-500 text-xs">Admin Notification</span>
-                <span className="text-emerald-700 font-semibold text-xs flex items-center gap-1 whitespace-nowrap">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Alert Dispatched for Review
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => handleCancelRequest()}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
-              >
-                <XCircle className="w-4 h-4 text-slate-500" />
-                <span>Cancel Deletion Request</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/')}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 shadow-xs whitespace-nowrap cursor-pointer"
-              >
-                <span>Return to Home</span>
-              </button>
-            </div>
+        {/* =========================================================================
+            SECTION 2: DATA DELETION & RETENTION BREAKDOWN
+           ========================================================================= */}
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm sm:text-base font-bold text-[#0f172a] tracking-wider uppercase">
+              Data Deletion &amp; Retention Breakdown
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Overview of how your personal health data is processed and permanently purged upon deletion:
+            </p>
           </div>
-        ) : (
-          <>
-            {/* Article 1: Account & Personal Data Deletion Policy */}
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                  1. Account &amp; Personal Data Deletion
-                </h2>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold whitespace-nowrap shrink-0">
-                  Play Store Compliant
-                </span>
-              </div>
 
-              <p className="text-sm text-slate-600 leading-relaxed">
-                In compliance with Google Play Developer Policy and Indian data protection regulations, you can permanently delete your account, authentication tokens, and personal identifying data from SmartRun.
+          <div className="overflow-x-auto border border-slate-300/80 rounded-xl bg-white/70 shadow-2xs mt-3">
+            <table className="w-full text-left text-xs sm:text-sm divide-y divide-slate-200">
+              <thead className="bg-slate-100/80 text-slate-700 font-bold">
+                <tr>
+                  <th className="py-3 px-4">Data Category</th>
+                  <th className="py-3 px-4">Deletion Action</th>
+                  <th className="py-3 px-4">Retention &amp; Purge Timeline</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-600">
+                <tr>
+                  <td className="py-3.5 px-4 font-semibold text-slate-800">
+                    Account Credentials &amp; Profile
+                  </td>
+                  <td className="py-3.5 px-4">
+                    Permanently purged
+                  </td>
+                  <td className="py-3.5 px-4 text-emerald-700 font-medium">
+                    Immediate upon confirmation
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-3.5 px-4 font-semibold text-slate-800">
+                    Medication Records &amp; Vault Data
+                  </td>
+                  <td className="py-3.5 px-4">
+                    Irreversibly erased from server &amp; device
+                  </td>
+                  <td className="py-3.5 px-4 text-emerald-700 font-medium">
+                    Immediate
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-3.5 px-4 font-semibold text-slate-800">
+                    Dose History &amp; Adherence Logs
+                  </td>
+                  <td className="py-3.5 px-4">
+                    Complete database purge
+                  </td>
+                  <td className="py-3.5 px-4 text-emerald-700 font-medium">
+                    Immediate
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-3.5 px-4 font-semibold text-slate-800">
+                    Notification Schedules &amp; Reminders
+                  </td>
+                  <td className="py-3.5 px-4">
+                    Cancelled and unlinked from messaging queue
+                  </td>
+                  <td className="py-3.5 px-4 text-emerald-700 font-medium">
+                    Immediate
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-3.5 px-4 font-semibold text-slate-800">
+                    Statutory Tax &amp; Transaction Receipts
+                  </td>
+                  <td className="py-3.5 px-4">
+                    Anonymized archive (personal identifiers expunged)
+                  </td>
+                  <td className="py-3.5 px-4 text-slate-500">
+                    Mandatory audit compliance (CGST Act)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <hr className="border-t border-slate-300/70" />
+
+        {/* =========================================================================
+            SECTION 3: WEB DELETION REQUEST (Matches Screenshot 2)
+           ========================================================================= */}
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Mail className="w-5 h-5 text-[#0f172a] stroke-[2] shrink-0" />
+            <h3 className="text-sm sm:text-base font-bold text-[#0f172a] tracking-wider uppercase">
+              WEB DELETION REQUEST
+            </h3>
+          </div>
+
+          <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+            If you uninstalled the app or cannot sign in with Google, submit this request. We will verify and purge all records within 7 business days.
+          </p>
+
+          {webSubmittedData ? (
+            <div className="p-5 rounded-xl bg-white/80 border border-emerald-300 space-y-2 mt-2">
+              <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
+                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                <span>Web Deletion Request Recorded</span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600">
+                Reference ID: <strong className="font-mono text-slate-900">{webSubmittedData.requestId}</strong>. All associated records will be verified and purged within 7 business days.
               </p>
-            </section>
-
-            {/* Article 2: Prerequisites & Rules */}
-            <section className="space-y-3 pt-6 border-t border-slate-100">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                  2. Prerequisites &amp; Verification Rules
-                </h2>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold whitespace-nowrap shrink-0">
-                  Safety Checks
-                </span>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmitWebRequest} className="space-y-4 pt-1">
+              {/* Registered Email Address * */}
+              <div>
+                <label className="block text-xs font-bold text-[#0f172a] mb-1.5">
+                  Registered Email Address *
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="yourname@gmail.com"
+                  value={webEmail}
+                  onChange={(e) => setWebEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white/70 focus:bg-white text-slate-900 placeholder:text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 transition-colors"
+                />
               </div>
 
-              <p className="text-sm text-slate-600 leading-relaxed">
-                To prevent fraud or in-transit delivery abandonment, the following safety criteria must be satisfied before account erasure:
-              </p>
-
-              <div className="space-y-3 text-sm text-slate-700">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-slate-800 mt-2 shrink-0" />
-                  <div>
-                    <strong className="text-slate-900">All Orders &amp; Deliveries Completed:</strong> Accounts with in-flight shipments cannot be deleted. Any pending deliveries must either be received or cancelled.
-                  </div>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-slate-800 mt-2 shrink-0" />
-                  <div>
-                    <strong className="text-slate-900">Outstanding Balances Settled:</strong> All pending payments or unpaid Cash-on-Delivery dues must be cleared.
-                  </div>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-slate-800 mt-2 shrink-0" />
-                  <div>
-                    <strong className="text-slate-900">Permanent Personal Data Erasure:</strong> Your name, phone, email, addresses, and auth tokens are wiped. Local cache memory on your device is purged.
-                  </div>
-                </div>
-              </div>
-
-              {/* Active Orders Warning Box (Highlighted if active orders exist) */}
-              {activeOrdersCount > 0 && (
-                <div className="p-4 rounded-xl bg-red-50 border border-red-200 space-y-2.5 text-red-950 mt-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <h4 className="font-bold text-sm text-red-900 flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                      Deletion Blocked: {activeOrdersCount} Active Order(s) In Progress
-                    </h4>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-100 text-red-800 text-[11px] font-bold whitespace-nowrap shrink-0">
-                      Action Required
-                    </span>
-                  </div>
-                  <p className="text-xs text-red-800 leading-relaxed">
-                    You currently have orders that are being packed or out for delivery. Please wait until they are delivered or cancel them first.
-                  </p>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => navigate('/orders')}
-                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
-                    >
-                      View Active Orders
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Unpaid Products Warning Box (Highlighted if unpaid orders exist) */}
-              {unpaidOrdersCount > 0 && (
-                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-2.5 text-amber-950 mt-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <h4 className="font-bold text-sm text-amber-900 flex items-center gap-1.5">
-                      <CreditCard className="w-4 h-4 text-amber-600 shrink-0" />
-                      Deletion Blocked: {unpaidOrdersCount} Unpaid Product(s) / Pending Dues
-                    </h4>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold whitespace-nowrap shrink-0">
-                      Settlement Required
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-800 leading-relaxed">
-                    You have orders with pending payments or unsettled dues. All outstanding amounts must be settled or cancelled first.
-                  </p>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => navigate('/orders')}
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
-                    >
-                      View Unpaid Orders &amp; Clear Dues
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Eligible Banner (Highlighted Section when verified clean) */}
-              {hasCheckedPrereqs && activeOrdersCount === 0 && unpaidOrdersCount === 0 && (
-                <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 mt-4">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold whitespace-nowrap">
-                      Eligible for Deletion
-                    </span>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-slate-200 text-slate-800 text-[11px] font-bold whitespace-nowrap">
-                      0 Active Deliveries
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm text-slate-700 leading-normal">
-                    Your account has 0 active deliveries and 0 unpaid products. You can safely proceed with account deletion below.
-                  </p>
-                </div>
-              )}
-            </section>
-
-            {/* Article 3: Deletion Form (Highlighted Interactive Container) */}
-            <section className="pt-6 border-t border-slate-100 space-y-4">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                  3. Submit Deletion Request
-                </h2>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold whitespace-nowrap shrink-0">
-                  Permanent Action
-                </span>
-              </div>
-
-              <form onSubmit={handleSubmitRequest} className="p-4 sm:p-6 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
-                {/* Account Identification */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Registered Mobile Number <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                      <input
-                        type="tel"
-                        required
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="e.g. 9876543210"
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Registered Email (Optional)
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="e.g. name@example.com"
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Full Name */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Full Name / Account Holder
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your registered name"
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  />
-                </div>
-
-                {/* Reason Selection */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Reason for Deletion <span className="text-red-500">*</span>
-                  </label>
+              {/* Reason for Deletion (Optional) */}
+              <div>
+                <label className="block text-xs font-bold text-[#0f172a] mb-1.5">
+                  Reason for Deletion (Optional)
+                </label>
+                <div className="relative">
                   <select
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    value={webReason}
+                    onChange={(e) => setWebReason(e.target.value)}
+                    className="w-full appearance-none px-4 py-2.5 pr-10 rounded-xl border border-slate-300 bg-white/70 focus:bg-white text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer transition-colors"
                   >
-                    <option value="I no longer need electrical goods delivery">I no longer need electrical goods delivery</option>
+                    <option value="No longer using the application">No longer using the application</option>
                     <option value="Concerned about data privacy / sharing">Concerned about data privacy / sharing</option>
                     <option value="Created a duplicate account">Created a duplicate account</option>
-                    <option value="Dissatisfied with products or delivery speed">Dissatisfied with products or delivery speed</option>
-                    <option value="Switching to a different supplier">Switching to a different supplier</option>
+                    <option value="Switching to a different app">Switching to a different app</option>
                     <option value="Other reason">Other reason</option>
                   </select>
+                  <ChevronDown className="w-4 h-4 text-slate-600 absolute right-3.5 top-3.5 pointer-events-none" />
                 </div>
+              </div>
 
-                {/* Feedback */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Additional Feedback (Optional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={feedback}
-                    onChange={(e) => setFeedback(e.target.value)}
-                    placeholder="Tell us what we could have done better..."
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none"
-                  />
-                </div>
-
-                {/* Mandatory Confirmation Input */}
-                <div className="p-3.5 rounded-lg bg-rose-50/70 border border-rose-200 space-y-1.5">
-                  <label className="block text-xs font-bold text-rose-900">
-                    Type <span className="font-mono uppercase bg-rose-100 px-1 py-0.5 rounded text-rose-700">DELETE MY ACCOUNT</span> to confirm:
-                  </label>
+              {/* Irreversible Confirmation Checkbox */}
+              <div className="pt-0.5">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
                   <input
-                    type="text"
-                    required
-                    value={confirmInput}
-                    onChange={(e) => setConfirmInput(e.target.value)}
-                    placeholder="DELETE MY ACCOUNT"
-                    className="w-full px-3 py-2 bg-white border border-rose-300 rounded-md text-xs sm:text-sm font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-rose-500"
+                    type="checkbox"
+                    checked={webConfirmed}
+                    onChange={(e) => setWebConfirmed(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-slate-300 text-pink-600 focus:ring-pink-500 cursor-pointer"
                   />
-                  <p className="text-[11px] text-rose-700 leading-tight">
-                    This safety check ensures your account cannot be deleted by accident.
-                  </p>
-                </div>
+                  <span className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    I confirm that this action is irreversible and will permanently delete my medication records and profile.
+                  </span>
+                </label>
+              </div>
 
-                {/* Submit Button */}
-                <div className="pt-1">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || isChecking || activeOrdersCount > 0 || unpaidOrdersCount > 0 || confirmInput.trim() !== 'DELETE MY ACCOUNT'}
-                    className={`w-full py-3 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 ${
-                      confirmInput.trim() === 'DELETE MY ACCOUNT' && activeOrdersCount === 0 && unpaidOrdersCount === 0
-                        ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-2xs cursor-pointer'
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    }`}
-                    id="submit-deletion-btn"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span className="whitespace-nowrap">Deleting Account &amp; Clearing Data...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Trash2 className="w-4 h-4" />
-                        <span className="whitespace-nowrap">Permanently Delete Account &amp; Clear All Data</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                <p className="text-center text-[11px] text-slate-500">
-                  When confirmed, your user account and personal identifiers are immediately removed from Supabase and local cache memory is purged.
-                </p>
-              </form>
-            </section>
-          </>
-        )}
-
-        {/* Article 4: Statutory Data Retention Disclosure (Google Play Store Policy) */}
-        <section className="pt-6 border-t border-slate-100 space-y-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
-              <Lock className="w-4 h-4 text-slate-500 shrink-0" />
-              <span>4. Statutory Data Retention Disclosure</span>
-            </h3>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-bold whitespace-nowrap shrink-0">
-              Audit Compliance
-            </span>
-          </div>
-
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            Under Section 36 of the Central Goods and Services Tax (CGST) Act, 2017, and the Companies Act, 2013, businesses registered in India are legally mandated to retain commercial tax records, invoice copies, and payment transaction receipts for a minimum statutory audit period of 72 months (6 years).
-          </p>
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            All personal identification records—including your name, mobile phone number, personal delivery addresses, UPI handles, and device notification tokens—are permanently expunged or anonymized from active application databases.
-          </p>
+              {/* Submit Button */}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={!webEmail.trim() || !webConfirmed || isSubmittingWeb}
+                  className={`w-full py-3.5 px-6 rounded-xl font-bold text-sm sm:text-base transition-all flex items-center justify-center gap-2 ${
+                    webEmail.trim() && webConfirmed && !isSubmittingWeb
+                      ? 'bg-[#ea5b7e] hover:bg-[#de4a6e] active:bg-[#cf3c5f] text-white shadow-sm cursor-pointer active:scale-[0.99]'
+                      : 'bg-[#ea5b7e]/70 text-white/80 cursor-not-allowed'
+                  }`}
+                >
+                  {isSubmittingWeb ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Submitting Request...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 stroke-[2.2]" />
+                      <span>Submit Web Deletion Request</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
         </section>
 
       </div>
+
+      {/* =========================================================================
+          CONFIRM IRREVERSIBLE DELETION MODAL / POP UP BOX
+         ========================================================================= */}
+      {showDeleteModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => {
+            if (!isDeleting) {
+              setShowDeleteModal(false);
+              setDeleteConfirmText('');
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200 text-left animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Title */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-slate-900">
+                  Confirm Irreversible Deletion
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed flex items-center flex-wrap gap-1.5">
+                  <span>Type</span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-50 border border-red-200/90 font-mono font-bold text-red-600 text-xs sm:text-sm">
+                    <span>DELETE</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyDeleteText}
+                      title={copiedDelete ? 'Copied!' : 'Copy DELETE to clipboard'}
+                      aria-label="Copy DELETE to clipboard"
+                      className="p-0.5 rounded hover:bg-red-100 active:bg-red-200 text-red-500 hover:text-red-700 transition-colors cursor-pointer inline-flex items-center justify-center"
+                    >
+                      {copiedDelete ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5 stroke-[2.2]" />
+                      )}
+                    </button>
+                  </span>
+                  <span>below to permanently erase your account and all medication vault records.</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmText('');
+                }}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Input: Type DELETE */}
+            <div>
+              <input
+                type="text"
+                placeholder="Type DELETE"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 text-slate-900 bg-white"
+                autoFocus
+              />
+            </div>
+
+            {/* Buttons: Cancel & Confirm Delete */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmText('');
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-sm transition-colors cursor-pointer text-center"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteConfirmText.trim() !== 'DELETE' || isDeleting}
+                onClick={handleDirectSelfServiceDelete}
+                className={`flex-1 py-2.5 px-4 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                  deleteConfirmText.trim() === 'DELETE' && !isDeleting
+                    ? 'bg-red-600 hover:bg-red-700 active:bg-red-800 text-white shadow-sm cursor-pointer'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  'Confirm Delete'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

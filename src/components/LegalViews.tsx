@@ -4,7 +4,7 @@ import { PrivacyPolicyPage } from './PrivacyPolicyPage';
 import { TermsOfServicePage } from './TermsOfServicePage';
 import { FAQPage } from './FAQPage';
 import {
-  ArrowLeft,
+  ChevronLeft,
   ShieldCheck,
   FileText,
   Lock,
@@ -121,7 +121,7 @@ export const LegalView = ({ onBack, type }: LegalViewProps) => {
             className="p-1.5 rounded-full hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
             title="Back"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
           </button>
           <div className="flex items-center gap-2">
             <IconComponent className="w-5 h-5 text-[#00875a]" />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertCircle, User } from 'lucide-react';
+import { AlertCircle, User, Calendar } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { saveUserProfile } from '../../services/supabaseService';
 import { showToast } from '../../utils/toast';
@@ -112,10 +112,10 @@ export const EditProfileModal = ({
 
         <form onSubmit={handleProfileFormSubmit} className="space-y-4">
           {/* Full Name */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between h-5">
               <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-slate-500" />
+                <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                 <span>Full Name</span>
                 {hasMissingName && (
                   <span className="w-2 h-2 rounded-full bg-yellow-500 inline-block animate-pulse" title="Name is required" />
@@ -130,21 +130,24 @@ export const EditProfileModal = ({
                 setFormError('');
               }}
               placeholder="Enter your full name"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 text-slate-900 bg-white"
+              className="w-full h-11 min-h-[44px] max-h-[44px] px-3.5 py-0 rounded-xl border border-slate-300 text-xs font-bold font-sans focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 text-slate-900 bg-white box-border transition-all appearance-none leading-[42px]"
               required
             />
           </div>
 
           {/* Date of Birth */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Date of Birth (Optional)
-            </label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between h-5">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span>Date of Birth (Optional)</span>
+              </label>
+            </div>
             <input
               type="date"
               value={editDob}
               onChange={(e) => setEditDob(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 text-slate-900 bg-white"
+              className="w-full h-11 min-h-[44px] max-h-[44px] px-3.5 py-0 rounded-xl border border-slate-300 text-xs font-bold font-sans focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 text-slate-900 bg-white box-border transition-all appearance-none leading-[42px] [&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:m-0 [&::-webkit-date-and-time-value]:p-0 [&::-webkit-date-and-time-value]:min-h-0 [&::-webkit-date-and-time-value]:leading-[42px] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
             />
             <p className="text-[10px] text-slate-500 mt-1">
               Used for exclusive birthday loyalty cashbacks and discounts.
@@ -156,14 +159,14 @@ export const EditProfileModal = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              className="flex-1 h-11 min-h-[44px] px-4 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer flex items-center justify-center"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              className="flex-1 h-11 min-h-[44px] px-4 rounded-xl bg-amber-400 hover:bg-yellow-400 text-slate-950 font-black text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center"
             >
               {isSaving ? 'Saving...' : 'Save Changes'}
             </button>

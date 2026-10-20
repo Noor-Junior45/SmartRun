@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
+  ChevronLeft,
   Search,
   Zap,
   Hammer,
@@ -109,7 +109,7 @@ export const SitemapPage: React.FC = () => {
               className="p-1.5 -ml-1 text-slate-700 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors"
               aria-label="Go back"
             >
-              <ArrowLeft className="w-5 h-5 stroke-[2.2]" />
+              <ChevronLeft className="w-6 h-6 stroke-[2.2]" />
             </button>
             <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
               Sitemap & Directory

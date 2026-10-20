@@ -17,7 +17,6 @@ import {
   CreditCard,
   Banknote,
   Download,
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   ShieldCheck,

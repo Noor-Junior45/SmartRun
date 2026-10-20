@@ -38,12 +38,13 @@ import {
   formatToE164Phone
 } from '../services/firebaseAuthService';
 import { updateGAConsent } from '../utils/analytics';
+import { PersonalInfoPage } from './PersonalInfoPage';
 
 interface LoginPageProps {
   onAuthSuccess: (phone: string, name: string, email?: string, userObj?: any) => void;
 }
 
-type AuthStep = 'primary' | 'onboarding_phone' | 'onboarding_email' | 'forgot';
+type AuthStep = 'primary' | 'personal_info' | 'onboarding_phone' | 'onboarding_email' | 'forgot';
 
 // Helper: If user or browser autofill entered an 11-digit number starting with 0, don't count the first zero
 const cleanAutofillPhone = (input: string): string => {
@@ -142,6 +143,8 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   const [onboardingEmailPhone, setOnboardingEmailPhone] = useState('');
   const [onboardingEmailPw, setOnboardingEmailPw] = useState('');
   const [showOnboardingEmailPw, setShowOnboardingEmailPw] = useState(false);
+  const [onboardingDob, setOnboardingDob] = useState('');
+  const [isPhoneLocked, setIsPhoneLocked] = useState(true);
 
   // Forgot password
   const [forgotEmail, setForgotEmail] = useState('');
@@ -318,13 +321,47 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         }
         setError(msg || 'Google Sign-In failed. Please try again.');
       } else {
-        saveTermsAgreed(true);
         if (res.user) {
+          saveTermsAgreed(true);
           const userPhone = res.user.phone || '';
-          const userName = res.user.name || res.user.user_metadata?.full_name || 'Customer';
+          const rawName = res.user.name || res.user.user_metadata?.full_name || '';
+          const userName = rawName && rawName.trim().toLowerCase() !== 'customer' ? rawName : '';
           const userEmail = res.user.email || '';
-          onAuthSuccess(userPhone, userName, userEmail, res.user);
-          navigate(getPostAuthRedirect(), { replace: true });
+
+          // Check if Google user already exists in database with a completed profile
+          let hasExistingProfile = false;
+          try {
+            const checkRes = await fetch(apiUrl('/api/auth/resolve-google-user'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: userEmail })
+            });
+            if (checkRes.ok) {
+              const d = await checkRes.json().catch(() => null);
+              if (
+                d?.exists &&
+                d?.profile?.full_name &&
+                d.profile.full_name.trim().toLowerCase() !== 'customer' &&
+                d.profile?.phone
+              ) {
+                hasExistingProfile = true;
+              }
+            }
+          } catch {}
+
+          if (hasExistingProfile) {
+            onAuthSuccess(userPhone, userName || 'Customer', userEmail, res.user);
+            navigate(getPostAuthRedirect(), { replace: true });
+          } else {
+            // First time Google user -> Open Personal Info page!
+            setOnboardingName(userName);
+            setOnboardingEmail(userEmail);
+            setOnboardingPhone(userPhone);
+            setOnboardingDob('');
+            setIsPhoneLocked(Boolean(userPhone));
+            setAuthStep('personal_info');
+            resetMessages();
+          }
         }
       }
     } catch (e: unknown) {
@@ -490,32 +527,32 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         console.debug('[User check notice]:', checkErr);
       }
 
-      // Check if user already exists on the server or in auth
+      // Check if user already exists on the server or in auth with a valid completed name
+      const existingFullName = (existingProfile?.full_name || result.profile?.name || '').trim();
       const isExistingUser = Boolean(
-        existingProfile?.user_id ||
-        existingProfile?.full_name ||
-        existingProfile?.email ||
-        result.user?.user_metadata?.master_user_id ||
-        result.user?.id ||
-        result.session ||
-        (result.profile?.name && !result.profile.name.toLowerCase().startsWith('giriraj'))
+        existingProfile?.user_id &&
+        existingFullName &&
+        existingFullName.toLowerCase() !== 'customer' &&
+        !existingFullName.toLowerCase().startsWith('giriraj')
       );
 
-      if (isExistingUser || existingProfile || result.user) {
+      if (isExistingUser) {
         // Sign in immediately with unified existing account identity!
         saveTermsAgreed(true);
-        const finalName = existingProfile?.full_name || result.profile?.name || 'Customer';
+        const finalName = existingFullName;
         const finalEmail = (existingProfile?.email && !existingProfile.email.includes('@girirajpower.internal'))
           ? existingProfile.email
           : (result.profile?.email && !result.profile.email.includes('@girirajpower.internal') ? result.profile.email : '');
         onAuthSuccess(`+91${clean10}`, finalName, finalEmail, result.user);
         navigate(getPostAuthRedirect(), { replace: true });
       } else {
-        // First-time new user -> Go to onboarding step to enter their name
+        // First-time new user -> Open Personal Info page
         setOnboardingPhone(clean10);
-        setOnboardingName(result.profile?.name && !result.profile.name.toLowerCase().startsWith('giriraj') ? result.profile.name : '');
+        setOnboardingName('');
         setOnboardingEmail(result.profile?.email && !result.profile.email.includes('@girirajpower.internal') ? result.profile.email : '');
-        setAuthStep('onboarding_phone');
+        setOnboardingDob('');
+        setIsPhoneLocked(true);
+        setAuthStep('personal_info');
         resetMessages();
       }
     } catch (err: unknown) {
@@ -787,20 +824,35 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         if (userExistsOnServer) {
           setError('Incorrect password for this email. Please check your password or reset it.');
         } else {
-          // NEW USER via EMAIL (not found in server) -> Go to next page to ask name, mobile number, and save
+          // NEW USER via EMAIL (not found in server) -> Go to Personal Info page!
           setOnboardingEmailAddr(cleanEmail);
           setOnboardingEmailPw(password);
-          setAuthStep('onboarding_email');
+          setOnboardingPhone('');
+          setOnboardingName('');
+          setOnboardingDob('');
+          setIsPhoneLocked(false);
+          setAuthStep('personal_info');
           resetMessages();
         }
       } else if (data.user) {
-        // Existing user logged in successfully!
+        // User logged in via Email
         const userFullName =
           data.user.user_metadata?.full_name ||
           data.user.user_metadata?.name ||
-          cleanEmail.split('@')[0] ||
-          'Customer';
+          '';
         const finalPhone = data.user.phone || data.user.user_metadata?.phone || '';
+
+        // If email user has not completed profile, direct to personal_info
+        if (!userFullName || userFullName.trim().toLowerCase() === 'customer' || !finalPhone) {
+          setOnboardingEmailAddr(cleanEmail);
+          setOnboardingEmailPhone(finalPhone);
+          setOnboardingName(userFullName && userFullName.trim().toLowerCase() !== 'customer' ? userFullName : '');
+          setOnboardingDob('');
+          setIsPhoneLocked(Boolean(finalPhone));
+          setAuthStep('personal_info');
+          resetMessages();
+          return;
+        }
 
         // Cross-share with Firebase in background
         fetch(apiUrl('/api/user-profile'), {
@@ -1044,6 +1096,27 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     ? Math.min((otpCode.length || 0) / 6, 1)
     : Math.min((password.length || 0) / 6, 1);
   const riderApproachX = isMotorcyclePassing ? 38 : typingProgress * 17;
+
+  if (authStep === 'personal_info') {
+    return (
+      <PersonalInfoPage
+        initialPhone={onboardingPhone || onboardingEmailPhone}
+        initialName={onboardingName || onboardingEmailName}
+        initialEmail={onboardingEmail || onboardingEmailAddr}
+        initialDob={onboardingDob}
+        isPhoneVerified={isPhoneLocked}
+        onSuccess={(ph, nm, em, u) => {
+          saveTermsAgreed(true);
+          onAuthSuccess(ph, nm, em, u);
+          navigate(getPostAuthRedirect(), { replace: true });
+        }}
+        onBack={() => {
+          setAuthStep('primary');
+          resetMessages();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white flex flex-col justify-center items-center px-4 py-8 sm:py-12 relative">

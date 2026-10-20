@@ -90,13 +90,34 @@ export const Header = ({
   const isConstructionDetailPage =
     isProductDetailPage && currentPath.includes('/construction');
 
-  // Track window scroll to collapse brand/location/avatar row when viewing product details
+  // Track window scroll with hysteresis to eliminate flicker when scrolling up and stopping
   const [isScrolled, setIsScrolled] = useState(false);
+  const isScrolledRef = useRef(false);
+
   useEffect(() => {
+    let ticking = false;
+
     const handleScroll = () => {
-      const scrolled = window.scrollY > 20;
-      setIsScrolled(scrolled);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const y = window.scrollY;
+          // Hysteresis deadband:
+          // Scroll down past 75px: collapse top row
+          // Scroll up near top (under 25px): re-expand top row
+          // Between 25px and 75px: retain current state to prevent flicker
+          if (!isScrolledRef.current && y > 75) {
+            isScrolledRef.current = true;
+            setIsScrolled(true);
+          } else if (isScrolledRef.current && y < 25) {
+            isScrolledRef.current = false;
+            setIsScrolled(false);
+          }
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
+
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
@@ -290,12 +311,12 @@ export const Header = ({
 
   return (
     <header
-      className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 transition-all shadow-2xs"
+      className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs [transform:translateZ(0)] [backface-visibility:hidden] will-change-transform"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
     >
       {/* Main Brand & Action Bar (collapses smoothly on product detail page scroll) */}
       <div
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+        className={`overflow-hidden transition-[max-height,opacity,padding] duration-200 ease-out [transform:translateZ(0)] ${
           isProductDetailPage && isScrolled
             ? 'max-h-0 opacity-0 pointer-events-none py-0'
             : 'max-h-24 opacity-100 py-2 sm:py-2.5'
@@ -406,7 +427,7 @@ export const Header = ({
     </div>
 
       {/* Row 2: Fixed Liquid Glass Search Bar + Right-side All Filters Button (Visible strictly on Electrical, Construction & Wiring, NOT on Home) */}
-      <div className="border-t border-slate-100/80 bg-gradient-to-b from-white/80 to-white/95 backdrop-blur-md px-3 sm:px-6 py-2 sm:py-2.5">
+      <div className="border-t border-slate-100/80 bg-white/95 px-3 sm:px-6 py-2 sm:py-2.5 [transform:translateZ(0)]">
         <div className="max-w-3xl mx-auto w-full flex items-center gap-2 sm:gap-3">
           {/* Back Button beside search bar when viewing product details - only arrow and nothing */}
           {isProductDetailPage && (
@@ -429,7 +450,7 @@ export const Header = ({
             className="relative flex-1 group"
             role="search"
           >
-            <div className="relative flex items-center w-full rounded-full backdrop-blur-xl bg-slate-100/80 hover:bg-slate-100/95 focus-within:bg-white border border-slate-200/80 focus-within:border-[#00875a]/50 focus-within:ring-2 focus-within:ring-[#00875a]/20 shadow-[0_2px_12px_rgba(0,0,0,0.03)] focus-within:shadow-[0_4px_20px_rgba(0,135,90,0.12)] transition-all duration-200">
+            <div className="relative flex items-center w-full rounded-full bg-slate-100 hover:bg-slate-100/90 focus-within:bg-white border border-slate-200/80 focus-within:border-[#00875a]/50 focus-within:ring-2 focus-within:ring-[#00875a]/20 shadow-[0_2px_12px_rgba(0,0,0,0.03)] focus-within:shadow-[0_4px_20px_rgba(0,135,90,0.12)] transition-colors duration-150">
               {/* Google-style Magnifying Glass Icon */}
               <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#00875a] pointer-events-none transition-colors">
                 <Search className="w-4 h-4 sm:w-4.5 sm:h-4.5" strokeWidth={2.2} />

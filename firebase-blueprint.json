@@ -117,6 +117,18 @@
         "createdAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "houseFlat", "buildingRoad", "area"]
+    },
+    "UserIndex": {
+      "title": "UserIndex",
+      "description": "Indexed user identity pointer for fast phone and email lookups",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 25 },
+        "email": { "type": "string", "maxLength": 120 },
+        "updated_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["user_id"]
     }
   },
   "firestore": {
@@ -135,6 +147,14 @@
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "Registered user contact and address profiles"
+    },
+    "/users_by_phone/{phone}": {
+      "schema": { "$ref": "#/entities/UserIndex" },
+      "description": "Fast index mapping verified 10-digit mobile number to user_id"
+    },
+    "/users_by_email/{emailKey}": {
+      "schema": { "$ref": "#/entities/UserIndex" },
+      "description": "Fast index mapping verified email to user_id"
     },
     "/user_addresses/{addressId}": {
       "schema": { "$ref": "#/entities/UserAddress" },

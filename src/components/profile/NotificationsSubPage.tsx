@@ -41,29 +41,26 @@ export const NotificationsSubPage = ({
         <h1 className="text-lg font-black text-slate-900 leading-none">Setting</h1>
       </div>
 
-      <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-5">
-        {/* COMMUNICATION NOTIFICATIONS */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-5">
-          <div className="pb-2 border-b border-slate-100">
-            <h2 className="text-sm sm:text-base font-bold text-slate-900">Communication Alerts</h2>
-            <p className="text-xs text-slate-500 font-normal">Real-time alerts for dispatch, OTPs and bills</p>
-          </div>
+      <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-3">
+        {/* Normal heading in starting alone Notification heading without any background box or any other design */}
+        <h2 className="text-base sm:text-lg font-bold text-slate-900 px-0.5">
+          Notification
+        </h2>
 
-          {/* Mobile Push Notifications */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1 pr-2">
-              <p className="text-sm sm:text-base font-bold text-slate-900 leading-snug">Mobile Push Notifications</p>
-              <p className="text-xs sm:text-[13px] text-slate-600 font-normal mt-1 leading-relaxed">
-                Receive instant mobile device pop-up alerts for live driver location, flash discounts, and delivery milestone alerts
-              </p>
-            </div>
+        {/* Setting Buttons Container - Kept same button design */}
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-2xs divide-y divide-slate-100">
+          {/* 1. Push notification */}
+          <div className="flex items-center justify-between gap-4 pb-4">
+            <p className="text-sm sm:text-base font-semibold text-slate-800 leading-snug">
+              Push notification
+            </p>
 
             <button
               id="toggle-mobile-notifications"
               type="button"
               role="switch"
               aria-checked={mobileAlerts}
-              aria-label="Toggle Mobile push notifications"
+              aria-label="Toggle Push notification"
               onClick={async () => {
                 const nextState = !mobileAlerts;
                 onToggleMobileAlerts(nextState);
@@ -85,21 +82,18 @@ export const NotificationsSubPage = ({
             </button>
           </div>
 
-          {/* WhatsApp Dispatch Tracking */}
-          <div className="flex items-center justify-between gap-4 pt-4 border-t border-slate-100">
-            <div className="flex-1 pr-2">
-              <p className="text-sm sm:text-base font-bold text-slate-900 leading-snug">WhatsApp Dispatch Tracking</p>
-              <p className="text-xs sm:text-[13px] text-slate-600 font-normal mt-1 leading-relaxed">
-                Receive live rider phone number and delivery OTP on WhatsApp
-              </p>
-            </div>
+          {/* 2. WhatsApp */}
+          <div className="flex items-center justify-between gap-4 py-4">
+            <p className="text-sm sm:text-base font-semibold text-slate-800 leading-snug">
+              WhatsApp
+            </p>
 
             <button
               id="toggle-whatsapp-tracking"
               type="button"
               role="switch"
               aria-checked={whatsappAlerts}
-              aria-label="Toggle WhatsApp dispatch tracking"
+              aria-label="Toggle WhatsApp"
               onClick={() => onToggleWhatsappAlerts(!whatsappAlerts)}
               className={`relative inline-flex h-[32px] w-[58px] shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                 whatsappAlerts
@@ -115,21 +109,18 @@ export const NotificationsSubPage = ({
             </button>
           </div>
 
-          {/* SMS Order Status Updates */}
-          <div className="flex items-center justify-between gap-4 pt-4 border-t border-slate-100">
-            <div className="flex-1 pr-2">
-              <p className="text-sm sm:text-base font-bold text-slate-900 leading-snug">SMS Order Status Updates</p>
-              <p className="text-xs sm:text-[13px] text-slate-600 font-normal mt-1 leading-relaxed">
-                Get packing and out-for-delivery SMS
-              </p>
-            </div>
+          {/* 3. SMS */}
+          <div className="flex items-center justify-between gap-4 py-4">
+            <p className="text-sm sm:text-base font-semibold text-slate-800 leading-snug">
+              SMS
+            </p>
 
             <button
               id="toggle-sms-updates"
               type="button"
               role="switch"
               aria-checked={smsAlerts}
-              aria-label="Toggle SMS order status updates"
+              aria-label="Toggle SMS"
               onClick={() => onToggleSmsAlerts(!smsAlerts)}
               className={`relative inline-flex h-[32px] w-[58px] shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                 smsAlerts
@@ -145,21 +136,18 @@ export const NotificationsSubPage = ({
             </button>
           </div>
 
-          {/* Email Invoices & Order Summary Alerts */}
-          <div className="flex items-center justify-between gap-4 pt-4 border-t border-slate-100">
-            <div className="flex-1 pr-2">
-              <p className="text-sm sm:text-base font-bold text-slate-900 leading-snug">Email Invoices &amp; Order Summaries</p>
-              <p className="text-xs sm:text-[13px] text-slate-600 font-normal mt-1 leading-relaxed">
-                Receive official GST invoices, order receipts, and delivery confirmations via email
-              </p>
-            </div>
+          {/* 4. Email */}
+          <div className="flex items-center justify-between gap-4 pt-4">
+            <p className="text-sm sm:text-base font-semibold text-slate-800 leading-snug">
+              Email
+            </p>
 
             <button
               id="toggle-email-updates"
               type="button"
               role="switch"
               aria-checked={emailAlerts}
-              aria-label="Toggle Email invoices and order summaries"
+              aria-label="Toggle Email"
               onClick={() => onToggleEmailAlerts(!emailAlerts)}
               className={`relative inline-flex h-[32px] w-[58px] shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                 emailAlerts

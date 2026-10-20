@@ -93,6 +93,17 @@ async function syncUserToBackendFirestore(userId: string, profile: any) {
         updated_at: new Date().toISOString()
       }, { merge: true });
     }
+
+    const cleanEmail = (profile.email || "").trim().toLowerCase();
+    if (cleanEmail && cleanEmail.includes("@") && !cleanEmail.includes("@girirajpower.internal")) {
+      const emailKey = cleanEmail.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120);
+      const emailIndexRef = firestoreDoc(serverFirestore, "users_by_email", emailKey);
+      await firestoreSetDoc(emailIndexRef, {
+        user_id: userId,
+        email: cleanEmail,
+        updated_at: new Date().toISOString()
+      }, { merge: true });
+    }
     console.log(`[Firebase Backend] User ${userId} successfully synced to Firestore`);
   } catch (err: any) {
     console.warn(`[Firebase Backend] Firestore sync notice for ${userId}:`, err?.message || err);
@@ -120,17 +131,17 @@ function getSenderFromEmail(): string {
   if (
     envFrom &&
     envFrom.includes("@") &&
-    !envFrom.includes("team@girirajpower.in") &&
     !envFrom.includes("oieldiakir.resend.app") &&
-    !envFrom.includes("example.com")
+    !envFrom.includes("example.com") &&
+    !envFrom.includes("girirajpower.in") // Prefer smartrun.in official domain
   ) {
     if (!envFrom.includes("<")) {
       return `SmartRun <${envFrom}>`;
     }
     return envFrom;
   }
-  // Default verified sandbox sender for Resend (works out-of-the-box on all Resend accounts)
-  return "SmartRun <onboarding@resend.dev>";
+  // Default verified production sender on smartrun.in domain
+  return "SmartRun <team@smartrun.in>";
 }
 
 interface ResendDispatchOptions {
@@ -212,11 +223,11 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
 
   let fromEmail = options.from || getSenderFromEmail();
   if (
-    fromEmail.includes("team@girirajpower.in") ||
     fromEmail.includes("oieldiakir.resend.app") ||
-    fromEmail.includes("example.com")
+    fromEmail.includes("example.com") ||
+    fromEmail.includes("girirajpower.in")
   ) {
-    fromEmail = "SmartRun <onboarding@resend.dev>";
+    fromEmail = "SmartRun <team@smartrun.in>";
   }
 
   let deliveredIds: string[] = [];
@@ -228,11 +239,11 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
       let effectiveSender = sender;
       if (
         !effectiveSender ||
-        effectiveSender.includes("team@girirajpower.in") ||
         effectiveSender.includes("oieldiakir.resend.app") ||
-        effectiveSender.includes("example.com")
+        effectiveSender.includes("example.com") ||
+        effectiveSender.includes("girirajpower.in")
       ) {
-        effectiveSender = "SmartRun <onboarding@resend.dev>";
+        effectiveSender = "SmartRun <team@smartrun.in>";
       }
 
       let res = await callResendApi(apiKey, {
@@ -7010,7 +7021,7 @@ Knowledge Base & Service Details:
   app.post("/api/auth/send-email-otp", emailOtpLimiter, async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
-      const { email, phone, customerName } = req.body || {};
+      const { email, phone, customerName, purpose } = req.body || {};
       const cleanEmail = String(email || "").trim().toLowerCase();
       if (!cleanEmail || !cleanEmail.includes("@") || !cleanEmail.includes(".")) {
         return res.status(400).json({
@@ -7021,15 +7032,22 @@ Knowledge Base & Service Details:
 
       const cleanPhone = phone ? String(phone).replace(/\D/g, "").slice(-10) : "";
       const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
       emailOtpStore.set(cleanEmail, {
         otp: generatedOtp,
-        expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+        expiresAt,
         attempts: 0,
         phone: cleanPhone
       });
 
-      console.log(`[Email OTP] Generated code for ${cleanEmail}: ${generatedOtp} (New phone: ${cleanPhone || 'N/A'})`);
+      // Stateless HMAC signature token so verification never fails even if containers restart or on serverless
+      const secret = process.env.API_SECRET_KEY || 'smartrun_email_otp_secret_key_kasba';
+      const signatureToken = crypto.createHmac('sha256', secret)
+        .update(`${cleanEmail}:${generatedOtp}:${expiresAt}`)
+        .digest('hex');
+
+      console.log(`[Email OTP] Generated code for ${cleanEmail}: ${generatedOtp} (Purpose: ${purpose || 'email_update'})`);
 
       // Mask email for privacy
       const atIdx = cleanEmail.indexOf("@");
@@ -7040,56 +7058,71 @@ Knowledge Base & Service Details:
         : namePart[0] + "*".repeat(Math.min(namePart.length - 2, 4)) + namePart[namePart.length - 1];
       const maskedEmail = `${maskedName}${domainPart}`;
 
+      // Format IST timestamp: HH:mm:ss DD-MM-YYYY (e.g. 21:54:46 08-10-2026)
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const generatedAt = `${timeStr} ${day}-${month}-${year}`;
+
+      const emailSubject = "SmartRun OTP";
+      const emailText = `Dear User,\n\nYour one-time password (OTP) for registering on SmartRun  is ${generatedOtp} .\nThis OTP is valid for 10 minutes.\n\nPlease do not share your login details with anyone as sharing it will give them complete access to your account.\n\nGenerated at ${generatedAt}\n\n************************************\n\nThis is an auto-generated email. Do not reply to this email.`;
+
       const emailHtml = `
         <!DOCTYPE html>
         <html>
         <head><meta charset="utf-8"></head>
-        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px;">
-          <div style="max-width: 480px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-            <div style="background-color: #00875a; padding: 20px; text-align: center;">
-              <h2 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.5px;">SmartRun</h2>
-              <p style="color: #d1fae5; margin: 4px 0 0 0; font-size: 12px; font-weight: 600;">Security Verification Code</p>
-            </div>
-            <div style="padding: 28px 24px; text-align: center;">
-              <p style="font-size: 14px; color: #334155; margin: 0 0 16px 0;">
-                Hello${customerName ? ` <strong>${customerName}</strong>` : ''},
-              </p>
-              <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0 0 24px 0;">
-                You requested to update your account's mobile number${cleanPhone ? ` to <strong>+91 ${cleanPhone}</strong>` : ''}. Enter this 6-digit verification code to authorize this change:
-              </p>
-              <div style="background-color: #ecfdf5; border: 2px dashed #00875a; border-radius: 12px; padding: 16px 28px; margin: 0 auto 24px auto; display: inline-block;">
-                <span style="font-size: 32px; font-weight: 900; font-family: monospace; letter-spacing: 6px; color: #065f46;">
-                  ${generatedOtp}
-                </span>
-              </div>
-              <p style="font-size: 11px; color: #94a3b8; margin: 0;">
-                This code is valid for 10 minutes. If you did not initiate this request, please secure your account immediately.
-              </p>
-            </div>
-            <div style="background-color: #f1f5f9; padding: 12px; text-align: center; border-top: 1px solid #e2e8f0;">
-              <p style="font-size: 11px; color: #64748b; margin: 0;">Express Electricals &bull; Kasba Warehouse Hub &bull; Kolkata</p>
-            </div>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #ffffff; color: #1e293b; margin: 0; padding: 24px; line-height: 1.6; font-size: 14px;">
+          <div style="max-width: 540px; margin: 0 auto;">
+            <p style="margin: 0 0 16px 0;">Dear User,</p>
+            <p style="margin: 0 0 16px 0;">
+              Your one-time password (OTP) for registering on SmartRun  is <strong>${generatedOtp}</strong> . This OTP is valid for 10 minutes.
+            </p>
+            <p style="margin: 0 0 16px 0; color: #334155;">
+              Please do not share your login details with anyone as sharing it will give them complete access to your account.
+            </p>
+            <p style="margin: 0 0 16px 0; color: #475569; font-size: 13px;">
+              Generated at ${generatedAt}
+            </p>
+            <p style="margin: 0 0 16px 0; color: #64748b; letter-spacing: 2px;">
+              ************************************
+            </p>
+            <p style="margin: 0; font-size: 12px; color: #64748b;">
+              This is an auto-generated email. Do not reply to this email.
+            </p>
           </div>
         </body>
         </html>
       `;
 
+      let dispatchResult: any = null;
       try {
-        await dispatchResendEmail({
+        dispatchResult = await dispatchResendEmail({
+          from: "SmartRun <team@smartrun.in>",
           to: cleanEmail,
-          subject: `🔐 ${generatedOtp} is your SmartRun verification code`,
+          subject: emailSubject,
           html: emailHtml,
-          text: `Your SmartRun verification code to update your mobile number is: ${generatedOtp}. Valid for 10 minutes.`
+          text: emailText
         });
       } catch (sendErr) {
         console.warn("[Email OTP Dispatch Notice]:", sendErr);
+      }
+
+      if (dispatchResult && !dispatchResult.success && dispatchResult.error) {
+        return res.status(500).json({
+          success: false,
+          error: dispatchResult.error?.message || "Failed to deliver email. Please check your address."
+        });
       }
 
       return res.json({
         success: true,
         message: `Verification code sent to ${cleanEmail}`,
         email: cleanEmail,
-        emailMasked: maskedEmail
+        emailMasked: maskedEmail,
+        token: signatureToken,
+        expiresAt
       });
     } catch (err: any) {
       return res.status(500).json({
@@ -7102,12 +7135,12 @@ Knowledge Base & Service Details:
   /**
    * Verify Email OTP Endpoint
    * POST /api/auth/verify-email-otp
-   * Request Body: { email: "user@example.com", otp: "123456" }
+   * Request Body: { email: "user@example.com", otp: "123456", token?: "...", expiresAt?: 1234567890 }
    */
   app.post("/api/auth/verify-email-otp", (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
-      const { email, otp } = req.body || {};
+      const { email, otp, token, expiresAt } = req.body || {};
       const cleanEmail = String(email || "").trim().toLowerCase();
       const cleanOtp = String(otp || "").trim();
 
@@ -7118,44 +7151,63 @@ Knowledge Base & Service Details:
         return res.status(400).json({ success: false, error: "Please enter the complete 6-digit OTP code." });
       }
 
+      // 1. Primary check: in-memory cache
       const cached = emailOtpStore.get(cleanEmail);
-      if (!cached) {
+      if (cached) {
+        if (Date.now() > cached.expiresAt) {
+          emailOtpStore.delete(cleanEmail);
+          return res.status(400).json({
+            success: false,
+            error: "Verification code has expired. Please request a fresh OTP."
+          });
+        }
+
+        cached.attempts += 1;
+        if (cached.attempts > 5) {
+          emailOtpStore.delete(cleanEmail);
+          return res.status(400).json({
+            success: false,
+            error: "Too many invalid attempts. Please request a new OTP code."
+          });
+        }
+
+        if (cached.otp === cleanOtp) {
+          emailOtpStore.delete(cleanEmail);
+          return res.json({
+            success: true,
+            verified: true,
+            message: "Email verification code verified successfully."
+          });
+        }
+      }
+
+      // 2. Secondary check: Cryptographic HMAC signature token (cross-container/serverless resilience)
+      if (token && expiresAt && Number(expiresAt) > Date.now()) {
+        const secret = process.env.API_SECRET_KEY || 'smartrun_email_otp_secret_key_kasba';
+        const expectedSig = crypto.createHmac('sha256', secret)
+          .update(`${cleanEmail}:${cleanOtp}:${expiresAt}`)
+          .digest('hex');
+
+        if (token === expectedSig) {
+          emailOtpStore.delete(cleanEmail);
+          return res.json({
+            success: true,
+            verified: true,
+            message: "Email verification code verified successfully."
+          });
+        }
+      }
+
+      if (!cached && (!token || !expiresAt)) {
         return res.status(400).json({
           success: false,
           error: "No active verification code found or code expired. Please request a new OTP."
         });
       }
 
-      if (Date.now() > cached.expiresAt) {
-        emailOtpStore.delete(cleanEmail);
-        return res.status(400).json({
-          success: false,
-          error: "Verification code has expired. Please request a fresh OTP."
-        });
-      }
-
-      cached.attempts += 1;
-      if (cached.attempts > 5) {
-        emailOtpStore.delete(cleanEmail);
-        return res.status(400).json({
-          success: false,
-          error: "Too many invalid attempts. Please request a new OTP code."
-        });
-      }
-
-      if (cached.otp !== cleanOtp) {
-        return res.status(400).json({
-          success: false,
-          error: "Incorrect verification code. Please check the code sent to your email."
-        });
-      }
-
-      // Validated successfully! Remove from store
-      emailOtpStore.delete(cleanEmail);
-      return res.json({
-        success: true,
-        verified: true,
-        message: "Email verification code verified successfully."
+      return res.status(400).json({
+        success: false,
+        error: "Incorrect verification code. Please check the code sent to your email."
       });
     } catch (err: any) {
       return res.status(500).json({
@@ -7555,21 +7607,29 @@ Knowledge Base & Service Details:
       // Cross-server check: Query Firebase Cloud Firestore if phone or profile missing
       if ((!resolvedProfile || !resolvedProfile.phone) && serverFirestore) {
         try {
-          const usersCol = firestoreCollection(serverFirestore, "users");
-          const q = firestoreQuery(usersCol, firestoreWhere("email", "==", cleanEmail));
-          const snap = await firestoreGetDocs(q);
-          if (!snap.empty) {
-            const docData = snap.docs[0].data();
-            const phoneFound = (docData.phone || "").replace(/\D/g, "").slice(-10);
-            const formattedPhone = phoneFound.length === 10 ? `+91${phoneFound}` : null;
-            resolvedProfile = {
-              user_id: resolvedProfile?.user_id || docData.user_id || snap.docs[0].id,
-              full_name: resolvedProfile?.full_name || docData.name || docData.full_name || name || null,
-              email: cleanEmail,
-              phone: resolvedProfile?.phone || formattedPhone,
-              avatar_url: avatarUrl || resolvedProfile?.avatar_url || docData.avatar_url || null,
-              dob: resolvedProfile?.dob || docData.dob || null
-            };
+          const emailKey = cleanEmail.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120);
+          const emailIndexRef = firestoreDoc(serverFirestore, "users_by_email", emailKey);
+          const emailSnap = await firestoreGetDoc(emailIndexRef);
+          if (emailSnap.exists()) {
+            const eData = emailSnap.data();
+            const fbUid = eData.user_id;
+            if (fbUid) {
+              const uDocRef = firestoreDoc(serverFirestore, "users", fbUid);
+              const uSnap = await firestoreGetDoc(uDocRef);
+              if (uSnap.exists()) {
+                const docData = uSnap.data();
+                const phoneFound = (docData.phone || "").replace(/\D/g, "").slice(-10);
+                const formattedPhone = phoneFound.length === 10 ? `+91${phoneFound}` : null;
+                resolvedProfile = {
+                  user_id: resolvedProfile?.user_id || docData.user_id || fbUid,
+                  full_name: resolvedProfile?.full_name || docData.name || docData.full_name || name || null,
+                  email: cleanEmail,
+                  phone: resolvedProfile?.phone || formattedPhone,
+                  avatar_url: avatarUrl || resolvedProfile?.avatar_url || docData.avatar_url || null,
+                  dob: resolvedProfile?.dob || docData.dob || null
+                };
+              }
+            }
           }
         } catch (fbErr) {
           console.debug("[Resolve Google User] Firestore check notice:", fbErr);
