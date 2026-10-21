@@ -465,7 +465,20 @@
     1. Added scroll hysteresis with `requestAnimationFrame`: collapses only when scrolling down past 75px, and re-expands only when scrolling up near the very top (under 25px). The 50px deadband completely eliminates threshold oscillation when the page stops at any scroll point.
     2. Removed `transition-all` from `<header>` root; isolated it onto its own hardware-accelerated GPU layer with `[transform:translateZ(0)] [backface-visibility:hidden] will-change-transform`.
     3. Eliminated conflicting nested backdrop blurs on Row 2 (`bg-white/95 [transform:translateZ(0)]`) and replaced search bar `transition-all` with targeted `transition-colors duration-150`, delivering zero-jitter, fluid scrolling.
-
-
-
-
+- [x] **Login Alert Email Design (Zerodha Reference Alignment)**:
+  - **Brand Header**: Rendered the top brand mark in `'Baloo 2', 'Baloo Bhai 2', 'Baloo'` with `font-size: 18px` and `font-weight: 600` (semi bold) without cursive/sans-serif fallbacks, in pure black (`#000000`), completely removing the square icon emblem.
+  - **Single Hyperlink Rule**: Cleaned the instructions paragraph so only `forgot password` is a styled hyperlink (`#387ed1`), removing the link from `login credentials`.
+  - **Account ID Styling**: Removed bold styling from `<account_id>` in the notification line, rendering it in regular weight blue text (`color: #387ed1; font-weight: normal`).
+  - **Updated Statutory Address**: Updated the footer address across HTML and plain-text templates to `SMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`.
+  - **Minimalist Table Layout**: Replaced heavy dark cards with a clean white card on a soft grey canvas (`#eaedf0`), thin divider lines (`#f0f0f0`), and clean row labels without colons (`Location`, `IP`, `Device`, `Time`).
+- [x] **Welcome Email for First-Time Users (Unified Minimalist Card Format)**:
+  - **Design & Layout**: Re-used the exact Zerodha-inspired card format with `#eaedf0` background canvas, black `SmartRun` brand mark in Baloo 18 semi-bold (`font-weight: 600`), `#ffffff` card container (`padding: 40px 44px 34px 44px`, `border-radius: 4px`, `box-shadow: 0 1px 3px rgba(0,0,0,0.05)`), and centered statutory footer address.
+  - **Subject Line**: `You're all set! Welcome to SmartRun ⚡`.
+  - **Copy & Links**: Added personalized greeting `Hey [User Name], Welcome aboard! 👋`, value proposition for Kolkata electrical & construction supplies, express delivery, genuine materials, and real-time tracking points, and linked Google Play Store (`https://play.google.com/store/apps/details?id=in.smartrun.app&pcampaignid=web_share`).
+  - **Backend Endpoints**: Added `generateWelcomeEmailHtml` template generator, dedicated `/api/auth/send-welcome-email` endpoint, and `type === "welcome_email"` in `/api/send-email`.
+  - **Client & Server Integration**: Built `src/services/welcomeEmailService.ts` with local deduplication guard (`smartrun_welcome_sent_<email>`), and connected automatic triggers in `PersonalInfoPage.tsx` and `LoginPage.tsx` (for onboarding/registration) and `/api/user-profile` (server profile creation).
+- [x] **Public Enriched FAQ Center & Login Alert Email Linking**:
+  - **Login Alert Email Link**: Updated the footer prompt `[Why did I receive this e-mail?]` in `generateLoginAlertEmailHtml` and plain-text notifications to link directly to `https://www.smartrun.in/faq#security-login-alerts`.
+  - **Public Routing & Seamless Navigation**: Kept `/faq` and `/faqs` publicly accessible without mandatory login. Updated `onBack` fallback in `App.tsx` so unauthenticated visitors landing directly on the FAQ page from an email return to the public store (`/`) rather than being forced to `/login`.
+  - **Anchor Hash Auto-Scroll & Highlighting**: Added automatic hash reader for `#security-login-alerts` that expands the corresponding security alert question, smoothly scrolls to it, and highlights it with an animated blue focus ring.
+  - **Enriched Comprehensive Q&A**: Expanded `FAQPage.tsx` with 20+ detailed answers across 8 categories (Security & Login, 60-Min Express, Genuine Materials & Brands, GST Invoices & Wholesale, Payments & COD, Returns & Refunds, Electricians & Kasba Hub), live search filtering, expand/collapse toggles, and direct customer helpline contacts.

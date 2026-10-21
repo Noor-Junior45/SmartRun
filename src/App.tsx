@@ -82,6 +82,7 @@ import { showToast } from './utils/toast';
 import { AndroidAppBridgePrompt } from './components/AndroidAppBridgePrompt';
 import { sanitizeCustomerName } from './services/firebaseAuthService';
 import { isNativePhoneApp } from './utils/platformDetection';
+import { fetchServerCurrentUser, syncServerSession, serverLogout } from './services/serverAuthService';
 
 export default function App() {
   const navigate = useNavigate();
@@ -696,6 +697,8 @@ export default function App() {
           sendLoginNotificationEmail({
             email,
             name,
+            phone: phone || undefined,
+            accountId: email,
             userId: user.id,
             loginMethod,
           }).catch((err) => console.debug('[Security Alert Background Trigger]:', err));
@@ -1507,6 +1510,34 @@ export default function App() {
     // Sync stored FCM push token to Supabase for newly authenticated user
     syncStoredPushTokenToSupabase(effectiveUserId || authId);
 
+    const ADMIN_EMAILS = ['gauravgiri123344@gmail.com', 'mdhassan1738@gmail.com'];
+    const isUserAdmin = Boolean(
+      (resolvedCleanEmail && ADMIN_EMAILS.includes(resolvedCleanEmail.toLowerCase())) ||
+      finalPhone === '8777400280' ||
+      finalPhone.endsWith('8777400280')
+    );
+
+    // Synchronize session to Cloud Run backend (mints secure httpOnly cookie and Bearer session token)
+    syncServerSession({
+      id: authId,
+      phone: finalPhone || undefined,
+      email: resolvedCleanEmail || undefined,
+      name: finalName || 'Customer',
+      role: isUserAdmin ? 'admin' : 'customer'
+    }).catch(() => {});
+
+    // Dispatch real-time security alert email whenever customer signs in (with email or phone account)
+    if (resolvedCleanEmail) {
+      sendLoginNotificationEmail({
+        email: resolvedCleanEmail,
+        name: finalName || 'Customer',
+        phone: finalPhone || undefined,
+        accountId: resolvedCleanEmail || (finalPhone ? `+91 ${finalPhone}` : undefined),
+        userId: authId || undefined,
+        loginMethod: finalPhone ? 'Phone Number & OTP' : 'Email & Password / Session'
+      }).catch((err) => console.debug('[Security Alert Background Trigger]:', err));
+    }
+
     // 6. Non-blocking asynchronous sync for cloud profile in the background
     (async () => {
       try {
@@ -1520,6 +1551,19 @@ export default function App() {
           if (cloudProf && !isLoggingOutRef.current && activeUserIdRef.current === targetUid) {
             const cloudEmailClean =
               cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : resolvedCleanEmail;
+            
+            // If email became known only after cloud profile resolution, send security alert
+            if (cloudEmailClean && !resolvedCleanEmail) {
+              sendLoginNotificationEmail({
+                email: cloudEmailClean,
+                name: cloudProf.name || finalName || 'Customer',
+                phone: finalPhone || undefined,
+                accountId: cloudEmailClean,
+                userId: targetUid,
+                loginMethod: finalPhone ? 'Phone Number & OTP' : 'Email & Password / Session'
+              }).catch(() => {});
+            }
+
             setUserProfile((prev) => {
               if (isLoggingOutRef.current || !activeUserIdRef.current) return null;
               return {
@@ -1543,6 +1587,11 @@ export default function App() {
   const handleLogout = async () => {
     isLoggingOutRef.current = true;
     activeUserIdRef.current = null;
+
+    // Reset session alert key so next login receives notification
+    try {
+      sessionStorage.removeItem('giriraj_session_alert_sent');
+    } catch {}
 
     // 1. Immediately cancel all active real-time subscriptions to prevent background queries
     if (unsubscribeOrdersRef.current) {
@@ -1574,10 +1623,11 @@ export default function App() {
     // 3. Immediately transition the route to /login with zero delay
     navigate('/login', { replace: true });
 
-    // 4. Perform background storage purge and Supabase/Firebase sign out asynchronously
+    // 4. Perform background storage purge and Supabase/Firebase/Server sign out asynchronously
     signOutUser().catch((err) => {
       console.debug('Background signout note:', err);
     });
+    serverLogout().catch(() => {});
   };
 
   // Branded Splash Loader for Native Phone App while restoring authentication
@@ -1927,7 +1977,7 @@ export default function App() {
                   if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
                     navigate(-1);
                   } else {
-                    navigate('/profile');
+                    navigate(isAuthenticated ? '/profile' : '/');
                   }
                 }}
                 type="faqs"
@@ -1942,7 +1992,7 @@ export default function App() {
                   if (typeof window !== 'undefined' && window.history.state && window.history.state.idx > 0) {
                     navigate(-1);
                   } else {
-                    navigate('/profile');
+                    navigate(isAuthenticated ? '/profile' : '/');
                   }
                 }}
                 type="faqs"

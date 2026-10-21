@@ -32,6 +32,7 @@ import {
 } from '../services/supabaseService';
 import { UserProfile } from '../types';
 import { sendLoginNotificationEmail } from '../services/securityNotificationService';
+import { sendWelcomeEmail } from '../services/welcomeEmailService';
 import {
   sendFirebasePhoneOtp,
   verifyFirebaseOtpAndBridgeToSupabase,
@@ -39,6 +40,7 @@ import {
 } from '../services/firebaseAuthService';
 import { updateGAConsent } from '../utils/analytics';
 import { PersonalInfoPage } from './PersonalInfoPage';
+import { setServerAuthToken } from '../services/serverAuthService';
 
 interface LoginPageProps {
   onAuthSuccess: (phone: string, name: string, email?: string, userObj?: any) => void;
@@ -647,6 +649,15 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         })
       }).catch(() => {});
 
+      // Send welcome email to new user joining SmartRun
+      if (cleanEmail && !cleanEmail.includes('@girirajpower.internal')) {
+        sendWelcomeEmail({
+          email: cleanEmail,
+          name: cleanName,
+          userId: currentUserId,
+        }).catch(() => {});
+      }
+
       saveTermsAgreed(true);
       onAuthSuccess(formattedPhone, cleanName, cleanEmail || undefined, authData?.user);
       navigate(getPostAuthRedirect(), { replace: true });
@@ -679,6 +690,9 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         const srvData = await srvRes.json().catch(() => null);
 
         if (srvData && srvData.success && srvData.user) {
+          if (srvData.sessionToken) {
+            setServerAuthToken(srvData.sessionToken);
+          }
           if (srvData.session) {
             await supabase.auth.setSession(srvData.session).catch(() => {});
           }
@@ -778,6 +792,9 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         const srvData = await srvRes.json().catch(() => null);
 
         if (srvData && srvData.success && srvData.user) {
+          if (srvData.sessionToken) {
+            setServerAuthToken(srvData.sessionToken);
+          }
           if (srvData.session) {
             await supabase.auth.setSession(srvData.session).catch(() => {});
           }
@@ -1005,6 +1022,15 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
           }
         })
       }).catch(() => {});
+
+      // Send welcome email to new user joining SmartRun
+      if (cleanEmail && !cleanEmail.includes('@girirajpower.internal')) {
+        sendWelcomeEmail({
+          email: cleanEmail,
+          name: cleanName,
+          userId: userId,
+        }).catch(() => {});
+      }
 
       saveTermsAgreed(true);
       onAuthSuccess(formattedPhone, cleanName, cleanEmail, regUser);

@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { apiUrl } from '../lib/apiBase';
 import { saveUserProfile } from '../services/supabaseService';
+import { sendWelcomeEmail } from '../services/welcomeEmailService';
 import { UserProfile } from '../types';
 import { SEOHead } from './SEOHead';
 
@@ -152,6 +153,15 @@ export const PersonalInfoPage = ({
           }
         })
       }).catch(() => {});
+
+      // 5. Dispatch welcome email to new member joining SmartRun
+      if (cleanEmail && !cleanEmail.includes('@girirajpower.internal')) {
+        sendWelcomeEmail({
+          email: cleanEmail,
+          name: cleanName,
+          userId: currentUserId,
+        }).catch(() => {});
+      }
 
       // Clean up session onboarding storage
       try {

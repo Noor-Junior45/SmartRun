@@ -350,6 +350,7 @@ export interface UserProfile {
   cashbackBalance?: number;
   savedUpiIds?: string[];
   transactions?: WalletTransaction[];
+  role?: 'customer' | 'admin';
   createdAt?: string;
   updatedAt?: string;
 }

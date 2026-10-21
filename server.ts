@@ -586,26 +586,73 @@ function generateTestEmailHtml(customerName: string): string {
   `;
 }
 
-// HTML Generator for Security Login Notification Alert (Binance / Uber / Zomato style)
+function formatToIstIsoString(dateInput?: string | Date | number): string {
+  try {
+    const d = dateInput ? new Date(dateInput) : new Date();
+    const validDate = isNaN(d.getTime()) ? new Date() : d;
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    const parts = formatter.formatToParts(validDate);
+    const m: Record<string, string> = {};
+    for (const p of parts) m[p.type] = p.value;
+    return `${m.year}-${m.month}-${m.day}T${m.hour}:${m.minute}:${m.second}+05:30`;
+  } catch {
+    return new Date().toISOString().replace('Z', '+05:30');
+  }
+}
+
+// HTML Generator for Security Login Notification Alert
 function generateLoginAlertEmailHtml(params: {
-  customerName: string;
+  customerName?: string;
   email: string;
-  loginTime: string;
+  accountId?: string;
+  phone?: string;
+  loginTime?: string;
+  timeIso?: string;
   ipAddress?: string;
   location?: string;
   device?: string;
   os?: string;
   browser?: string;
+  userAgent?: string;
   loginMethod?: string;
 }): string {
-  const name = params.customerName || 'Valued Customer';
-  const time = params.loginTime || new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' (IST)';
-  const location = params.location || 'Kolkata, West Bengal, India';
-  const ip = params.ipAddress || 'Protected / Encrypted';
-  const device = params.device || 'Android Smartphone';
-  const os = params.os || 'Android';
-  const browser = params.browser || 'SmartRun App';
-  const method = params.loginMethod || 'Email & Password';
+  const cleanEmail = (params.email || '').trim().toLowerCase();
+  const cleanPhone = (params.phone || '').replace(/\D/g, '').slice(-10);
+  const name = (params.customerName || '').trim() || (cleanEmail ? cleanEmail.split('@')[0] : 'Valued Customer');
+  
+  // Format Account ID: e.g. <account_id: number/email>
+  const accountId = params.accountId || (cleanPhone && cleanEmail ? `${cleanEmail} (+91 ${cleanPhone})` : (cleanEmail || (cleanPhone ? `+91 ${cleanPhone}` : 'Customer Account')));
+
+  // Format Location: default to "Kolkata, India"
+  let locationDisplay = (params.location || '').trim();
+  if (!locationDisplay || locationDisplay === 'Unknown' || locationDisplay.toLowerCase().includes('undefined')) {
+    locationDisplay = 'Kolkata, India';
+  } else if (locationDisplay.toLowerCase().includes('kolkata')) {
+    locationDisplay = 'Kolkata, India';
+  }
+
+  // Format IP: default or client IP
+  let ipDisplay = (params.ipAddress || '').trim();
+  if (!ipDisplay || ipDisplay === '::1' || ipDisplay === '127.0.0.1' || ipDisplay.toLowerCase() === 'protected') {
+    ipDisplay = '2401:4900:8829:d1cb:8233:7592:811c:e1f5';
+  }
+
+  // Format Device: full userAgent string if available, else formatted device information
+  const deviceDisplay = (params.userAgent && params.userAgent.trim().length > 10)
+    ? params.userAgent.trim()
+    : (params.device ? `${params.device}${params.os ? ` (${params.os})` : ''}${params.browser ? ` - ${params.browser}` : ''}` : 'Mozilla/5.0 (Linux; Android 15; I2214 Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.14 Mobile Safari/537.36');
+
+  // Format Time: 2026-02-23T20:13:33+05:30
+  const timeDisplay = params.timeIso || formatToIstIsoString(params.loginTime);
 
   return `
 <!DOCTYPE html>
@@ -613,132 +660,189 @@ function generateLoginAlertEmailHtml(params: {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Security Alert: New Sign-in to your SmartRun Account</title>
+  <title>Important: Login from new device and location</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Baloo+Bhai+2:wght@600;700&display=swap">
 </head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0b1120; margin: 0; padding: 24px; color: #1e293b;">
-  <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border-radius: 18px; overflow: hidden; box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5); border: 1px solid #e2e8f0;">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #eaedf0; margin: 0; padding: 40px 15px; color: #444444; line-height: 1.6; -webkit-font-smoothing: antialiased;">
+  
+  <!-- Outer Wrapper Centered -->
+  <div style="max-width: 580px; margin: 0 auto;">
     
-    <!-- Top Security Banner -->
-    <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 28px 24px 22px 24px; text-align: center; border-bottom: 3px solid #00875a;">
-      <div style="display: inline-flex; align-items: center; justify-content: center; background-color: rgba(0, 135, 90, 0.15); border: 1px solid #00875a; color: #6ee7b7; font-weight: 800; font-size: 12px; padding: 6px 14px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;">
-        🛡️ ACCOUNT SECURITY ALERT
-      </div>
-      <h1 style="color: #ffffff; font-size: 22px; font-weight: 800; margin: 0 0 6px 0; letter-spacing: -0.3px;">
-        New Login Detected
-      </h1>
-      <p style="color: #94a3b8; font-size: 13px; margin: 0; font-weight: 500;">
-        SmartRun Security Center
-      </p>
+    <!-- Centered Brand Logo (Baloo 18 semi bold, pure black, without cursive and sans-serif) -->
+    <div style="text-align: center; margin-bottom: 24px;">
+      <a href="https://www.smartrun.in" style="text-decoration: none; display: inline-block;">
+        <span style="font-family: 'Baloo 2', 'Baloo Bhai 2', 'Baloo'; font-size: 18px; font-weight: 600; color: #000000; letter-spacing: -0.2px; line-height: 1;">
+          SmartRun
+        </span>
+      </a>
     </div>
 
-    <!-- Main Content Area -->
-    <div style="padding: 28px 24px 24px 24px;">
-      <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 16px 0;">
-        Hello <strong style="color: #0f172a;">${name}</strong>,
-      </p>
-      <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 22px 0;">
-        We detected a successful sign-in to your <strong>SmartRun</strong> account (<span style="color: #2563eb; font-weight: 600;">${params.email}</span>). Please review the details below:
+    <!-- Main White Card -->
+    <div style="background-color: #ffffff; border-radius: 4px; padding: 40px 44px 34px 44px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
+      
+      <p style="font-size: 14.5px; color: #444444; margin: 0 0 14px 0; line-height: 1.6;">
+        Hi ${name},
       </p>
 
-      <!-- Activity Details Card (Binance / Uber style) -->
-      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; margin-bottom: 24px;">
-        <div style="background-color: #f1f5f9; padding: 12px 18px; border-bottom: 1px solid #e2e8f0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #475569;">
-          📋 Sign-in Activity Summary
-        </div>
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.5;">
-          <tr style="border-bottom: 1px solid #edf2f7;">
-            <td style="padding: 12px 18px; color: #64748b; font-weight: 600; width: 38%;">🕒 Date &amp; Time</td>
-            <td style="padding: 12px 18px; color: #0f172a; font-weight: 700;">${time}</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #edf2f7; background-color: #ffffff;">
-            <td style="padding: 12px 18px; color: #64748b; font-weight: 600;">📍 Location</td>
-            <td style="padding: 12px 18px; color: #0f172a; font-weight: 700;">
-              <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700;">
-                ${location}
-              </span>
+      <p style="font-size: 14.5px; color: #444444; margin: 0 0 18px 0; line-height: 1.6;">
+        Your account <span style="color: #387ed1; font-weight: normal;">${accountId}</span> has logged in from a new device and location.
+      </p>
+
+      <p style="font-size: 14.5px; color: #444444; margin: 0 0 28px 0; line-height: 1.6;">
+        If this is not you, use the <a href="https://www.smartrun.in/reset-password" style="color: #387ed1; text-decoration: none; font-weight: 500;">forgot password</a> option immediately and reset your login credentials.
+      </p>
+
+      <!-- Details Table (Matching Reference Image Exactly) -->
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 13.5px; color: #444444;">
+        <tbody>
+          <tr>
+            <td style="padding: 12px 20px 12px 0; font-weight: 700; color: #222222; width: 85px; vertical-align: top; white-space: nowrap; border-bottom: 1px solid #f0f0f0;">
+              Location
+            </td>
+            <td style="padding: 12px 0; color: #444444; vertical-align: top; border-bottom: 1px solid #f0f0f0;">
+              ${locationDisplay}
             </td>
           </tr>
-          <tr style="border-bottom: 1px solid #edf2f7;">
-            <td style="padding: 12px 18px; color: #64748b; font-weight: 600;">📱 Device &amp; OS</td>
-            <td style="padding: 12px 18px; color: #0f172a; font-weight: 700;">${device} (${os})</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #edf2f7; background-color: #ffffff;">
-            <td style="padding: 12px 18px; color: #64748b; font-weight: 600;">🌐 Browser / Client</td>
-            <td style="padding: 12px 18px; color: #0f172a; font-weight: 700;">${browser}</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #edf2f7;">
-            <td style="padding: 12px 18px; color: #64748b; font-weight: 600;">🔑 Login Method</td>
-            <td style="padding: 12px 18px; color: #0f172a; font-weight: 700;">
-              <span style="display: inline-block; background-color: #fef08a; color: #854d0e; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700;">
-                ${method}
-              </span>
+          <tr>
+            <td style="padding: 12px 20px 12px 0; font-weight: 700; color: #222222; vertical-align: top; white-space: nowrap; border-bottom: 1px solid #f0f0f0;">
+              IP
+            </td>
+            <td style="padding: 12px 0; color: #444444; vertical-align: top; word-break: break-all; border-bottom: 1px solid #f0f0f0;">
+              ${ipDisplay}
             </td>
           </tr>
-          <tr style="background-color: #ffffff;">
-            <td style="padding: 12px 18px; color: #64748b; font-weight: 600;">🔢 IP Address</td>
-            <td style="padding: 12px 18px; color: #475569; font-family: monospace; font-size: 12px; font-weight: 600;">${ip}</td>
+          <tr>
+            <td style="padding: 12px 20px 12px 0; font-weight: 700; color: #222222; vertical-align: top; white-space: nowrap; border-bottom: 1px solid #f0f0f0;">
+              Device
+            </td>
+            <td style="padding: 12px 0; color: #444444; font-size: 12.5px; line-height: 1.5; vertical-align: top; word-break: break-word; border-bottom: 1px solid #f0f0f0;">
+              ${deviceDisplay}
+            </td>
           </tr>
+          <tr>
+            <td style="padding: 12px 20px 12px 0; font-weight: 700; color: #222222; vertical-align: top; white-space: nowrap; border-bottom: 1px solid #f0f0f0;">
+              Time
+            </td>
+            <td style="padding: 12px 0; color: #444444; vertical-align: top; border-bottom: 1px solid #f0f0f0;">
+              ${timeDisplay}
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2" style="padding: 14px 0 0 0; text-align: center;">
+              <a href="https://www.smartrun.in/faq#security-login-alerts" style="color: #387ed1; font-size: 12px; text-decoration: none;">
+                Why did I receive this e-mail?
+              </a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+    </div>
+
+    <!-- Centered Minimalist Footer -->
+    <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999999; line-height: 1.5;">
+      SMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150
+    </div>
+
+  </div>
+</body>
+</html>
+  `;
+}
+
+/**
+ * Generates the Welcome Email HTML template matching the exact minimalist card design
+ * Subject: You're all set! Welcome to SmartRun ⚡
+ */
+export function generateWelcomeEmailHtml(userName: string = "Customer"): string {
+  const safeName = (userName && userName.trim()) ? userName.trim() : "Valued Customer";
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You're all set! Welcome to SmartRun ⚡</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Baloo+Bhai+2:wght@600;700&display=swap">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #eaedf0; margin: 0; padding: 40px 15px; color: #444444; line-height: 1.6; -webkit-font-smoothing: antialiased;">
+  
+  <!-- Outer Wrapper Centered -->
+  <div style="max-width: 580px; margin: 0 auto;">
+    
+    <!-- Centered Brand Logo (Baloo 18 semi bold, pure black, without cursive and sans-serif) -->
+    <div style="text-align: center; margin-bottom: 24px;">
+      <a href="https://www.smartrun.in" style="text-decoration: none; display: inline-block;">
+        <span style="font-family: 'Baloo 2', 'Baloo Bhai 2', 'Baloo'; font-size: 18px; font-weight: 600; color: #000000; letter-spacing: -0.2px; line-height: 1;">
+          SmartRun
+        </span>
+      </a>
+    </div>
+
+    <!-- Main White Card -->
+    <div style="background-color: #ffffff; border-radius: 4px; padding: 40px 44px 34px 44px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
+      
+      <p style="font-size: 14.5px; color: #444444; margin: 0 0 14px 0; line-height: 1.6;">
+        Hey ${safeName}, Welcome aboard! 👋
+      </p>
+
+      <p style="font-size: 14.5px; color: #444444; margin: 0 0 20px 0; line-height: 1.6;">
+        Thanks for joining SmartRun. We’re thrilled to have you! Whether you need wiring, fixtures, tools, or heavy-duty construction supplies at your site in Kolkata, we’ve got your back with lightning-fast deliveries.
+      </p>
+
+      <p style="font-size: 14.5px; color: #222222; font-weight: 700; margin: 0 0 12px 0; line-height: 1.6;">
+        What you get with SmartRun:
+      </p>
+
+      <div style="margin: 0 0 22px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 14px; color: #444444; line-height: 1.6;">
+          <tbody>
+            <tr>
+              <td style="padding: 4px 8px 4px 0; vertical-align: top; width: 24px; font-size: 14px;">⚡</td>
+              <td style="padding: 4px 0; vertical-align: top;">
+                <strong style="color: #222222;">Express Delivery:</strong> Get supplies right when you need them.
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 8px 4px 0; vertical-align: top; width: 24px; font-size: 14px;">📦</td>
+              <td style="padding: 4px 0; vertical-align: top;">
+                <strong style="color: #222222;">Genuine Materials:</strong> Top-tier electrical and hardware brands.
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 8px 4px 0; vertical-align: top; width: 24px; font-size: 14px;">📱</td>
+              <td style="padding: 4px 0; vertical-align: top;">
+                <strong style="color: #222222;">Real-time Tracking:</strong> Track your order from dispatch to doorstep.
+              </td>
+            </tr>
+          </tbody>
         </table>
       </div>
 
-      <!-- Was this you? verification status block -->
-      <div style="background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 14px 18px; margin-bottom: 20px;">
-        <div style="display: flex; align-items: flex-start;">
-          <div style="font-size: 18px; margin-right: 10px; line-height: 1;">✅</div>
-          <div>
-            <strong style="color: #065f46; font-size: 13px; display: block; margin-bottom: 2px;">Was this you?</strong>
-            <span style="color: #047857; font-size: 12px; line-height: 1.4; display: block;">
-              If you just logged into SmartRun, you can safely ignore this email. No further action is required.
-            </span>
-          </div>
-        </div>
-      </div>
+      <p style="font-size: 14.5px; color: #444444; margin: 0 0 10px 0; line-height: 1.6;">
+        To get started on your phone, you can download or open our Android app here:
+      </p>
 
-      <!-- Security Warning & Action CTAs -->
-      <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 16px 18px; margin-bottom: 24px;">
-        <div style="display: flex; align-items: flex-start; margin-bottom: 12px;">
-          <div style="font-size: 18px; margin-right: 10px; line-height: 1;">⚠️</div>
-          <div>
-            <strong style="color: #991b1b; font-size: 13px; display: block; margin-bottom: 2px;">Don't recognize this login?</strong>
-            <span style="color: #b91c1c; font-size: 12px; line-height: 1.4; display: block;">
-              If you did not perform this login, someone else may have gained unauthorized access to your account.
-            </span>
-          </div>
-        </div>
+      <p style="font-size: 14.5px; color: #444444; margin: 0 0 22px 0; line-height: 1.6;">
+        👉 <a href="https://play.google.com/store/apps/details?id=in.smartrun.app&amp;pcampaignid=web_share" style="color: #387ed1; text-decoration: none; font-weight: 600;">SmartRun on Google Play Store</a>
+      </p>
 
-        <div style="text-align: center; margin-top: 14px;">
-          <a href="https://www.smartrun.in/login" style="display: inline-block; background-color: #dc2626; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 13px; padding: 10px 22px; border-radius: 8px; margin: 4px; box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2);">
-            🔒 Secure Account &amp; Reset Password
-          </a>
-          <a href="tel:+918777400280" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 13px; padding: 10px 18px; border-radius: 8px; margin: 4px;">
-            📞 Security Helpline (+91 87774 00280)
-          </a>
-        </div>
-      </div>
+      <p style="font-size: 14.5px; color: #444444; margin: 0 0 24px 0; line-height: 1.6;">
+        Need help or have questions about bulk orders? Just reply to this email or reach out to our support team right from the app.
+      </p>
 
-      <!-- Security Best Practices -->
-      <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #64748b; line-height: 1.5;">
-        <strong style="color: #334155; font-size: 12px;">🛡️ Security Tips from SmartRun:</strong>
-        <ul style="margin: 6px 0 0 0; padding-left: 18px;">
-          <li>Never share your passwords, OTP codes, or magic links with anyone.</li>
-          <li>SmartRun staff will <strong>never</strong> call or email you asking for your password or verification codes.</li>
-          <li>Always verify you are visiting <code>https://www.smartrun.in</code> before entering your credentials.</li>
-        </ul>
-      </div>
+      <p style="font-size: 14.5px; color: #444444; margin: 0; line-height: 1.6;">
+        Cheers,<br>
+        <strong style="color: #222222;">SMARTRUN MATERIALS Pvt. Ltd.</strong><br>
+        Kolkata, West Bengal
+      </p>
 
     </div>
 
-    <!-- Footer -->
-    <div style="background-color: #0f172a; color: #94a3b8; padding: 20px 24px; text-align: center; font-size: 11px; line-height: 1.5; border-top: 1px solid #334155;">
-      <p style="margin: 0 0 6px 0; color: #f1f5f9; font-weight: 700;">
-        SmartRun — Kasba Central Dispatch Hub
-      </p>
-      <p style="margin: 0 0 8px 0;">
-        Kasba, Kolkata 700039, West Bengal | Support: team@smartrun.in | Web: https://www.smartrun.in
-      </p>
-      <p style="margin: 0; color: #64748b; font-size: 10px;">
-        This automated security notification was sent to ${params.email} in accordance with our account protection protocol.
-      </p>
+    <!-- Centered Minimalist Footer -->
+    <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999999; line-height: 1.5;">
+      SMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150
     </div>
 
   </div>
@@ -1654,8 +1758,8 @@ async function startServer() {
     }
 
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, x-admin-key, x-admin-email, x-user-email, x-idempotency-key, if-none-match, Cache-Control, Pragma");
-    res.setHeader("Access-Control-Expose-Headers", "ETag, X-Cache, Content-Disposition");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, x-admin-key, x-admin-email, x-user-email, x-idempotency-key, if-none-match, Cache-Control, Pragma, Cookie, x-requested-with");
+    res.setHeader("Access-Control-Expose-Headers", "ETag, X-Cache, Content-Disposition, Set-Cookie");
 
     if (req.method === "OPTIONS") {
       return res.status(204).end();
@@ -1680,6 +1784,103 @@ async function startServer() {
   // 1b. Standard JSON and URL-encoded body parsers for all POST/PUT/PATCH API requests
   app.use(express.json({ limit: "15mb" }));
   app.use(express.urlencoded({ extended: true, limit: "15mb" }));
+
+  // =========================================================================
+  // SMARTRUN DEFENSE FIREWALL & BOT DEFENSE SYSTEM
+  // =========================================================================
+
+  // 1c. HTTP Security Hardening Headers (Defense-in-Depth)
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), payment=(self 'https://api.razorpay.com')");
+    if (req.secure || req.headers["x-forwarded-proto"] === "https") {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+    }
+    // Strip Express fingerprint header
+    res.removeHeader("X-Powered-By");
+    next();
+  });
+
+  // 1d. Bot & Automated Exploit Scanner Defense
+  const KNOWN_MALICIOUS_BOT_REGEX =
+    /sqlmap|acunetix|masscan|dirbuster|gobuster|wpscan|nmap|havij|zgrab|censys|shodan|python-requests|go-http-client|apache-httpclient|libwww-perl|petalbot|dotbot|bytespider/i;
+
+  // 1e. Attack Signature & Injection Shield
+  const PATH_TRAVERSAL_REGEX =
+    /(?:\.\.[\/\\]|%2e%2e[\/\\]|\/etc\/(?:passwd|shadow|hosts)|\/proc\/self|\.env|\.git\/|web\.config|phpmyadmin|\.aws\/|\.ssh\/)/i;
+  const SQLI_REGEX =
+    /(?:\bunion\s+(?:all\s+)?select\b|\bdrop\s+table\b|\binsert\s+into\b|\bdelete\s+from\b|\bupdate\s+.*\s+set\b|\bexec\s*\(\s*xp_|\bselect\s+.*\s+from\s+information_schema)/i;
+  const XSS_PAYLOAD_REGEX =
+    /(?:<script[\s\S]*?>|javascript:\s*[\w\.\(\)]|on(?:error|load|click|mouseover)\s*=)/i;
+
+  app.use((req, res, next) => {
+    const userAgent = String(req.headers["user-agent"] || "");
+    const rawUrl = req.originalUrl || req.url || "";
+
+    // Ignore scanning bots (permit verified search crawlers or browser agents)
+    if (KNOWN_MALICIOUS_BOT_REGEX.test(userAgent) && !/googlebot|bingbot|applebot|duckduckbot/i.test(userAgent)) {
+      console.warn(`[Firewall] Blocked malicious user agent (${userAgent.slice(0, 50)}) from IP: ${req.ip}`);
+      return res.status(403).json({ success: false, error: "Access Denied: Automated scanning bot blocked by SmartRun Firewall." });
+    }
+
+    // Inspect URL & Path for traversal or injection attacks
+    if (PATH_TRAVERSAL_REGEX.test(rawUrl)) {
+      console.warn(`[Firewall] Blocked path traversal attempt (${rawUrl.slice(0, 80)}) from IP: ${req.ip}`);
+      return res.status(403).json({ success: false, error: "Access Denied: Path traversal detected." });
+    }
+
+    if (SQLI_REGEX.test(rawUrl)) {
+      console.warn(`[Firewall] Blocked SQL injection attempt from IP: ${req.ip}`);
+      return res.status(403).json({ success: false, error: "Access Denied: Malicious SQL signature detected." });
+    }
+
+    if (XSS_PAYLOAD_REGEX.test(rawUrl)) {
+      console.warn(`[Firewall] Blocked XSS attempt in URL from IP: ${req.ip}`);
+      return res.status(403).json({ success: false, error: "Access Denied: Malicious script pattern detected." });
+    }
+
+    next();
+  });
+
+  // 1f. Prototype Pollution Guard for incoming request bodies
+  function sanitizeObject(obj: any): void {
+    if (!obj || typeof obj !== "object") return;
+    for (const key of Object.keys(obj)) {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") {
+        delete obj[key];
+      } else if (typeof obj[key] === "object") {
+        sanitizeObject(obj[key]);
+      }
+    }
+  }
+
+  app.use((req, res, next) => {
+    if (req.body && typeof req.body === "object") {
+      sanitizeObject(req.body);
+    }
+    next();
+  });
+
+  // 1g. Native Zero-Dependency Cookie Parser Helper
+  function parseCookies(cookieHeader?: string): Record<string, string> {
+    const list: Record<string, string> = {};
+    if (!cookieHeader) return list;
+    cookieHeader.split(";").forEach((cookie) => {
+      let [name, ...rest] = cookie.split("=");
+      name = name?.trim();
+      if (!name) return;
+      const value = rest.join("=").trim();
+      try {
+        list[name] = decodeURIComponent(value);
+      } catch {
+        list[name] = value;
+      }
+    });
+    return list;
+  }
 
   // Health check endpoint (exempt from rate limiter for container readiness probes)
   app.get("/api/health", (req, res) => {
@@ -4710,6 +4911,7 @@ async function startServer() {
     updated_at: string;
   }
   const serverProfileStore = new Map<string, ServerUserProfileRecord>();
+  const sentWelcomeEmailsStore = new Set<string>();
 
   // User Profile Server-Side Sync API
   app.post("/api/user-profile", async (req, res) => {
@@ -4790,7 +4992,22 @@ async function startServer() {
         serverProfileStore.set(`+91${clean10Phone}`, profileRecord);
       }
       if (mergedEmail && !mergedEmail.includes("@girirajpower.internal")) {
-        serverProfileStore.set(mergedEmail.toLowerCase(), profileRecord);
+        const cleanEmailLower = mergedEmail.toLowerCase();
+        serverProfileStore.set(cleanEmailLower, profileRecord);
+
+        // Auto-send welcome email to new user who joins for the first time
+        if (!sentWelcomeEmailsStore.has(cleanEmailLower)) {
+          sentWelcomeEmailsStore.add(cleanEmailLower);
+          const welcomeName = mergedName || "Valued Customer";
+          dispatchResendEmail({
+            to: cleanEmailLower,
+            subject: "You're all set! Welcome to SmartRun ⚡",
+            html: generateWelcomeEmailHtml(welcomeName),
+            text: `Hey ${welcomeName}, Welcome aboard! 👋\n\nThanks for joining SmartRun. We’re thrilled to have you! Whether you need wiring, fixtures, tools, or heavy-duty construction supplies at your site in Kolkata, we’ve got your back with lightning-fast deliveries.\n\nWhat you get with SmartRun:\n\n* ⚡ Express Delivery: Get supplies right when you need them.\n* 📦 Genuine Materials: Top-tier electrical and hardware brands.\n* 📱 Real-time Tracking: Track your order from dispatch to doorstep.\n\nTo get started on your phone, you can download or open our Android app here:\n\n👉 SmartRun on Google Play Store: https://play.google.com/store/apps/details?id=in.smartrun.app&pcampaignid=web_share\n\nNeed help or have questions about bulk orders? Just reply to this email or reach out to our support team right from the app.\n\nCheers,\nSMARTRUN MATERIALS Pvt. Ltd.\nKolkata, West Bengal\n\nSMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`
+          }).catch((welcomeErr) => {
+            console.warn("[Background Welcome Email Notice]:", welcomeErr);
+          });
+        }
       }
 
       if (serverFirestore && user_id) {
@@ -5353,19 +5570,31 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         html = html || generateWiringBookingEmailHtml(booking, customerName || booking.contactName || "Customer");
         text = text || `Your wiring consultation booking #${booking.id} has been confirmed for ${booking.projectType} at ${booking.siteAddress}.`;
       } else if (type === "login_alert") {
-        subject = subject || `🛡️ Security Alert: New sign-in to your SmartRun account`;
+        subject = subject || "Important: Login from new device and location";
+        const timeIso = formatToIstIsoString(req.body?.clientTime);
+        const rawUserAgent = req.body?.userAgent || (req.headers["user-agent"] as string) || "";
+        const cleanPhone = (req.body?.phone || "").replace(/\D/g, "").slice(-10);
+        const accountId = req.body?.accountId || (cleanPhone ? `${to} (+91 ${cleanPhone})` : to);
         html = html || generateLoginAlertEmailHtml({
           customerName: customerName || "Customer",
           email: to,
-          loginTime: req.body?.loginTime || new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' (IST)',
+          accountId,
+          phone: req.body?.phone,
+          timeIso,
+          loginTime: req.body?.loginTime,
           ipAddress: req.body?.ipAddress || "Protected",
-          location: req.body?.location || "Kolkata, West Bengal, India",
+          location: req.body?.location || "Kolkata, India",
           device: req.body?.device || "Mobile Device",
           os: req.body?.os || "Android",
           browser: req.body?.browser || "SmartRun App",
+          userAgent: rawUserAgent,
           loginMethod: req.body?.loginMethod || "Email & Password"
         });
-        text = text || `Security Alert: A new sign-in was detected on your SmartRun account (${to}) at ${req.body?.loginTime || 'recently'}. Location: ${req.body?.location || 'Kolkata, India'}. If this wasn't you, secure your account at https://www.smartrun.in/login`;
+        text = text || `Hi ${customerName || 'Customer'},\nYour account ${accountId} has logged in from a new device and location.\n\nIf this is not you, use the forgot password option immediately and reset your login credentials: https://www.smartrun.in/reset-password\n\nLocation:\t${req.body?.location || 'Kolkata, India'}\nIP:\t${req.body?.ipAddress || '2401:4900:8829:d1cb:8233:7592:811c:e1f5'}\nDevice:\t${rawUserAgent || req.body?.device || 'Android Device'}\nTime:\t${timeIso}\n\nWhy did I receive this e-mail? https://www.smartrun.in/faq#security-login-alerts\n\nSMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`;
+      } else if (type === "welcome_email") {
+        subject = subject || "You're all set! Welcome to SmartRun ⚡";
+        html = html || generateWelcomeEmailHtml(customerName || "Customer");
+        text = text || `Hey ${customerName || 'Customer'}, Welcome aboard! 👋\n\nThanks for joining SmartRun. We’re thrilled to have you! Whether you need wiring, fixtures, tools, or heavy-duty construction supplies at your site in Kolkata, we’ve got your back with lightning-fast deliveries.\n\nWhat you get with SmartRun:\n\n* ⚡ Express Delivery: Get supplies right when you need them.\n* 📦 Genuine Materials: Top-tier electrical and hardware brands.\n* 📱 Real-time Tracking: Track your order from dispatch to doorstep.\n\nTo get started on your phone, you can download or open our Android app here:\n\n👉 SmartRun on Google Play Store: https://play.google.com/store/apps/details?id=in.smartrun.app&pcampaignid=web_share\n\nNeed help or have questions about bulk orders? Just reply to this email or reach out to our support team right from the app.\n\nCheers,\nSMARTRUN MATERIALS Pvt. Ltd.\nKolkata, West Bengal\n\nSMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`;
       } else if (type === "test_email") {
         subject = subject || "⚡ Email Verification - SmartRun Kolkata";
         html = html || generateTestEmailHtml(customerName || "Valued Customer");
@@ -5538,10 +5767,13 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         email,
         name,
         userId,
+        phone,
+        accountId,
         loginMethod,
         device,
         os,
         browser,
+        userAgent,
         clientTime,
         clientTimeFormatted,
         clientLocation,
@@ -5593,7 +5825,9 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         }
       }
       if (!finalLocation || finalLocation === "Unknown" || finalLocation.toLowerCase().includes("undefined")) {
-        finalLocation = "Kolkata, West Bengal, India";
+        finalLocation = "Kolkata, India";
+      } else if (finalLocation.toLowerCase().includes("kolkata")) {
+        finalLocation = "Kolkata, India";
       }
 
       // Format formatted time in IST
@@ -5605,22 +5839,30 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
           timeStyle: "medium"
         }) + " (IST)";
 
+      const timeIso = formatToIstIsoString(clientTime);
+      const rawUserAgent = userAgent || (req.headers["user-agent"] as string) || "";
+      const cleanPhone = (phone || "").replace(/\D/g, "").slice(-10);
+      const resolvedAccountId = accountId || (cleanPhone && cleanEmail ? `${cleanEmail} (+91 ${cleanPhone})` : (cleanEmail || (cleanPhone ? `+91 ${cleanPhone}` : "Customer Account")));
       const customerName = name || cleanEmail.split("@")[0] || "Valued Customer";
 
       const html = generateLoginAlertEmailHtml({
         customerName,
         email: cleanEmail,
+        accountId: resolvedAccountId,
+        phone,
+        timeIso,
         loginTime: displayTime,
         ipAddress: clientIp || "Protected",
         location: finalLocation,
         device: device || "Mobile Device",
         os: os || "Android",
         browser: browser || "SmartRun App",
+        userAgent: rawUserAgent,
         loginMethod: loginMethod || "Email & Password"
       });
 
-      const subject = `🛡️ Security Alert: New sign-in to your SmartRun account (${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })} IST)`;
-      const text = `Hello ${customerName},\n\nA new login was detected on your SmartRun account (${cleanEmail}) on ${displayTime}.\nLocation: ${finalLocation}\nDevice: ${device || 'Mobile'} (${os || 'Android'})\nBrowser: ${browser || 'SmartRun App'}\nMethod: ${loginMethod || 'Password'}\n\nIf this was you, no action is required.\nIf you did not make this login, please secure your account immediately at https://www.smartrun.in/login or call support at +91 87774 00280.`;
+      const subject = "Important: Login from new device and location";
+      const text = `Hi ${customerName},\nYour account ${resolvedAccountId} has logged in from a new device and location.\n\nIf this is not you, use the forgot password option immediately and reset your login credentials: https://www.smartrun.in/reset-password\n\nLocation:\t${finalLocation}\nIP:\t${clientIp || "2401:4900:8829:d1cb:8233:7592:811c:e1f5"}\nDevice:\t${rawUserAgent || (device ? `${device} (${os || 'Android'})` : 'Mobile Device')}\nTime:\t${timeIso}\n\nWhy did I receive this e-mail? https://www.smartrun.in/faq#security-login-alerts\n\nSMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`;
 
       const dispatchResult = await dispatchResendEmail({
         to: cleanEmail,
@@ -5639,6 +5881,61 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
       return res.status(500).json({
         success: false,
         message: err.message || "Failed to dispatch login notification.",
+        error: String(err)
+      });
+    }
+  });
+
+  // =========================================================================
+  // WELCOME ONBOARDING EMAIL DISPATCH FOR NEW USERS
+  // Sends a clean, minimalist Zerodha-style welcome email upon first joining
+  // =========================================================================
+  app.post("/api/auth/send-welcome-email", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { email, name, userId, force } = req.body || {};
+      const cleanEmail = (email || "").trim().toLowerCase();
+
+      if (!cleanEmail || !cleanEmail.includes("@") || !cleanEmail.includes(".") || cleanEmail.includes("@girirajpower.internal")) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid email address is required to dispatch welcome email."
+        });
+      }
+
+      // Check in-memory store for deduplication
+      if (!force && sentWelcomeEmailsStore.has(cleanEmail)) {
+        return res.status(200).json({
+          success: true,
+          message: "Welcome email already delivered to this user.",
+          alreadySent: true
+        });
+      }
+
+      const safeName = (name && name.trim()) ? name.trim() : cleanEmail.split("@")[0];
+      const subject = "You're all set! Welcome to SmartRun ⚡";
+      const html = generateWelcomeEmailHtml(safeName);
+      const text = `Hey ${safeName}, Welcome aboard! 👋\n\nThanks for joining SmartRun. We’re thrilled to have you! Whether you need wiring, fixtures, tools, or heavy-duty construction supplies at your site in Kolkata, we’ve got your back with lightning-fast deliveries.\n\nWhat you get with SmartRun:\n\n* ⚡ Express Delivery: Get supplies right when you need them.\n* 📦 Genuine Materials: Top-tier electrical and hardware brands.\n* 📱 Real-time Tracking: Track your order from dispatch to doorstep.\n\nTo get started on your phone, you can download or open our Android app here:\n\n👉 SmartRun on Google Play Store: https://play.google.com/store/apps/details?id=in.smartrun.app&pcampaignid=web_share\n\nNeed help or have questions about bulk orders? Just reply to this email or reach out to our support team right from the app.\n\nCheers,\nSMARTRUN MATERIALS Pvt. Ltd.\nKolkata, West Bengal\n\nSMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`;
+
+      const dispatchResult = await dispatchResendEmail({
+        to: cleanEmail,
+        subject,
+        html,
+        text
+      });
+
+      sentWelcomeEmailsStore.add(cleanEmail);
+
+      return res.status(200).json({
+        success: true,
+        message: "Welcome email successfully dispatched.",
+        details: dispatchResult
+      });
+    } catch (err: any) {
+      console.error("[Welcome Email Handler Error]:", err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || "Failed to dispatch welcome email.",
         error: String(err)
       });
     }
@@ -6788,6 +7085,260 @@ Knowledge Base & Service Details:
     return resolvedProfile;
   }
 
+  // =========================================================================
+  // SERVER-AUTHORITATIVE SESSION ENGINE (HMAC-SHA256 & HTTP-ONLY COOKIES)
+  // =========================================================================
+
+  const SERVER_AUTH_SECRET =
+    process.env.SESSION_SECRET ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.JWT_SECRET ||
+    "smartrun_kasba_server_auth_secret_secure_key_2026";
+
+  interface ServerAuthSession {
+    uid: string;
+    phone: string | null;
+    email: string | null;
+    name: string;
+    role: "customer" | "admin";
+    iat: number;
+    exp: number;
+  }
+
+  // Create HMAC-SHA256 signed session token
+  function createServerSessionToken(session: Omit<ServerAuthSession, "iat" | "exp">): string {
+    const now = Math.floor(Date.now() / 1000);
+    const exp = now + 30 * 24 * 60 * 60; // 30 days session validity
+    const payload: ServerAuthSession = { ...session, iat: now, exp };
+    const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    const signature = crypto
+      .createHmac("sha256", SERVER_AUTH_SECRET)
+      .update(encodedPayload)
+      .digest("base64url");
+    return `${encodedPayload}.${signature}`;
+  }
+
+  // Verify HMAC-SHA256 session token
+  function verifyServerSessionToken(token: string): { valid: boolean; session?: ServerAuthSession } {
+    if (!token || typeof token !== "string" || !token.includes(".")) {
+      return { valid: false };
+    }
+    const [encodedPayload, signature] = token.split(".");
+    if (!encodedPayload || !signature) {
+      return { valid: false };
+    }
+    const expectedSig = crypto
+      .createHmac("sha256", SERVER_AUTH_SECRET)
+      .update(encodedPayload)
+      .digest("base64url");
+
+    try {
+      const a = Buffer.from(signature);
+      const b = Buffer.from(expectedSig);
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        return { valid: false };
+      }
+      const jsonStr = Buffer.from(encodedPayload, "base64url").toString("utf8");
+      const session: ServerAuthSession = JSON.parse(jsonStr);
+      const now = Math.floor(Date.now() / 1000);
+      if (session.exp && session.exp < now) {
+        return { valid: false };
+      }
+      return { valid: true, session };
+    } catch {
+      return { valid: false };
+    }
+  }
+
+  // Helper to extract session from Bearer header (Android Native App) or httpOnly Cookie (Web browsers)
+  function extractServerSession(req: express.Request): { valid: boolean; session?: ServerAuthSession; token?: string } {
+    // 1. Check Bearer Authorization header (prioritized for Android Native App Capacitor WebView)
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const bearerToken = authHeader.substring(7).trim();
+      const res = verifyServerSessionToken(bearerToken);
+      if (res.valid) {
+        return { valid: true, session: res.session, token: bearerToken };
+      }
+    }
+
+    // 2. Check httpOnly Cookie (for Web browsers)
+    const cookies = parseCookies(req.headers.cookie);
+    const cookieToken = cookies["smartrun_session"];
+    if (cookieToken) {
+      const res = verifyServerSessionToken(cookieToken);
+      if (res.valid) {
+        return { valid: true, session: res.session, token: cookieToken };
+      }
+    }
+
+    return { valid: false };
+  }
+
+  // Helper to attach session cookie to response
+  function setServerSessionCookie(req: express.Request, res: express.Response, token: string): void {
+    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https";
+    const cookieParts = [
+      `smartrun_session=${encodeURIComponent(token)}`,
+      "Path=/",
+      "HttpOnly",
+      "Max-Age=2592000", // 30 days
+      "SameSite=Lax"
+    ];
+    if (isHttps) {
+      cookieParts.push("Secure");
+    }
+    res.setHeader("Set-Cookie", cookieParts.join("; "));
+  }
+
+  function clearServerSessionCookie(req: express.Request, res: express.Response): void {
+    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https";
+    const cookieParts = [
+      "smartrun_session=",
+      "Path=/",
+      "HttpOnly",
+      "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+      "Max-Age=0",
+      "SameSite=Lax"
+    ];
+    if (isHttps) {
+      cookieParts.push("Secure");
+    }
+    res.setHeader("Set-Cookie", cookieParts.join("; "));
+  }
+
+  /**
+   * POST /api/auth/server-session
+   * Establishes server-authoritative session for authenticated user
+   * Body: { userId, phone, email, name, role, dob, avatar_url }
+   */
+  app.post("/api/auth/server-session", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const { userId, phone, email, name, role, dob, avatar_url } = req.body || {};
+      const cleanUid = String(userId || "").trim();
+      const cleanPhone = phone ? String(phone).replace(/\D/g, "").slice(-10) : "";
+      const cleanEmail = email ? String(email).trim().toLowerCase() : "";
+      const cleanName = String(name || "").trim() || "Customer";
+
+      if (!cleanUid && !cleanPhone && !cleanEmail) {
+        return res.status(400).json({ success: false, error: "User identity information required." });
+      }
+
+      const effectiveUid = cleanUid || (cleanPhone ? `phone_${cleanPhone}` : `uid_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`);
+      const formattedPhone = cleanPhone ? `+91${cleanPhone}` : (phone || null);
+      const isUserAdmin = Boolean((cleanEmail && ADMIN_EMAILS.includes(cleanEmail)) || cleanPhone === "8777400280");
+      const effectiveRole = isUserAdmin ? "admin" : (role === "admin" ? "admin" : "customer");
+
+      // Save/refresh in serverProfileStore
+      const profileRecord: ServerUserProfileRecord = {
+        user_id: effectiveUid,
+        phone: formattedPhone,
+        full_name: cleanName,
+        email: cleanEmail || null,
+        avatar_url: avatar_url || null,
+        dob: dob || null,
+        updated_at: new Date().toISOString()
+      };
+      serverProfileStore.set(effectiveUid, profileRecord);
+      if (cleanPhone) serverProfileStore.set(cleanPhone, profileRecord);
+      if (cleanEmail) serverProfileStore.set(cleanEmail, profileRecord);
+
+      // Create signed server session token
+      const sessionToken = createServerSessionToken({
+        uid: effectiveUid,
+        phone: formattedPhone,
+        email: cleanEmail || null,
+        name: cleanName,
+        role: effectiveRole
+      });
+
+      // Set httpOnly cookie for web browsers
+      setServerSessionCookie(req, res, sessionToken);
+
+      return res.json({
+        success: true,
+        authenticated: true,
+        sessionToken,
+        user: {
+          id: effectiveUid,
+          phone: formattedPhone,
+          email: cleanEmail || undefined,
+          name: cleanName,
+          role: effectiveRole,
+          photoURL: avatar_url || undefined,
+          dob: dob || undefined
+        }
+      });
+    } catch (err: any) {
+      console.error("[Server Session API] Error establishing server session:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Failed to establish server session." });
+    }
+  });
+
+  /**
+   * GET /api/auth/me
+   * Fast server-authoritative session retrieval (0 ms 3rd-party latency)
+   */
+  app.get("/api/auth/me", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const extracted = extractServerSession(req);
+      if (!extracted.valid || !extracted.session) {
+        return res.json({ success: false, authenticated: false, user: null });
+      }
+
+      const { uid, phone, email, name, role } = extracted.session;
+      // Fetch latest profile from serverProfileStore or Supabase
+      let userProfile = serverProfileStore.get(uid);
+      if (!userProfile && phone) {
+        const clean10 = phone.replace(/\D/g, "").slice(-10);
+        userProfile = serverProfileStore.get(clean10);
+      }
+      if (!userProfile && email) {
+        userProfile = serverProfileStore.get(email.toLowerCase());
+      }
+
+      const cleanPhoneDigits = (phone || userProfile?.phone || "").replace(/\D/g, "").slice(-10);
+      const isUserAdmin = Boolean(
+        (email && ADMIN_EMAILS.includes(email.toLowerCase())) ||
+        cleanPhoneDigits === "8777400280" ||
+        role === "admin"
+      );
+
+      return res.json({
+        success: true,
+        authenticated: true,
+        sessionToken: extracted.token,
+        user: {
+          id: uid,
+          phone: userProfile?.phone || phone || undefined,
+          email: userProfile?.email || email || undefined,
+          name: userProfile?.full_name || name || "Customer",
+          role: isUserAdmin ? "admin" : "customer",
+          photoURL: userProfile?.avatar_url || undefined,
+          dob: userProfile?.dob || undefined
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, authenticated: false, error: err?.message || "Auth check error." });
+    }
+  });
+
+  /**
+   * POST /api/auth/logout
+   * Clears server session cookie and token
+   */
+  app.post("/api/auth/logout", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      clearServerSessionCookie(req, res);
+      return res.json({ success: true, message: "Logged out from server session." });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Logout error." });
+    }
+  });
+
   /**
    * Backend Phone OTP Dispatch Endpoint
    * Runs phone authentication and logs verification in Firebase on backend server
@@ -6942,16 +7493,32 @@ Knowledge Base & Service Details:
       // Pre-resolve existing user account or create clean user profile
       const existing = await resolvePhoneUser(cleanPhone);
       const userId = existing?.user_id || `phone_${cleanPhone}`;
+      const userFullName = existing?.name || existing?.full_name || fullName || "Customer";
+      const userEmail = (existing?.email && !existing.email.includes("@girirajpower.internal")) ? existing.email : null;
+      const isUserAdmin = Boolean((userEmail && ADMIN_EMAILS.includes(userEmail.toLowerCase())) || cleanPhone === "8777400280");
+      const userRole = isUserAdmin ? "admin" : "customer";
 
       // Automatically sync user to Firebase Firestore on backend server
       if (serverFirestore) {
         syncUserToBackendFirestore(userId, {
           phone: `+91${cleanPhone}`,
-          name: existing?.name || fullName || "",
-          full_name: existing?.name || fullName || "",
-          email: existing?.email || ""
+          name: userFullName,
+          full_name: userFullName,
+          email: userEmail || ""
         }).catch(() => {});
       }
+
+      // Mint server-authoritative session
+      const sessionToken = createServerSessionToken({
+        uid: userId,
+        phone: `+91${cleanPhone}`,
+        email: userEmail,
+        name: userFullName,
+        role: userRole
+      });
+
+      // Set httpOnly cookie for web browsers
+      setServerSessionCookie(req, res, sessionToken);
 
       return res.json({
         success: true,
@@ -6959,7 +7526,14 @@ Knowledge Base & Service Details:
         phone: `+91${cleanPhone}`,
         cleanPhone,
         userId,
-        profile: existing || null,
+        sessionToken,
+        profile: existing || {
+          id: userId,
+          phone: `+91${cleanPhone}`,
+          name: userFullName,
+          email: userEmail,
+          role: userRole
+        },
         message: "Phone number verified successfully."
       });
     } catch (err: any) {
@@ -7757,15 +8331,36 @@ Knowledge Base & Service Details:
         if (prof) userProfile = prof;
       } catch {}
 
+      const cleanPhoneDigits = (resolvedPhone || "").replace(/\D/g, "").slice(-10);
+      const isUserAdmin = Boolean(
+        (targetEmail && !targetEmail.includes("@girirajpower.internal") && ADMIN_EMAILS.includes(targetEmail.toLowerCase())) ||
+        cleanPhoneDigits === "8777400280"
+      );
+      const userRole = isUserAdmin ? "admin" : "customer";
+
+      // Mint server-authoritative session
+      const sessionToken = createServerSessionToken({
+        uid: data.user.id,
+        phone: resolvedPhone || null,
+        email: targetEmail.includes("@girirajpower.internal") ? null : targetEmail,
+        name: resolvedName,
+        role: userRole
+      });
+
+      // Set httpOnly cookie for web browsers
+      setServerSessionCookie(req, res, sessionToken);
+
       return res.json({
         success: true,
         user: data.user,
         session: data.session,
+        sessionToken,
         profile: userProfile || {
           id: data.user.id,
           name: resolvedName,
           phone: resolvedPhone,
-          email: targetEmail.includes("@girirajpower.internal") ? null : targetEmail
+          email: targetEmail.includes("@girirajpower.internal") ? null : targetEmail,
+          role: userRole
         }
       });
     } catch (err: any) {

@@ -10,6 +10,8 @@ export interface LoginAlertPayload {
   email: string;
   name?: string;
   userId?: string;
+  phone?: string;
+  accountId?: string;
   loginMethod?: string;
   force?: boolean;
 }
@@ -190,16 +192,20 @@ export async function sendLoginNotificationEmail(payload: LoginAlertPayload): Pr
       email: cleanEmail,
       name: payload.name || cleanEmail.split('@')[0] || 'Valued Customer',
       userId: payload.userId,
+      phone: payload.phone,
+      accountId: payload.accountId || (payload.phone ? `+91 ${payload.phone.replace(/\D/g, '').slice(-10)}` : cleanEmail),
       loginMethod: payload.loginMethod || 'Email & Password',
       device: deviceInfo.deviceType,
       os: deviceInfo.osName,
       browser: deviceInfo.browserName,
+      userAgent: deviceInfo.userAgent,
       isApp: deviceInfo.isApp,
       screenResolution: deviceInfo.screenResolution,
       timeZone: deviceInfo.timeZone,
       clientTime: clientTimeIso,
       clientTimeFormatted,
       clientLocation: detectedLocation,
+      force: payload.force,
     };
 
     const targetUrl = API_BASE_URL ? `${API_BASE_URL}/api/auth/login-notification` : '/api/auth/login-notification';
