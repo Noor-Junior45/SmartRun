@@ -1181,7 +1181,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-white flex flex-col justify-center items-center px-4 py-3 sm:py-8 relative overflow-x-hidden overflow-y-auto overscroll-contain">
+    <div className="min-h-[100dvh] bg-white flex flex-col justify-end items-center px-4 pt-10 pb-4 sm:pt-16 sm:pb-8 relative overflow-x-hidden overflow-y-auto overscroll-contain">
       <SEOHead
         title="Sign In / Register | SmartRun Express Electricals"
         description="Sign in to your SmartRun account with mobile OTP, email, or Google to track express delivery orders, manage addresses, and access wholesale pricing."
@@ -1212,10 +1212,10 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         </div>
       )}
 
-      {/* Main Login Container - Positioned in the middle/slightly lower of screen without changing design */}
+      {/* Main Login Container - Positioned towards bottom of screen across all devices */}
       <div
         className={`w-full max-w-md bg-white border-0 shadow-none px-4 transition-all duration-300 ${
-          isKeyboardOpen ? 'space-y-2 py-1 my-0' : 'space-y-3 sm:space-y-3.5 my-auto pt-3 pb-8'
+          isKeyboardOpen ? 'space-y-2 py-1 my-0' : 'space-y-3 sm:space-y-3.5 mt-auto mb-3 sm:mb-6 pt-4 pb-6 sm:pb-8'
         }`}
       >
 
