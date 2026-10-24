@@ -25,6 +25,7 @@ import { TechniciansPage } from './components/technicians/TechniciansPage';
 import { TechnicianDetailPage } from './components/technicians/TechnicianDetailPage';
 import { FloatingBottomNav } from './components/FloatingBottomNav';
 import { InstallAppModal } from './components/InstallAppModal';
+import { DeviceLocationPromptModal } from './components/DeviceLocationPromptModal';
 import { AddProductModal } from './components/AddProductModal';
 import { FloatingLiveOrderButton, isProfileOrSubpage } from './components/orders/FloatingLiveOrderButton';
 import { LiveOrderDetailsModal } from './components/orders/LiveOrderDetailsModal';
@@ -235,6 +236,11 @@ export default function App() {
         }
       } catch (err: any) {
         console.debug('[App Location Fetch Notice]:', err?.message || err);
+        // If location is not on or access is not given to our app, prompt user with location modal box
+        const dismissedInSession = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('smartrun_location_prompt_dismissed') === 'true';
+        if (!isCancelled && !dismissedInSession) {
+          setIsDeviceLocationPromptOpen(true);
+        }
       } finally {
         if (!isCancelled) {
           setIsLocationFetching(false);
@@ -320,6 +326,7 @@ export default function App() {
 
   // Modals & Panels
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [isDeviceLocationPromptOpen, setIsDeviceLocationPromptOpen] = useState(false);
   const [addressToEdit, setAddressToEdit] = useState<SavedAddress | null>(null);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
@@ -2254,6 +2261,38 @@ export default function App() {
       <InstallAppModal
         isOpen={isInstallModalOpen}
         onClose={() => setIsInstallModalOpen(false)}
+      />
+
+      <DeviceLocationPromptModal
+        isOpen={isDeviceLocationPromptOpen}
+        onClose={() => {
+          setIsDeviceLocationPromptOpen(false);
+          try {
+            sessionStorage.setItem('smartrun_location_prompt_dismissed', 'true');
+          } catch {}
+        }}
+        savedAddresses={savedAddresses}
+        currentArea={currentArea}
+        activeAddress={activeSavedAddress}
+        onSelectArea={(area, addr) => {
+          setCurrentArea(area);
+          try {
+            safeSetItem('smartrun_selected_area', JSON.stringify(area));
+            if (area?.pincode) {
+              safeSetItem('smartrun_user_pincode', area.pincode);
+            }
+          } catch (e) {}
+          if (addr) {
+            setActiveSavedAddress(addr);
+          } else {
+            setActiveSavedAddress(null);
+          }
+          setIsDeviceLocationPromptOpen(false);
+        }}
+        onOpenManualSearch={() => {
+          setIsDeviceLocationPromptOpen(false);
+          setIsLocationModalOpen(true);
+        }}
       />
 
       <LocationModal

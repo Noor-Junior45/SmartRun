@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Zap, ShoppingBag, User, ChevronDown, Home, Briefcase, Building2, MapPin, Wrench, Search, X, SlidersHorizontal, ArrowUpDown, ArrowRight, ArrowLeft, Check, Navigation } from 'lucide-react';
+import { Zap, ShoppingBag, User, ChevronDown, Home, Briefcase, Building2, MapPin, Wrench, Search, X, SlidersHorizontal, ArrowUpDown, ArrowRight, ArrowLeft, Check, Navigation, Loader2 } from 'lucide-react';
 import { KolkataArea, SavedAddress, UserProfile, Product } from '../types';
 import { detectQueryCategory, searchAllProducts } from '../utils/searchHelper';
 import { isConstructionProduct } from '../utils/categoryHelper';
@@ -349,7 +349,7 @@ export const Header = ({
                 aria-label={`Current delivery address: ${locationInfo.houseNameOnly}. Click to change address`}
               >
                 {isLocationFetching && !activeAddress ? (
-                  <Navigation className="w-3.5 h-3.5 text-amber-500 animate-spin shrink-0" />
+                  <Loader2 className="w-3.5 h-3.5 text-amber-500 animate-spin shrink-0" />
                 ) : activeAddress?.tag === 'home' ? (
                   <Home className="w-3.5 h-3.5 text-pink-600 shrink-0" />
                 ) : activeAddress?.tag === 'work' ? (

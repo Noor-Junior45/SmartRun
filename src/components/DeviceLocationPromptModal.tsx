@@ -181,20 +181,20 @@ export const DeviceLocationPromptModal = ({
 
         <div className="p-3.5 sm:p-5 space-y-3 sm:space-y-3.5 overflow-y-auto no-scrollbar pb-6 sm:pb-5">
           
-          {/* Card 1: Current Location with Reddish Google Maps Pin */}
-          <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-xs flex items-center justify-between gap-3">
+          {/* Card 1: Current Location with Pink/Red Pin & Enable Button */}
+          <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              {/* Google Maps Style Reddish Pin Logo */}
-              <div className="relative flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-b from-rose-50 to-rose-100/60 border border-rose-200/80 shadow-[0_2px_8px_-2px_rgba(244,63,94,0.15),inset_0_1px_1px_rgba(255,255,255,0.9)] shrink-0">
+              {/* Google Maps Style Reddish Pin */}
+              <div className="relative flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-rose-50 border border-rose-100 flex-shrink-0">
                 <svg
-                  className="w-5.5 h-5.5 sm:w-6 sm:h-6 drop-shadow-[0_2px_4px_rgba(225,29,72,0.25)]"
+                  className="w-5.5 h-5.5 sm:w-6 sm:h-6"
                   viewBox="0 0 24 24"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
                 >
                   <path
                     d="M12 2C8.13401 2 5 5.13401 5 9C5 14.18 11.16 21.32 11.45 21.65C11.74 21.98 12.26 21.98 12.55 21.65C12.84 21.32 19 14.18 19 9C19 5.13401 15.866 2 12 2Z"
-                    fill="url(#gmap-prompt-pin-gradient)"
+                    fill="#e23744"
                   />
                   <ellipse
                     cx="12"
@@ -203,20 +203,6 @@ export const DeviceLocationPromptModal = ({
                     ry="2.8"
                     fill="white"
                   />
-                  <defs>
-                    <linearGradient
-                      id="gmap-prompt-pin-gradient"
-                      x1="5"
-                      y1="2"
-                      x2="19"
-                      y2="22"
-                      gradientUnits="userSpaceOnUse"
-                    >
-                      <stop stopColor="#ff4d79" />
-                      <stop offset="0.5" stopColor="#ff245d" />
-                      <stop offset="1" stopColor="#d91448" />
-                    </linearGradient>
-                  </defs>
                 </svg>
               </div>
 
@@ -233,7 +219,7 @@ export const DeviceLocationPromptModal = ({
               id="enable-device-location-btn"
               onClick={handleEnableLocation}
               disabled={gpsLoading}
-              className="px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-b from-[#ff4575] via-[#ff245d] to-[#e0194e] text-white font-bold text-xs sm:text-sm tracking-tight shadow-[0_4px_12px_-2px_rgba(255,36,93,0.4),inset_0_1px_1px_rgba(255,255,255,0.4)] border border-rose-400/40 hover:brightness-105 active:scale-95 transition-all cursor-pointer shrink-0 disabled:opacity-75 flex items-center gap-1.5 min-h-[38px]"
+              className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl bg-gradient-to-r from-[#e23744] via-[#ef4444] to-[#f43f5e] hover:brightness-105 active:scale-95 text-white font-bold text-xs sm:text-sm tracking-tight shadow-md shadow-rose-500/25 transition-all cursor-pointer shrink-0 disabled:opacity-75 flex items-center gap-1.5 min-h-[38px]"
             >
               {gpsLoading ? (
                 <>
@@ -245,6 +231,27 @@ export const DeviceLocationPromptModal = ({
               )}
             </button>
           </div>
+
+          {/* Card 2: Search location manually Bar */}
+          <button
+            type="button"
+            id="search-location-manually-trigger"
+            onClick={() => {
+              onClose();
+              onOpenManualSearch();
+            }}
+            className="w-full bg-white border border-slate-200/90 hover:border-slate-300 rounded-2xl p-3 sm:p-3.5 transition-all shadow-2xs hover:shadow-xs flex items-center justify-between text-left cursor-pointer group min-h-[46px]"
+          >
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-50 border border-rose-100 text-[#e23744] flex items-center justify-center shrink-0">
+                <Search className="w-4 h-4 stroke-[2.5]" />
+              </div>
+              <span className="text-xs sm:text-sm font-semibold text-slate-800 group-hover:text-slate-950 truncate">
+                Search location manually
+              </span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 group-hover:translate-x-0.5 transition-transform shrink-0" />
+          </button>
 
           {/* GPS Error message if permission denied or timed out */}
           {gpsError && (
@@ -274,9 +281,9 @@ export const DeviceLocationPromptModal = ({
             </div>
           )}
 
-          {/* Card 2: Saved Addresses From User Account (Shown ONLY if user has saved addresses, with borderless design and less details) */}
+          {/* Card 3: Saved Addresses (If available) */}
           {savedAddresses && savedAddresses.length > 0 && (
-            <div className="space-y-1.5 pt-0.5">
+            <div className="space-y-1.5 pt-1">
               <div className="flex items-center justify-between px-1 mb-1">
                 <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                   Saved Addresses
@@ -287,14 +294,13 @@ export const DeviceLocationPromptModal = ({
                     onClose();
                     onOpenManualSearch();
                   }}
-                  className="text-[11px] sm:text-xs font-bold text-[#ff245d] hover:text-[#d91448] transition-colors cursor-pointer"
+                  className="text-[11px] sm:text-xs font-bold text-[#e23744] hover:text-[#d02836] transition-colors cursor-pointer"
                 >
                   Manage ({savedAddresses.length})
                 </button>
               </div>
 
-              {/* Borderless Address items with less details */}
-              <div className="bg-white rounded-2xl p-1 shadow-2xs divide-y divide-slate-100 max-h-[200px] overflow-y-auto no-scrollbar">
+              <div className="bg-white rounded-2xl p-1 shadow-2xs divide-y divide-slate-100 max-h-[180px] overflow-y-auto no-scrollbar border border-slate-100">
                 {savedAddresses.map((addr) => {
                   const isSelected = activeAddress?.id === addr.id;
                   const shortAddress = addr.buildingRoad || addr.area?.name || addr.houseName || 'Kolkata';
@@ -339,25 +345,6 @@ export const DeviceLocationPromptModal = ({
               </div>
             </div>
           )}
-
-          {/* Card 3 / Secondary Action: Search location manually Bar */}
-          <button
-            type="button"
-            id="search-location-manually-trigger"
-            onClick={() => {
-              onClose();
-              onOpenManualSearch();
-            }}
-            className="w-full bg-white border border-slate-200/90 hover:border-slate-400 rounded-2xl p-3 sm:p-3.5 transition-all shadow-2xs hover:shadow-xs flex items-center gap-2.5 sm:gap-3 text-left cursor-pointer group min-h-[46px]"
-          >
-            <div className="w-8 h-8 rounded-xl bg-rose-50 group-hover:bg-rose-100 text-[#ff245d] flex items-center justify-center shrink-0 transition-colors">
-              <Search className="w-4 h-4 stroke-[2.5]" />
-            </div>
-            <span className="text-xs sm:text-sm font-medium text-slate-700 group-hover:text-slate-900 flex-1 truncate">
-              Search location manually
-            </span>
-            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-900 group-hover:translate-x-0.5 transition-transform shrink-0" />
-          </button>
 
         </div>
       </div>
