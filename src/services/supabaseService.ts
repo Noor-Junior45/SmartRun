@@ -10,6 +10,7 @@ import { showToast } from '../utils/toast';
 import { API_BASE_URL, apiUrl } from '../lib/apiBase';
 import { generateUUID as secureGenerateUUID, generateSecureOrderNumber, generateSecureToken } from '../utils/cryptoHelper';
 import { NEUTRAL_PRODUCT_PLACEHOLDER } from '../data/productColorImages';
+import { sendOrderDeliveredEmail } from './emailService';
 
 // Offline Sync Queue Types & Constants
 export interface PendingSyncItem {
@@ -259,11 +260,12 @@ const inMemoryActiveAddress = new Map<string, SavedAddress>();
 const inMemoryUpi = new Map<string, string[]>();
 
 /**
- * Purges all device cache memory, browser storage, and service worker caches
- * Ensuring no user data or cache memory lingers on logout or account deletion.
+ * Purges all device cache memory, browser storage, IndexedDB, Cookies,
+ * and service worker caches ensuring no user data or cache memory lingers
+ * on logout or account deletion.
  */
 export async function purgeAllUserCacheAndStorage(): Promise<void> {
-  // 1. Clear in-memory caches
+  // 1. Clear in-memory caches immediately
   clearUserProfile();
   activeUserScope = null;
   inMemoryProfiles.clear();
@@ -297,7 +299,40 @@ export async function purgeAllUserCacheAndStorage(): Promise<void> {
       console.warn('Browser caches delete notice:', e);
     }
 
-    // 5. Unregister service workers if any
+    // 5. Clear all IndexedDB databases
+    try {
+      if ('indexedDB' in window && typeof window.indexedDB.databases === 'function') {
+        const dbs = await window.indexedDB.databases();
+        for (const db of dbs) {
+          if (db.name) {
+            try { window.indexedDB.deleteDatabase(db.name); } catch {}
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('IndexedDB delete notice:', e);
+    }
+
+    // 6. Clear all client cookies
+    try {
+      if (document.cookie) {
+        const cookies = document.cookie.split(';');
+        for (const cookie of cookies) {
+          const eqPos = cookie.indexOf('=');
+          const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;`;
+          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname};`;
+        }
+      }
+    } catch {}
+
+    // 7. Clear native Capacitor Preferences if running on native app
+    try {
+      const { Preferences } = await import('@capacitor/preferences');
+      await Preferences.clear();
+    } catch {}
+
+    // 8. Unregister service workers if any
     try {
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
@@ -308,6 +343,12 @@ export async function purgeAllUserCacheAndStorage(): Promise<void> {
     } catch (e) {
       console.warn('Service worker unregister notice:', e);
     }
+
+    // 9. Sever server-side Cloud Run session
+    try {
+      const { serverLogout } = await import('./serverAuthService');
+      await serverLogout();
+    } catch {}
   }
 }
 
@@ -3306,7 +3347,37 @@ export async function updateOrderStatusInFirestore(
     const updatePayload: Record<string, unknown> = {
       status: newStatus
     };
+    if (newStatus === 'delivered') {
+      updatePayload.delivered_at = new Date().toISOString();
+    }
     await supabase.from('orders').update(updatePayload).eq('id', orderId);
+
+    // If order is successfully delivered, dispatch delivered email with attached Tax Invoice PDF
+    if (newStatus === 'delivered') {
+      try {
+        const currentOrders = activeUserScope ? getStoredOrders(activeUserScope) : [];
+        const targetOrder = currentOrders.find((o) => o.id === orderId);
+        if (targetOrder) {
+          sendOrderDeliveredEmail(targetOrder, targetOrder.customerEmail).catch(() => {});
+        } else {
+          (async () => {
+            try {
+              const { data } = await supabase
+                .from('orders')
+                .select('*')
+                .eq('id', orderId)
+                .maybeSingle();
+              if (data) {
+                sendOrderDeliveredEmail(data as any, data.customer_email || data.recipient_email).catch(() => {});
+              }
+            } catch {}
+          })();
+        }
+      } catch (deliveryEmailErr) {
+        console.debug('[Delivery Email Notice]:', deliveryEmailErr);
+      }
+    }
+
     return true;
   } catch (error) {
     console.warn('Supabase update order error:', error);

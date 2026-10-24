@@ -142,10 +142,10 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) 
             1. Introduction &amp; Who We Are
           </h2>
           <p className="text-sm sm:text-base text-[#4A4235] leading-relaxed">
-            SmartRun is an express quick-commerce electrical and building supplies platform serving greater Kolkata. We supply 100% original, brand-certified electrical products—including Polycab and Havells copper wires, Schneider and Anchor modular switches, Philips LED panels, Finolex conduits, UltraTech cement, and Tata Tiscon steel—along with verified doorstep electrical technician bookings.
+            SmartRun (operated by <strong>SmartRun materials pvt. ltd</strong>) is an express quick-commerce electrical and building supplies platform serving greater Kolkata. We supply 100% original, brand-certified electrical products—including Polycab and Havells copper wires, Schneider and Anchor modular switches, Philips LED panels, Finolex conduits, UltraTech cement, and Tata Tiscon steel—along with verified doorstep electrical technician bookings.
           </p>
           <p className="text-sm sm:text-base text-[#4A4235] leading-relaxed">
-            When you use our website or Android application, SmartRun acts as the <strong>Data Fiduciary</strong> (as defined under the Digital Personal Data Protection Act, 2023). This means we determine the specific purposes and methods of processing your personal information, and we are legally responsible for ensuring its absolute confidentiality, integrity, and safety.
+            When you use our website or Android application, <strong>SmartRun materials pvt. ltd</strong> acts as the <strong>Data Fiduciary</strong> (as defined under the Digital Personal Data Protection Act, 2023). This means we determine the specific purposes and methods of processing your personal information, and we are legally responsible for ensuring its absolute confidentiality, integrity, and safety.
           </p>
         </section>
 
@@ -418,13 +418,13 @@ export const PrivacyPolicyPage: React.FC<PrivacyPolicyPageProps> = ({ onBack }) 
           <div className="p-4 sm:p-5 rounded-xl bg-[#FBF9F4] border border-[#E6DEC8] space-y-3 text-sm text-[#4A4235]">
             <div className="flex items-center gap-2 text-[#2C261E] font-bold">
               <Building2 className="w-5 h-5 text-amber-800" />
-              <span>SmartRun Kasba Central Hub &amp; Grievance Office</span>
+              <span>SmartRun materials pvt. ltd Central Hub &amp; Grievance Office</span>
             </div>
 
             <div className="space-y-2">
               <p className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-[#7C7469] shrink-0 mt-0.5" />
-                <span><strong>Warehouse Address:</strong> SmartRun Kasba Hub, Bediadanga 1st Lane, Nator Park, Kasba, Kolkata, West Bengal 700039, India</span>
+                <span><strong>Company &amp; Warehouse Address:</strong> SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150, West Bengal, India</span>
               </p>
               <p className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-[#7C7469] shrink-0" />

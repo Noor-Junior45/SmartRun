@@ -10,6 +10,7 @@ import { z } from "zod";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import Razorpay from "razorpay";
+import { jsPDF } from "jspdf";
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -125,8 +126,8 @@ function getResendApiKey(): string | null {
   return apiKey;
 }
 
-// Safely determine a valid sender address for Resend
-function getSenderFromEmail(): string {
+// Safely determine a valid sender address for Resend based on email purpose
+function getSenderFromEmail(type?: string): string {
   const envFrom = process.env.RESEND_FROM_EMAIL?.trim();
   if (
     envFrom &&
@@ -140,16 +141,45 @@ function getSenderFromEmail(): string {
     }
     return envFrom;
   }
+
+  // Dedicated sender sub-domains on official smartrun.in domain
+  const cleanType = String(type || "").toLowerCase().trim();
+  if (cleanType === "welcome" || cleanType === "welcome_email") {
+    return "SmartRun <welcome@smartrun.in>";
+  }
+  if (
+    cleanType === "alert" ||
+    cleanType === "security_alert" ||
+    cleanType === "login_alert" ||
+    cleanType === "login_notification"
+  ) {
+    return "SmartRun Security <alert@smartrun.in>";
+  }
+  if (
+    cleanType === "order" ||
+    cleanType === "order_delivered" ||
+    cleanType === "order_confirmation" ||
+    cleanType === "invoice" ||
+    cleanType === "tax_invoice"
+  ) {
+    return "SmartRun Orders <order@smartrun.in>";
+  }
+
   // Default verified production sender on smartrun.in domain
   return "SmartRun <team@smartrun.in>";
 }
 
 interface ResendDispatchOptions {
   from?: string;
+  type?: "welcome" | "alert" | "order" | "invoice" | "welcome_email" | "login_alert" | "order_confirmation" | "order_delivered" | string;
   to: string | string[];
   subject: string;
   html: string;
   text?: string;
+  attachments?: Array<{
+    filename: string;
+    content: string; // Base64 encoded string
+  }>;
 }
 
 interface ResendDispatchResult {
@@ -164,7 +194,17 @@ interface ResendDispatchResult {
 /**
  * Direct HTTPS REST call to Resend's API to bypass internal SDK console.error logs
  */
-async function callResendApi(apiKey: string, payload: { from: string; to: string[]; subject: string; html: string; text?: string }): Promise<{ ok: boolean; status: number; data?: any; error?: any }> {
+async function callResendApi(
+  apiKey: string,
+  payload: {
+    from: string;
+    to: string[];
+    subject: string;
+    html: string;
+    text?: string;
+    attachments?: Array<{ filename: string; content: string }>;
+  }
+): Promise<{ ok: boolean; status: number; data?: any; error?: any }> {
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -221,13 +261,13 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
     };
   }
 
-  let fromEmail = options.from || getSenderFromEmail();
+  let fromEmail = options.from || getSenderFromEmail(options.type);
   if (
     fromEmail.includes("oieldiakir.resend.app") ||
     fromEmail.includes("example.com") ||
     fromEmail.includes("girirajpower.in")
   ) {
-    fromEmail = "SmartRun <team@smartrun.in>";
+    fromEmail = getSenderFromEmail(options.type);
   }
 
   let deliveredIds: string[] = [];
@@ -251,7 +291,8 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
         to: [recipient],
         subject: options.subject,
         html: options.html,
-        text: options.text
+        text: options.text,
+        attachments: options.attachments
       });
 
       // If domain validation error occurred and sender was custom, retry with verified sandbox sender
@@ -271,7 +312,8 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
             to: [recipient],
             subject: options.subject,
             html: options.html,
-            text: options.text
+            text: options.text,
+            attachments: options.attachments
           });
         }
 
@@ -322,8 +364,188 @@ async function dispatchResendEmail(options: ResendDispatchOptions): Promise<Rese
   };
 }
 
+// Extract 8-char short order code matching the rest of the application
+function getShortOrderCode(orderIdInput: any): string {
+  if (!orderIdInput) return "ORD10001";
+  const str = String(orderIdInput).trim();
+  const hexMatch = str.match(/[0-9a-fA-F]{8}/);
+  if (hexMatch) return hexMatch[0].toUpperCase();
+  const clean = str.replace(/[^a-zA-Z0-9]/g, "");
+  return clean.slice(0, 8).toUpperCase() || "ORD10001";
+}
+
+// Generates a complete vector-rendered A4 Tax Invoice PDF and returns it as a base64 string
+function generateInvoicePdfBuffer(order: any): string {
+  try {
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const shortId = getShortOrderCode(order.id || order.order_id || order.orderId);
+
+    // Top header banner (Dark slate #0f172a)
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, 210, 32, "F");
+
+    // Logo text
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text("Smart", 14, 18);
+    doc.setTextColor(0, 135, 90);
+    doc.text("Run", 35, 18);
+
+    doc.setFontSize(9);
+    doc.setTextColor(203, 213, 225);
+    doc.setFont("helvetica", "normal");
+    doc.text("Express Electrical & Quick Commerce • Kolkata", 14, 25);
+
+    // Right banner - TAX INVOICE
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text("TAX INVOICE", 196, 17, { align: "right" });
+    doc.setFontSize(9);
+    doc.setTextColor(0, 135, 90);
+    doc.text("ORIGINAL FOR RECIPIENT", 196, 24, { align: "right" });
+
+    // Metadata cards
+    let y = 40;
+    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(14, y, 88, 32, 2, 2, "FD");
+    doc.roundedRect(108, y, 88, 32, 2, 2, "FD");
+
+    // Left card: Invoice Details
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text("INVOICE DETAILS", 18, y + 6);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Invoice No: INV-${shortId}`, 18, y + 12);
+    doc.text(`Order ID: #${shortId}`, 18, y + 17);
+    const dateStr = order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-IN") : new Date().toLocaleDateString("en-IN");
+    doc.text(`Date: ${dateStr}`, 18, y + 22);
+    doc.text(`Status: DELIVERED`, 18, y + 27);
+
+    // Right card: Customer Details
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text("DELIVERED TO", 112, y + 6);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    const custName = (order.customerName || order.recipient_name || "Valued Customer").slice(0, 32);
+    doc.text(`Customer: ${custName}`, 112, y + 12);
+    doc.text(`Phone: ${order.phone || order.recipient_phone || "+91"}`, 112, y + 17);
+    const addr = `${order.address || order.address_line1 || ""}, ${order.area || "Kolkata"}`.slice(0, 45);
+    doc.text(`Address: ${addr}`, 112, y + 22);
+    doc.text(`PIN: ${order.pincode || "700001"}`, 112, y + 27);
+
+    // Table header
+    y = 80;
+    doc.setFillColor(241, 245, 249);
+    doc.rect(14, y, 182, 8, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(30, 41, 59);
+    doc.text("ITEM DESCRIPTION", 18, y + 5.5);
+    doc.text("QTY", 130, y + 5.5, { align: "center" });
+    doc.text("UNIT PRICE", 160, y + 5.5, { align: "right" });
+    doc.text("TOTAL", 192, y + 5.5, { align: "right" });
+
+    // Table rows
+    y += 8;
+    const rawItems = order.items && order.items.length > 0
+      ? order.items
+      : order.services && order.services.length > 0
+      ? order.services.map((s: any) => ({
+          product: { name: s.serviceTitle || "Electrical Wiring Service", brand: "SmartRun Pro", price: s.estimatedPrice || order.totalAmount || 0, unit: "service" },
+          quantity: 1
+        }))
+      : [{ product: { name: "Standard Electrical & Hardware Supplies", brand: "SmartRun Genuine", price: order.totalAmount || 0, unit: "pkg" }, quantity: 1 }];
+
+    doc.setFont("helvetica", "normal");
+    rawItems.slice(0, 10).forEach((item: any, idx: number) => {
+      const pName = (item.product?.name || "Electrical Item").slice(0, 48);
+      const brand = item.product?.brand || "SmartRun Genuine";
+      const color = item.selectedColor || item.product?.selectedColor;
+      const desc = color ? `${pName} (${color})` : pName;
+      const qty = item.quantity || 1;
+      const price = item.product?.price || 0;
+      const total = price * qty;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(30, 41, 59);
+      doc.text(`${idx + 1}. ${desc}`, 18, y + 5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Brand: ${brand} • Unit: ${item.product?.unit || "1 pc"}`, 18, y + 9);
+
+      doc.setFontSize(8);
+      doc.setTextColor(30, 41, 59);
+      doc.text(`${qty}`, 130, y + 6, { align: "center" });
+      doc.text(`Rs. ${price.toLocaleString("en-IN")}`, 160, y + 6, { align: "right" });
+      doc.text(`Rs. ${total.toLocaleString("en-IN")}`, 192, y + 6, { align: "right" });
+
+      y += 12;
+      doc.setDrawColor(226, 232, 240);
+      doc.line(14, y, 196, y);
+    });
+
+    // Totals Box
+    y += 6;
+    const summaryX = 118;
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(summaryX, y, 78, 36, 2, 2, "FD");
+
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Subtotal:", summaryX + 4, y + 7);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`Rs. ${(order.itemTotal || order.totalAmount || 0).toLocaleString("en-IN")}`, 192, y + 7, { align: "right" });
+
+    doc.setTextColor(100, 116, 139);
+    doc.text("Delivery Fee:", summaryX + 4, y + 14);
+    doc.setTextColor(0, 135, 90);
+    doc.text((order.deliveryFee || 0) === 0 ? "FREE" : `Rs. ${order.deliveryFee}`, 192, y + 14, { align: "right" });
+
+    doc.setTextColor(100, 116, 139);
+    doc.text("Payment Mode:", summaryX + 4, y + 21);
+    doc.setTextColor(30, 41, 59);
+    doc.text(order.paymentMethod === "cod" ? "COD" : "Prepaid (Online)", 192, y + 21, { align: "right" });
+
+    doc.setDrawColor(226, 232, 240);
+    doc.line(summaryX + 4, y + 25, 192, y + 25);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text("Grand Total:", summaryX + 4, y + 31);
+    doc.text(`Rs. ${(order.totalAmount || 0).toLocaleString("en-IN")}`, 192, y + 31, { align: "right" });
+
+    // Footer notes
+    const footerY = 270;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text("This is a computer-generated tax invoice. No signature is required.", 105, footerY, { align: "center" });
+    doc.text("SmartRun materials pvt. ltd • Kheyadah Village, Bhagabanpur, Kolkata 700150 • Helpline: +91 87774 00280", 105, footerY + 5, { align: "center" });
+
+    const arrayBuf = doc.output("arraybuffer");
+    return Buffer.from(arrayBuf).toString("base64");
+  } catch (pdfErr) {
+    console.error("[generateInvoicePdfBuffer Error]:", pdfErr);
+    return "";
+  }
+}
+
 // HTML Generator for Order Confirmation Invoice Email
-function generateOrderEmailHtml(order: any, customerName: string): string {
+function generateOrderEmailHtml(order: any, customerName: string, isDelivered = false): string {
+  const shortId = getShortOrderCode(order.id || order.order_id || order.orderId);
   const itemsListHtml = (order.items || [])
     .map(
       (item: any) => {
@@ -352,12 +574,33 @@ function generateOrderEmailHtml(order: any, customerName: string): string {
     )
     .join('');
 
+  const headerTitle = isDelivered ? "Express Order Delivered!" : "Express Order Confirmed!";
+  const headerSubtitle = isDelivered
+    ? "Your Kolkata Rapid Electrical &amp; Construction supplies have been successfully delivered"
+    : "Kolkata 60-Minute Rapid Electrical &amp; Construction Delivery";
+
+  const deliveredStatusRow = isDelivered
+    ? `
+          <tr>
+            <td style="font-size: 13px; color: #854d0e; font-weight: bold; padding-top: 6px;">Status:</td>
+            <td style="font-size: 13px; color: #16a34a; font-weight: 800; text-align: right; padding-top: 6px;">
+              DELIVERED &#10004;
+            </td>
+          </tr>`
+    : '';
+
+  const attachedPdfNote = isDelivered
+    ? `<div style="margin-top: 14px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #166534;">
+        <strong>📄 Attached Tax Invoice:</strong> Official PDF invoice <strong>SmartRun-Invoice-${shortId}.pdf</strong> is attached to this email.
+      </div>`
+    : '';
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>SmartRun Order Confirmation</title>
+  <title>${isDelivered ? 'SmartRun Order Delivered' : 'SmartRun Order Confirmation'}</title>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
@@ -368,10 +611,10 @@ function generateOrderEmailHtml(order: any, customerName: string): string {
         <span>Smart</span><span style="color: #00875a;">Run</span>
       </div>
       <h1 style="color: #ffffff; font-size: 22px; font-weight: 800; margin: 6px 0 2px 0;">
-        Express Order Confirmed!
+        ${headerTitle}
       </h1>
       <p style="color: #cbd5e1; font-size: 13px; margin: 0;">
-        Kolkata 60-Minute Rapid Electrical &amp; Construction Delivery
+        ${headerSubtitle}
       </p>
     </div>
 
@@ -381,8 +624,9 @@ function generateOrderEmailHtml(order: any, customerName: string): string {
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
             <td style="font-size: 13px; color: #854d0e; font-weight: bold;">Order ID:</td>
-            <td style="font-size: 14px; color: #0f172a; font-weight: 800; text-align: right;">${order.id || 'GP-100234'}</td>
+            <td style="font-size: 14px; color: #0f172a; font-weight: 800; text-align: right;">#${shortId}</td>
           </tr>
+          ${deliveredStatusRow}
           <tr>
             <td style="font-size: 13px; color: #854d0e; font-weight: bold; padding-top: 6px;">Customer:</td>
             <td style="font-size: 13px; color: #0f172a; font-weight: 600; text-align: right; padding-top: 6px;">${customerName || order.customerName || 'Valued Customer'}</td>
@@ -449,7 +693,8 @@ function generateOrderEmailHtml(order: any, customerName: string): string {
         <strong style="color: #0f172a;">Shipping Address:</strong><br>
         ${order.address || 'Address on file'}, ${order.area || 'Kolkata'} ${order.landmark ? `(Landmark: ${order.landmark})` : ''}<br>
         <strong>Phone:</strong> ${order.phone || '+91'}<br><br>
-        <strong>Central Hub Dispatch:</strong> SmartRun, Bediadanga 1st Ln, Nator Park, Kasba, Kolkata 700039
+        <strong>Central Hub Dispatch:</strong> SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150
+        ${attachedPdfNote}
       </div>
     </div>
 
@@ -573,7 +818,7 @@ function generateTestEmailHtml(customerName: string): string {
       <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 12px; color: #64748b; text-align: left;">
         <strong>Service:</strong> SmartRun Transactional Mailer<br>
         <strong>Time:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)<br>
-        <strong>Hub:</strong> SmartRun Kasba Central Dispatch, Kolkata 700039
+        <strong>Hub:</strong> SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150
       </div>
     </div>
 
@@ -741,7 +986,7 @@ function generateLoginAlertEmailHtml(params: {
 
     <!-- Centered Minimalist Footer -->
     <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999999; line-height: 1.5;">
-      SMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150
+      SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150
     </div>
 
   </div>
@@ -834,7 +1079,7 @@ export function generateWelcomeEmailHtml(userName: string = "Customer"): string 
 
       <p style="font-size: 14.5px; color: #444444; margin: 0; line-height: 1.6;">
         Cheers,<br>
-        <strong style="color: #222222;">SMARTRUN MATERIALS Pvt. Ltd.</strong><br>
+        <strong style="color: #222222;">SmartRun materials pvt. ltd</strong><br>
         Kolkata, West Bengal
       </p>
 
@@ -842,7 +1087,7 @@ export function generateWelcomeEmailHtml(userName: string = "Customer"): string 
 
     <!-- Centered Minimalist Footer -->
     <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999999; line-height: 1.5;">
-      SMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150
+      SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150
     </div>
 
   </div>
@@ -1032,7 +1277,7 @@ function generateAdminOrderAlertHtml(order: any): string {
 
     <!-- Footer -->
     <div style="background-color: #0f172a; color: #94a3b8; padding: 18px; text-align: center; font-size: 11px;">
-      SmartRun Store Admin Notification System • Kasba Hub Kolkata 700039<br>
+      SmartRun Store Admin Notification System • SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150<br>
       Admin Alert Email: ${ADMIN_EMAIL}
     </div>
   </div>
@@ -1209,6 +1454,100 @@ function writeOrderReviewsFile(reviews: Record<string, any>): void {
 }
 
 // ============================================================================
+// PERSISTENT SERVER STORE FOR WELCOMED USERS (Survives Server Restarts)
+// Guarantees welcome emails are strictly sent ONCE per first-time registered account
+// ============================================================================
+const WELCOMED_USERS_FILE = path.join(DATA_DIR, "welcomed_users.json");
+
+function loadWelcomedUsersFile(): Set<string> {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(WELCOMED_USERS_FILE)) {
+      const raw = fs.readFileSync(WELCOMED_USERS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed.map((e: string) => String(e).trim().toLowerCase()));
+      }
+    }
+  } catch (err) {
+    console.warn("[Server Read Welcomed Users Notice]:", err);
+  }
+  return new Set<string>();
+}
+
+const welcomedUsersStore: Set<string> = loadWelcomedUsersFile();
+
+function recordWelcomedUser(email: string): void {
+  if (!email || !email.includes("@")) return;
+  const clean = email.trim().toLowerCase();
+  if (clean.includes("@girirajpower.internal")) return;
+  welcomedUsersStore.add(clean);
+  try {
+    ensureDataDir();
+    fs.writeFileSync(WELCOMED_USERS_FILE, JSON.stringify(Array.from(welcomedUsersStore), null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[Server Write Welcomed Users Notice]:", err);
+  }
+}
+
+function isUserWelcomed(email: string): boolean {
+  if (!email || !email.includes("@")) return true;
+  const clean = email.trim().toLowerCase();
+  if (clean.includes("@girirajpower.internal")) return true;
+  return welcomedUsersStore.has(clean);
+}
+
+// ============================================================================
+// PERSISTENT SERVER STORE FOR DELIVERED ORDER EMAILS (Survives Server Restarts)
+// Guarantees delivery confirmation & Tax Invoice PDF emails are sent strictly once per delivery
+// ============================================================================
+const DELIVERED_EMAILS_FILE = path.join(DATA_DIR, "delivered_emails_sent.json");
+
+function loadDeliveredEmailsFile(): Set<string> {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(DELIVERED_EMAILS_FILE)) {
+      const raw = fs.readFileSync(DELIVERED_EMAILS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed.map((id: string) => String(id).trim()));
+      }
+    }
+  } catch (err) {
+    console.warn("[Server Read Delivered Emails Notice]:", err);
+  }
+  return new Set<string>();
+}
+
+const deliveredEmailsStore: Set<string> = loadDeliveredEmailsFile();
+
+function recordDeliveredEmailSent(orderId: string, email?: string): void {
+  if (!orderId) return;
+  const rawId = String(orderId).trim();
+  deliveredEmailsStore.add(rawId);
+  const short = getShortOrderCode(rawId);
+  if (short) deliveredEmailsStore.add(short);
+  if (short) deliveredEmailsStore.add(`#${short}`);
+  try {
+    ensureDataDir();
+    fs.writeFileSync(DELIVERED_EMAILS_FILE, JSON.stringify(Array.from(deliveredEmailsStore), null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[Server Write Delivered Emails Notice]:", err);
+  }
+}
+
+function isDeliveredEmailSent(orderId: string): boolean {
+  if (!orderId) return false;
+  const rawId = String(orderId).trim();
+  const short = getShortOrderCode(rawId);
+  return (
+    deliveredEmailsStore.has(rawId) ||
+    deliveredEmailsStore.has(short) ||
+    deliveredEmailsStore.has(`#${short}`)
+  );
+}
+
+// ============================================================================
 // 1. SUPABASE SERVER CLIENT (LAZY INITIALIZATION)
 // ============================================================================
 let serverSupabaseClient: any = null;
@@ -1282,6 +1621,9 @@ async function backfillAllUsersToFirebaseFirestore(): Promise<{ success: boolean
       for (const prof of profiles) {
         const uid = prof.user_id || prof.id;
         if (!uid) continue;
+        if (prof.email && !prof.email.includes("@girirajpower.internal")) {
+          recordWelcomedUser(prof.email);
+        }
         const cleanPhone = (prof.phone || "").replace(/\D/g, "").slice(-10);
         await syncUserToBackendFirestore(uid, {
           phone: cleanPhone ? `+91${cleanPhone}` : prof.phone || "",
@@ -1312,6 +1654,10 @@ async function backfillAllUsersToFirebaseFirestore(): Promise<{ success: boolean
         const cleanEmail = (order.customer_email || order.recipient_email || "").trim().toLowerCase();
         const emailToSave = cleanEmail.includes("@girirajpower.internal") ? "" : cleanEmail;
         const nameToSave = order.customer_name || order.recipient_name || "";
+
+        if (emailToSave) {
+          recordWelcomedUser(emailToSave);
+        }
 
         await syncUserToBackendFirestore(uid, {
           phone: cleanPhone ? `+91${cleanPhone}` : "",
@@ -2004,7 +2350,8 @@ async function startServer() {
           if (parsed && parsed.buildId) {
             return {
               success: true,
-              version: parsed.version || process.env.npm_package_version || "2.4.0",
+              version: parsed.version || process.env.npm_package_version || "1.1.3",
+              versionCode: parsed.versionCode || 14,
               buildId: parsed.buildId,
               builtAt: parsed.builtAt || SERVER_BOOT_TIME,
               serverStartedAt: SERVER_BOOT_TIME,
@@ -2018,10 +2365,11 @@ async function startServer() {
       console.warn("[Server Version Check Notice]:", err);
     }
 
-    const fallbackBuildId = process.env.BUILD_ID || process.env.VITE_APP_BUILD_ID || `v2.4.0-${SERVER_BOOT_TIME}`;
+    const fallbackBuildId = process.env.BUILD_ID || process.env.VITE_APP_BUILD_ID || `v1.1.3-14-${SERVER_BOOT_TIME}`;
     return {
       success: true,
-      version: process.env.npm_package_version || "2.4.0",
+      version: process.env.npm_package_version || "1.1.3",
+      versionCode: 14,
       buildId: fallbackBuildId,
       builtAt: SERVER_BOOT_TIME,
       serverStartedAt: SERVER_BOOT_TIME,
@@ -3218,7 +3566,7 @@ async function startServer() {
         `📍 *DELIVERY ADDRESS:* ${validatedOrder.address}, Area: ${validatedOrder.area}, PIN: ${validatedOrder.pincode}\n\n` +
         `🛒 *ORDERED ITEMS:*\n${itemsListText}\n\n` +
         `💳 *GRAND TOTAL:* ₹${validatedOrder.totalAmount.toLocaleString("en-IN")} (${validatedOrder.paymentMethod.toUpperCase()})\n` +
-        `⚡ *Dispatch:* SmartRun Kasba Central Hub, Kolkata 700039`;
+        `⚡ *Dispatch:* SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150`;
 
       const whatsappUrl = `https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappText)}`;
       const customerWhatsappUrl = phoneClean
@@ -3242,6 +3590,8 @@ async function startServer() {
           const custHtml = generateOrderEmailHtml(validatedOrder, validatedOrder.customerName);
           const custSubject = `⚡ Order Confirmed ${shortDisplayId} - SmartRun Express Kolkata`;
           dispatchResendEmail({
+            type: "order",
+            from: "SmartRun Orders <order@smartrun.in>",
             to: [validatedOrder.customerEmail.trim()],
             subject: custSubject,
             html: custHtml,
@@ -4940,14 +5290,17 @@ async function startServer() {
       let mergedPhone = formattedE164 || sanitizedPhone || null;
       let mergedName = sanitizedName || null;
 
+      let existingRow: any = null;
+
       if (sb && user_id) {
         try {
           // Read existing row to prevent overwriting genuine existing values with null
-          const { data: existingRow } = await sb
+          const { data } = await sb
             .from("user_profiles")
             .select("*")
             .eq("user_id", user_id)
             .maybeSingle();
+          existingRow = data;
 
           if (existingRow) {
             if (!mergedEmail && existingRow.email && !existingRow.email.includes("@girirajpower.internal")) {
@@ -4995,19 +5348,8 @@ async function startServer() {
         const cleanEmailLower = mergedEmail.toLowerCase();
         serverProfileStore.set(cleanEmailLower, profileRecord);
 
-        // Auto-send welcome email to new user who joins for the first time
-        if (!sentWelcomeEmailsStore.has(cleanEmailLower)) {
-          sentWelcomeEmailsStore.add(cleanEmailLower);
-          const welcomeName = mergedName || "Valued Customer";
-          dispatchResendEmail({
-            to: cleanEmailLower,
-            subject: "You're all set! Welcome to SmartRun ⚡",
-            html: generateWelcomeEmailHtml(welcomeName),
-            text: `Hey ${welcomeName}, Welcome aboard! 👋\n\nThanks for joining SmartRun. We’re thrilled to have you! Whether you need wiring, fixtures, tools, or heavy-duty construction supplies at your site in Kolkata, we’ve got your back with lightning-fast deliveries.\n\nWhat you get with SmartRun:\n\n* ⚡ Express Delivery: Get supplies right when you need them.\n* 📦 Genuine Materials: Top-tier electrical and hardware brands.\n* 📱 Real-time Tracking: Track your order from dispatch to doorstep.\n\nTo get started on your phone, you can download or open our Android app here:\n\n👉 SmartRun on Google Play Store: https://play.google.com/store/apps/details?id=in.smartrun.app&pcampaignid=web_share\n\nNeed help or have questions about bulk orders? Just reply to this email or reach out to our support team right from the app.\n\nCheers,\nSMARTRUN MATERIALS Pvt. Ltd.\nKolkata, West Bengal\n\nSMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`
-          }).catch((welcomeErr) => {
-            console.warn("[Background Welcome Email Notice]:", welcomeErr);
-          });
-        }
+        // Profile synchronization only - never dispatch emails from profile sync
+        recordWelcomedUser(cleanEmailLower);
       }
 
       if (serverFirestore && user_id) {
@@ -5559,11 +5901,30 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
       let subject = customSubject;
       let html = customHtml;
       let text = customText;
+      let attachments: Array<{ filename: string; content: string }> | undefined = undefined;
 
       // Select template based on type
-      if (type === "order_confirmation" && order) {
+      if ((type === "order_delivered" || (type === "order_confirmation" && order?.status === "delivered")) && order) {
+        const shortId = getShortOrderCode(order.id || order.order_id || order.orderId);
+        subject = subject || `⚡ Order Delivered #${shortId} - SmartRun Express Kolkata`;
+        html = html || generateOrderEmailHtml(order, customerName || order.customerName || "Customer", true);
+        text = text || `Your SmartRun order #${shortId} has been successfully delivered to ${order.area || 'Kolkata'}. Attached is your official Tax Invoice PDF (SmartRun-Invoice-${shortId}.pdf). Total: ₹${order.totalAmount}. Thank you for ordering with SmartRun!`;
+        
+        // Generate vector PDF tax invoice attachment
+        const pdfBase64 = generateInvoicePdfBuffer(order);
+        if (pdfBase64) {
+          attachments = [
+            {
+              filename: `SmartRun-Invoice-${shortId}.pdf`,
+              content: pdfBase64
+            }
+          ];
+        }
+
+        recordDeliveredEmailSent(order.id || order.order_id || order.orderId, to);
+      } else if (type === "order_confirmation" && order) {
         subject = subject || `⚡ Order Confirmed #${order.id} - SmartRun Express Kolkata`;
-        html = html || generateOrderEmailHtml(order, customerName || order.customerName || "Customer");
+        html = html || generateOrderEmailHtml(order, customerName || order.customerName || "Customer", false);
         text = text || `Your SmartRun order #${order.id} has been confirmed. Total: ₹${order.totalAmount}. Delivery to ${order.area}, Kolkata.`;
       } else if (type === "service_booking" && booking) {
         subject = subject || `⚡ Service Booking Confirmed #${booking.id} - SmartRun Services`;
@@ -5590,11 +5951,11 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
           userAgent: rawUserAgent,
           loginMethod: req.body?.loginMethod || "Email & Password"
         });
-        text = text || `Hi ${customerName || 'Customer'},\nYour account ${accountId} has logged in from a new device and location.\n\nIf this is not you, use the forgot password option immediately and reset your login credentials: https://www.smartrun.in/reset-password\n\nLocation:\t${req.body?.location || 'Kolkata, India'}\nIP:\t${req.body?.ipAddress || '2401:4900:8829:d1cb:8233:7592:811c:e1f5'}\nDevice:\t${rawUserAgent || req.body?.device || 'Android Device'}\nTime:\t${timeIso}\n\nWhy did I receive this e-mail? https://www.smartrun.in/faq#security-login-alerts\n\nSMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`;
+        text = text || `Hi ${customerName || 'Customer'},\nYour account ${accountId} has logged in from a new device and location.\n\nIf this is not you, use the forgot password option immediately and reset your login credentials: https://www.smartrun.in/reset-password\n\nLocation:\t${req.body?.location || 'Kolkata, India'}\nIP:\t${req.body?.ipAddress || '2401:4900:8829:d1cb:8233:7592:811c:e1f5'}\nDevice:\t${rawUserAgent || req.body?.device || 'Android Device'}\nTime:\t${timeIso}\n\nWhy did I receive this e-mail? https://www.smartrun.in/faq#security-login-alerts\n\nSmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150`;
       } else if (type === "welcome_email") {
         subject = subject || "You're all set! Welcome to SmartRun ⚡";
         html = html || generateWelcomeEmailHtml(customerName || "Customer");
-        text = text || `Hey ${customerName || 'Customer'}, Welcome aboard! 👋\n\nThanks for joining SmartRun. We’re thrilled to have you! Whether you need wiring, fixtures, tools, or heavy-duty construction supplies at your site in Kolkata, we’ve got your back with lightning-fast deliveries.\n\nWhat you get with SmartRun:\n\n* ⚡ Express Delivery: Get supplies right when you need them.\n* 📦 Genuine Materials: Top-tier electrical and hardware brands.\n* 📱 Real-time Tracking: Track your order from dispatch to doorstep.\n\nTo get started on your phone, you can download or open our Android app here:\n\n👉 SmartRun on Google Play Store: https://play.google.com/store/apps/details?id=in.smartrun.app&pcampaignid=web_share\n\nNeed help or have questions about bulk orders? Just reply to this email or reach out to our support team right from the app.\n\nCheers,\nSMARTRUN MATERIALS Pvt. Ltd.\nKolkata, West Bengal\n\nSMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`;
+        text = text || `Hey ${customerName || 'Customer'}, Welcome aboard! 👋\n\nThanks for joining SmartRun. We’re thrilled to have you! Whether you need wiring, fixtures, tools, or heavy-duty construction supplies at your site in Kolkata, we’ve got your back with lightning-fast deliveries.\n\nWhat you get with SmartRun:\n\n* ⚡ Express Delivery: Get supplies right when you need them.\n* 📦 Genuine Materials: Top-tier electrical and hardware brands.\n* 📱 Real-time Tracking: Track your order from dispatch to doorstep.\n\nTo get started on your phone, you can download or open our Android app here:\n\n👉 SmartRun on Google Play Store: https://play.google.com/store/apps/details?id=in.smartrun.app&pcampaignid=web_share\n\nNeed help or have questions about bulk orders? Just reply to this email or reach out to our support team right from the app.\n\nCheers,\nSmartRun materials pvt. ltd\nKolkata, West Bengal\n\nSmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150`;
       } else if (type === "test_email") {
         subject = subject || "⚡ Email Verification - SmartRun Kolkata";
         html = html || generateTestEmailHtml(customerName || "Valued Customer");
@@ -5605,10 +5966,12 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
       }
 
       const dispatchResult = await dispatchResendEmail({
+        type,
         to,
         subject,
         html,
-        text
+        text,
+        attachments
       });
 
       // If this was an order confirmation, also ensure Admin Alert is triggered in background
@@ -5633,6 +5996,91 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
       return res.status(500).json({
         success: false,
         message: err.message || "An unexpected error occurred while sending email.",
+        error: String(err)
+      });
+    }
+  });
+
+  // Dedicated Delivery Email & Attached Tax Invoice PDF Trigger API
+  app.post("/api/orders/:id/send-delivery-email", strictLimiter, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    try {
+      const orderId = req.params.id;
+      const { customerEmail, force, order: orderFromReq } = req.body || {};
+
+      if (!orderId) {
+        return res.status(400).json({ success: false, message: "Missing order ID." });
+      }
+
+      // Check deduplication
+      if (!force && isDeliveredEmailSent(orderId)) {
+        return res.status(200).json({
+          success: true,
+          message: "Delivered order email and invoice PDF already sent to customer.",
+          alreadySent: true
+        });
+      }
+
+      let orderData = orderFromReq;
+      if (!orderData) {
+        const sb = getServerSupabase();
+        if (sb) {
+          const { data } = await sb
+            .from("orders")
+            .select("*")
+            .eq("id", orderId)
+            .maybeSingle();
+          if (data) orderData = data;
+        }
+      }
+
+      if (!orderData) {
+        return res.status(404).json({ success: false, message: "Order details could not be found." });
+      }
+
+      const recipientEmail =
+        customerEmail ||
+        orderData.customer_email ||
+        orderData.customerEmail ||
+        orderData.recipient_email;
+
+      if (!recipientEmail || !recipientEmail.includes("@") || recipientEmail.includes("@girirajpower.internal")) {
+        return res.status(400).json({
+          success: false,
+          message: "No valid customer email address available on this order."
+        });
+      }
+
+      const shortId = getShortOrderCode(orderData.id || orderData.order_id || orderId);
+      const subject = `⚡ Order Delivered #${shortId} - SmartRun Express Kolkata`;
+      const html = generateOrderEmailHtml(orderData, orderData.customerName || orderData.customer_name || "Customer", true);
+      const text = `Your SmartRun order #${shortId} has been successfully delivered. Attached is your official Tax Invoice PDF (SmartRun-Invoice-${shortId}.pdf). Total: ₹${orderData.totalAmount || orderData.total_amount}. Thank you for choosing SmartRun!`;
+      
+      const pdfBase64 = generateInvoicePdfBuffer(orderData);
+      const attachments = pdfBase64
+        ? [{ filename: `SmartRun-Invoice-${shortId}.pdf`, content: pdfBase64 }]
+        : undefined;
+
+      const result = await dispatchResendEmail({
+        to: recipientEmail,
+        subject,
+        html,
+        text,
+        attachments
+      });
+
+      recordDeliveredEmailSent(orderId, recipientEmail);
+
+      return res.status(200).json({
+        success: true,
+        message: "Delivered order confirmation and Tax Invoice PDF successfully dispatched.",
+        details: result
+      });
+    } catch (err: any) {
+      console.error("[send-delivery-email Error]:", err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || "Failed to dispatch delivered order email.",
         error: String(err)
       });
     }
@@ -5777,8 +6225,18 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         clientTime,
         clientTimeFormatted,
         clientLocation,
+        isNewAccount,
         force
       } = req.body || {};
+
+      // Guard: Brand-new registrations receive the Welcome Email, NOT the login alert
+      if (isNewAccount === true) {
+        return res.status(200).json({
+          success: true,
+          message: "Login security alert skipped for initial account registration (welcome email is dispatched).",
+          skippedForNewRegistration: true
+        });
+      }
 
       const cleanEmail = (email || "").trim().toLowerCase();
       if (!cleanEmail || !cleanEmail.includes("@") || !cleanEmail.includes(".")) {
@@ -5862,9 +6320,11 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
       });
 
       const subject = "Important: Login from new device and location";
-      const text = `Hi ${customerName},\nYour account ${resolvedAccountId} has logged in from a new device and location.\n\nIf this is not you, use the forgot password option immediately and reset your login credentials: https://www.smartrun.in/reset-password\n\nLocation:\t${finalLocation}\nIP:\t${clientIp || "2401:4900:8829:d1cb:8233:7592:811c:e1f5"}\nDevice:\t${rawUserAgent || (device ? `${device} (${os || 'Android'})` : 'Mobile Device')}\nTime:\t${timeIso}\n\nWhy did I receive this e-mail? https://www.smartrun.in/faq#security-login-alerts\n\nSMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`;
+      const text = `Hi ${customerName},\nYour account ${resolvedAccountId} has logged in from a new device and location.\n\nIf this is not you, use the forgot password option immediately and reset your login credentials: https://www.smartrun.in/reset-password\n\nLocation:\t${finalLocation}\nIP:\t${clientIp || "2401:4900:8829:d1cb:8233:7592:811c:e1f5"}\nDevice:\t${rawUserAgent || (device ? `${device} (${os || 'Android'})` : 'Mobile Device')}\nTime:\t${timeIso}\n\nWhy did I receive this e-mail? https://www.smartrun.in/faq#security-login-alerts\n\nSmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150`;
 
       const dispatchResult = await dispatchResendEmail({
+        type: "alert",
+        from: "SmartRun Security <alert@smartrun.in>",
         to: cleanEmail,
         subject,
         html,
@@ -5888,12 +6348,12 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
 
   // =========================================================================
   // WELCOME ONBOARDING EMAIL DISPATCH FOR NEW USERS
-  // Sends a clean, minimalist Zerodha-style welcome email upon first joining
+  // Sends a clean, minimalist Zerodha-style welcome email strictly upon first joining
   // =========================================================================
   app.post("/api/auth/send-welcome-email", async (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     try {
-      const { email, name, userId, force } = req.body || {};
+      const { email, name, userId, force, isNewAccount } = req.body || {};
       const cleanEmail = (email || "").trim().toLowerCase();
 
       if (!cleanEmail || !cleanEmail.includes("@") || !cleanEmail.includes(".") || cleanEmail.includes("@girirajpower.internal")) {
@@ -5903,8 +6363,8 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         });
       }
 
-      // Check in-memory store for deduplication
-      if (!force && sentWelcomeEmailsStore.has(cleanEmail)) {
+      // 1. Check in-memory deduplication store
+      if (!force && isUserWelcomed(cleanEmail)) {
         return res.status(200).json({
           success: true,
           message: "Welcome email already delivered to this user.",
@@ -5912,19 +6372,74 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         });
       }
 
+      // 2. Strict Database Guard: Check Supabase and Firestore to prevent sending to any existing accounts
+      if (!force) {
+        const sb = getServerSupabase();
+        if (sb) {
+          try {
+            const { data: existingProfile } = await sb
+              .from("user_profiles")
+              .select("user_id, email, created_at")
+              .eq("email", cleanEmail)
+              .maybeSingle();
+
+            if (existingProfile) {
+              const createdAt = existingProfile.created_at ? new Date(existingProfile.created_at).getTime() : 0;
+              const isRecentRegistration = createdAt > 0 && (Date.now() - createdAt) < 5 * 60 * 1000; // within 5 mins
+              if (!isNewAccount || !isRecentRegistration) {
+                recordWelcomedUser(cleanEmail);
+                return res.status(200).json({
+                  success: true,
+                  message: "Welcome email skipped: user already has an established account.",
+                  alreadySent: true
+                });
+              }
+            }
+          } catch (dbCheckErr) {
+            console.warn("[Welcome Email DB Existence Check Notice]:", dbCheckErr);
+          }
+        }
+
+        if (serverFirestore) {
+          try {
+            const userDoc = await serverFirestore.collection("users").doc(cleanEmail).get();
+            if (userDoc.exists && userDoc.data()?.welcomed === true) {
+              recordWelcomedUser(cleanEmail);
+              return res.status(200).json({
+                success: true,
+                message: "Welcome email skipped: user already recorded as welcomed in database.",
+                alreadySent: true
+              });
+            }
+          } catch (fErr) {
+            console.debug("[Firestore Welcomed Check Notice]:", fErr);
+          }
+        }
+      }
+
       const safeName = (name && name.trim()) ? name.trim() : cleanEmail.split("@")[0];
       const subject = "You're all set! Welcome to SmartRun ⚡";
       const html = generateWelcomeEmailHtml(safeName);
-      const text = `Hey ${safeName}, Welcome aboard! 👋\n\nThanks for joining SmartRun. We’re thrilled to have you! Whether you need wiring, fixtures, tools, or heavy-duty construction supplies at your site in Kolkata, we’ve got your back with lightning-fast deliveries.\n\nWhat you get with SmartRun:\n\n* ⚡ Express Delivery: Get supplies right when you need them.\n* 📦 Genuine Materials: Top-tier electrical and hardware brands.\n* 📱 Real-time Tracking: Track your order from dispatch to doorstep.\n\nTo get started on your phone, you can download or open our Android app here:\n\n👉 SmartRun on Google Play Store: https://play.google.com/store/apps/details?id=in.smartrun.app&pcampaignid=web_share\n\nNeed help or have questions about bulk orders? Just reply to this email or reach out to our support team right from the app.\n\nCheers,\nSMARTRUN MATERIALS Pvt. Ltd.\nKolkata, West Bengal\n\nSMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150`;
+      const text = `Hey ${safeName}, Welcome aboard! 👋\n\nThanks for joining SmartRun. We’re thrilled to have you! Whether you need wiring, fixtures, tools, or heavy-duty construction supplies at your site in Kolkata, we’ve got your back with lightning-fast deliveries.\n\nWhat you get with SmartRun:\n\n* ⚡ Express Delivery: Get supplies right when you need them.\n* 📦 Genuine Materials: Top-tier electrical and hardware brands.\n* 📱 Real-time Tracking: Track your order from dispatch to doorstep.\n\nTo get started on your phone, you can download or open our Android app here:\n\n👉 SmartRun on Google Play Store: https://play.google.com/store/apps/details?id=in.smartrun.app&pcampaignid=web_share\n\nNeed help or have questions about bulk orders? Just reply to this email or reach out to our support team right from the app.\n\nCheers,\nSmartRun materials pvt. ltd\nKolkata, West Bengal\n\nSmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150`;
 
       const dispatchResult = await dispatchResendEmail({
+        type: "welcome_email",
+        from: "SmartRun <welcome@smartrun.in>",
         to: cleanEmail,
         subject,
         html,
         text
       });
 
-      sentWelcomeEmailsStore.add(cleanEmail);
+      recordWelcomedUser(cleanEmail);
+
+      // Persist permanently in Firestore so Cloud Run restarts never forget welcomed users
+      if (serverFirestore) {
+        serverFirestore.collection("users").doc(cleanEmail).set({
+          welcomed: true,
+          welcomed_at: new Date().toISOString()
+        }, { merge: true }).catch(() => {});
+      }
 
       return res.status(200).json({
         success: true,
@@ -5984,7 +6499,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
         `${(order.discount || 0) > 0 ? `🎟️ *Discount:* -₹${order.discount}\n` : ''}` +
         `💳 *GRAND TOTAL:* ₹${(order.totalAmount || 0).toLocaleString('en-IN')}\n` +
         `💵 *Payment Mode:* ${order.paymentMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Online UPI / Card (PAID)'}\n\n` +
-        `⚡ *Dispatch Central:* SmartRun Kasba Hub Kolkata 700039`;
+        `⚡ *Dispatch Central:* SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150`;
 
       const whatsappUrl = `https://wa.me/${ADMIN_WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappText)}`;
       const customerWhatsappUrl = phoneClean
@@ -6432,7 +6947,7 @@ Tone: direct, confident, objective. Output ONLY the single sentence. No quotatio
                 
                 <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 20px; font-size: 12px; color: #64748b;">
                   <strong>SmartRun Support &amp; Wholesale Desk</strong><br>
-                  Kasba Central Warehouse, Kolkata 700039<br>
+                  SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150<br>
                   WhatsApp: +91 87774 00280 | Phone: +91 90071 68561 | Email: ${OFFICIAL_EMAIL}
                 </div>
               </div>
@@ -6804,7 +7319,7 @@ Express delivery is available across Kolkata within ~60 minutes!`,
             }
           });
 
-          const systemPrompt = `You are Mayra, the friendly, expert 24/7 AI Customer Support Specialist for SmartRun Electricals & Construction Supplies, located at Kasba, Kolkata 700039.
+          const systemPrompt = `You are Mayra, the friendly, expert 24/7 AI Customer Support Specialist for SmartRun Electricals & Construction Supplies (SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150).
 Customer Name: ${customerName || "Customer"}
 Customer Email: ${customerEmail || "Not specified"}
 Customer Area: ${customerArea || "Kolkata"}

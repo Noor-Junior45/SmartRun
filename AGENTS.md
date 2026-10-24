@@ -482,3 +482,16 @@
   - **Public Routing & Seamless Navigation**: Kept `/faq` and `/faqs` publicly accessible without mandatory login. Updated `onBack` fallback in `App.tsx` so unauthenticated visitors landing directly on the FAQ page from an email return to the public store (`/`) rather than being forced to `/login`.
   - **Anchor Hash Auto-Scroll & Highlighting**: Added automatic hash reader for `#security-login-alerts` that expands the corresponding security alert question, smoothly scrolls to it, and highlights it with an animated blue focus ring.
   - **Enriched Comprehensive Q&A**: Expanded `FAQPage.tsx` with 20+ detailed answers across 8 categories (Security & Login, 60-Min Express, Genuine Materials & Brands, GST Invoices & Wholesale, Payments & COD, Returns & Refunds, Electricians & Kasba Hub), live search filtering, expand/collapse toggles, and direct customer helpline contacts.
+- [x] **Legal Entity Name, Registered Address, Android APK Header Fix & Play Store SEO**:
+  - **Official Legal Name & Registered Address**: Updated business name to `SmartRun materials pvt. ltd` and address to `Kheyadah Village, Bhagabanpur, Kolkata 700150` across the entire application (PDF invoice generator, terms of service, privacy policy, refund policy, legal views, FAQ page, support engines, and email footers) while preserving the consumer brand name as `SmartRun`.
+  - **Android APK Black Top Bar / ActionBar Elimination**:
+    - Identified that `AppTheme` in `android/app/src/main/res/values/styles.xml` used `Theme.AppCompat.Light.DarkActionBar` and `AndroidManifest.xml` used `@style/AppTheme`. This caused the native Android OS to draw a black native ActionBar with app text on top of the web navbar.
+    - Updated `AppTheme` to `Theme.AppCompat.DayNight.NoActionBar` with `windowNoTitle=true` and `windowActionBar=false`.
+    - Applied `@style/AppTheme.NoActionBar` to `<application>` in `AndroidManifest.xml`.
+    - Added runtime ActionBar suppression in `MainActivity.java` (`getSupportActionBar().hide()`, `getActionBar().hide()`).
+  - **Google Play Store SEO & Metadata for "Smart Run" (with space)**:
+    - Updated `index.html` title to `SmartRun (Smart Run) | Electrical Goods, Construction Supplies & Wiring Services Kolkata`.
+    - Added high-priority keywords: `"Smart Run", "SmartRun", "smart run app", "smart run electricals", "smart run kolkata", "SmartRun materials pvt ltd"`.
+    - Updated Schema.org structured data graph: added `alternateName: ["Smart Run", "SmartRun", "Smart Run App", "SmartRun App", "Smart Run Kolkata", "SmartRun materials pvt. ltd"]`, `legalName: "SmartRun materials pvt. ltd"`, and official registered address `Kheyadah Village, Bhagabanpur, Kolkata 700150`.
+    - Updated `src/components/SEOHead.tsx` with `"Smart Run"` keyword density and legal seller entity.
+    - Enhanced `PLAYSTORE_AI_SEARCH_LISTING.md` with Play Store title options (`SmartRun (Smart Run): Supplies`), short description (`Smart Run (SmartRun): 60-min express electricals, wires, switches & electricians`), and query matching for both "Smart Run" and "SmartRun".

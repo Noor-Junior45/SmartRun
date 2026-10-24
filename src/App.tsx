@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Product, CartItem, KolkataArea, SavedAddress, Order, WiringServiceBooking, UserProfile } from './types';
-import { KOLKATA_AREAS } from './data/kolkataAreas';
+import { KOLKATA_AREAS, getKolkataAreaByPincode, isKolkataServiceable } from './data/kolkataAreas';
+import { mapManager } from './services/maps';
+import { getResilientCurrentPosition, reverseGeocodeWithFallback } from './utils/geolocationHelper';
 import { Header } from './components/Header';
 import { LocationModal } from './components/LocationModal';
-import { DeviceLocationPromptModal } from './components/DeviceLocationPromptModal';
 import { LoginPage } from './components/LoginPage';
 import { PersonalInfoPage } from './components/PersonalInfoPage';
 import { ProfileView } from './components/ProfileView';
@@ -76,10 +77,10 @@ import { useVersionCheck } from './hooks/useVersionCheck';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { Browser } from '@capacitor/browser';
 import { initPushNotifications, syncStoredPushTokenToSupabase } from './services/pushNotificationService';
 import { showToast } from './utils/toast';
-import { AndroidAppBridgePrompt } from './components/AndroidAppBridgePrompt';
 import { sanitizeCustomerName } from './services/firebaseAuthService';
 import { isNativePhoneApp } from './utils/platformDetection';
 import { fetchServerCurrentUser, syncServerSession, serverLogout } from './services/serverAuthService';
@@ -88,11 +89,25 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Hide native splash screen on app ready
+  // Hide native splash screen & configure clean edge-to-edge status bar on app ready
   useEffect(() => {
-    if (Capacitor.isNativePlatform()) {
+    const isNative = Capacitor.isNativePlatform() || isNativePhoneApp();
+    const isStandalone = typeof window !== 'undefined' && (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    );
+
+    if (isNative) {
       SplashScreen.hide().catch(() => {});
+      StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+      StatusBar.setStyle({ style: Style.Light }).catch(() => {});
+      StatusBar.setBackgroundColor({ color: '#ffffff' }).catch(() => {});
     }
+
+    // Ensure --safe-area-top is 0px because the APK starts directly below WiFi, network & battery status bar
+    try {
+      document.documentElement.style.setProperty('--safe-area-top', '0px');
+    } catch {}
   }, []);
 
   // Silent Background Version Check & Cache Invalidation (no popups, no blinking reloads)
@@ -142,6 +157,97 @@ export default function App() {
     }
     return null;
   });
+
+  const [isLocationFetching, setIsLocationFetching] = useState(false);
+
+  // Automatic non-intrusive location fetch when user opens site or app
+  useEffect(() => {
+    let isCancelled = false;
+
+    const fetchCurrentLocationOnLaunch = async () => {
+      // If user already has an explicit custom saved address (e.g. Home/Work), don't override their specific house choice
+      const storedAddr = safeGetItem(getActiveAddressStorageKey()) || safeGetItem(ACTIVE_SAVED_ADDRESS_KEY);
+      if (storedAddr) {
+        try {
+          const parsed = JSON.parse(storedAddr);
+          if (parsed && (parsed.houseFlat || parsed.houseName)) {
+            return;
+          }
+        } catch {}
+      }
+
+      try {
+        setIsLocationFetching(true);
+
+        // Fetch user device GPS / network position (Capacitor Geolocation on Android, HTML5 on web)
+        const coords = await getResilientCurrentPosition();
+        if (isCancelled) return;
+
+        // Reverse geocode coordinates to street and PIN code
+        let street = '';
+        let pincode = '';
+        try {
+          const revRes = await mapManager.reverseGeocode(coords);
+          street = revRes.street || revRes.formattedAddress || '';
+          pincode = revRes.pincode && /^\d{6}$/.test(revRes.pincode) ? revRes.pincode : '';
+        } catch {
+          const fallback = await reverseGeocodeWithFallback(coords.lat, coords.lng);
+          street = fallback.street;
+          pincode = fallback.pincode || '';
+        }
+
+        if (isCancelled) return;
+
+        // Match closest Kolkata delivery area
+        const distKm = Math.hypot(coords.lat - 22.5726, coords.lng - 88.3639) * 111;
+        let closest = KOLKATA_AREAS[0];
+        let minDistance = Number.MAX_VALUE;
+        KOLKATA_AREAS.forEach((a) => {
+          if (a.lat && a.lng) {
+            const dist = Math.hypot(a.lat - coords.lat, a.lng - coords.lng);
+            if (dist < minDistance) {
+              minDistance = dist;
+              closest = a;
+            }
+          }
+        });
+
+        const isOutsideKolkata = distKm > 35 || (pincode ? !isKolkataServiceable(pincode) : false);
+        const resolvedPin = pincode || (isOutsideKolkata ? '000000' : closest.pincode);
+        const areaForPin = pincode ? getKolkataAreaByPincode(pincode) : null;
+        const baseArea = areaForPin || closest;
+
+        const resolvedStreet = street || baseArea.exactStreet || baseArea.name;
+        const detectedArea: KolkataArea = {
+          ...baseArea,
+          pincode: resolvedPin,
+          serviceable: !isOutsideKolkata && isKolkataServiceable(resolvedPin),
+          name: isOutsideKolkata ? (street || 'Outside Delivery Area') : (areaForPin ? areaForPin.name : resolvedStreet),
+          exactStreet: resolvedStreet,
+          lat: coords.lat,
+          lng: coords.lng
+        };
+
+        setCurrentArea(detectedArea);
+        safeSetItem('smartrun_selected_area', JSON.stringify(detectedArea));
+        if (detectedArea.pincode) {
+          safeSetItem('smartrun_user_pincode', detectedArea.pincode);
+        }
+      } catch (err: any) {
+        console.debug('[App Location Fetch Notice]:', err?.message || err);
+      } finally {
+        if (!isCancelled) {
+          setIsLocationFetching(false);
+        }
+      }
+    };
+
+    const timer = setTimeout(fetchCurrentLocationOnLaunch, 400);
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
 
   const getActiveTabFromLocation = (): 'home' | 'catalog' | 'orders' | 'profile' | 'cart' | 'privacy' | 'terms' | 'electrical' | 'construction' | 'technicians' => {
     const path = location.pathname.toLowerCase();
@@ -215,7 +321,6 @@ export default function App() {
   // Modals & Panels
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [addressToEdit, setAddressToEdit] = useState<SavedAddress | null>(null);
-  const [isDeviceLocationPromptOpen, setIsDeviceLocationPromptOpen] = useState(false);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
@@ -689,19 +794,25 @@ export default function App() {
         setupUserSubscriptions(user.id);
         syncStoredPushTokenToSupabase(effectiveUserId || user.id);
 
-        // Real-time security email notification on sign in
+        // Real-time security email notification on sign in for existing accounts
         if (event === 'SIGNED_IN' && email) {
-          const loginMethod = user.app_metadata?.provider === 'google'
-            ? 'Google Account (One-Tap / OAuth)'
-            : 'Email & Password / Session';
-          sendLoginNotificationEmail({
-            email,
-            name,
-            phone: phone || undefined,
-            accountId: email,
-            userId: user.id,
-            loginMethod,
-          }).catch((err) => console.debug('[Security Alert Background Trigger]:', err));
+          const wasNewReg = sessionStorage.getItem('smartrun_just_registered') === 'true';
+          if (!wasNewReg) {
+            const loginMethod = user.app_metadata?.provider === 'google'
+              ? 'Google Account (One-Tap / OAuth)'
+              : 'Email & Password / Session';
+            sendLoginNotificationEmail({
+              email,
+              name,
+              phone: phone || undefined,
+              accountId: email,
+              userId: user.id,
+              loginMethod,
+              isNewAccount: false,
+            }).catch((err) => console.debug('[Security Alert Background Trigger]:', err));
+          } else {
+            sessionStorage.removeItem('smartrun_just_registered');
+          }
         }
       } else {
         if (!isLoggingOutRef.current && !isUserLoggingOut()) {
@@ -1031,10 +1142,6 @@ export default function App() {
         setAddressToEdit(null);
         return;
       }
-      if (isDeviceLocationPromptOpen) {
-        setIsDeviceLocationPromptOpen(false);
-        return;
-      }
       if (isAiAssistantOpen) {
         setIsAiAssistantOpen(false);
         return;
@@ -1102,7 +1209,6 @@ export default function App() {
     isLiveOrderModalOpen,
     isLocationModalOpen,
     addressToEdit,
-    isDeviceLocationPromptOpen,
     isAiAssistantOpen,
     isInstallModalOpen,
     location.pathname,
@@ -1168,40 +1274,6 @@ export default function App() {
       }
     }
   }, [isNativeApp, isAuthenticated, isAuthLoading, location.pathname, navigate]);
-
-  // Check device location permission on app open; if not granted/closed, show bottom popup smoothly
-  useEffect(() => {
-    try {
-      const dismissed = sessionStorage.getItem('buildnow_device_loc_prompt_dismissed');
-      if (dismissed === 'true') return;
-      
-      // If user already has an active selected address or saved address in storage, do not abruptly popup
-      const activeSaved = safeGetItem(getActiveAddressStorageKey());
-      if (activeSaved) return;
-    } catch {}
-
-    const timer = setTimeout(async () => {
-      try {
-        if ('permissions' in navigator && navigator.permissions?.query) {
-          const status = await navigator.permissions.query({ name: 'geolocation' });
-          if (status.state === 'prompt') {
-            setIsDeviceLocationPromptOpen(true);
-          }
-        }
-      } catch {
-        // fail silently without blinking
-      }
-    }, 1200);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleCloseDeviceLocationPrompt = () => {
-    setIsDeviceLocationPromptOpen(false);
-    try {
-      sessionStorage.setItem('buildnow_device_loc_prompt_dismissed', 'true');
-    } catch {}
-  };
 
   // Reset scroll strictly when navigating to a new page (pathname change), avoiding jitter when typing search queries
   useEffect(() => {
@@ -1449,7 +1521,7 @@ export default function App() {
     }
   };
 
-  const handleAuthSuccess = (phone: string, name: string, email?: string, userObj?: any) => {
+  const handleAuthSuccess = (phone: string, name: string, email?: string, userObj?: any, options?: { isNewRegistration?: boolean }) => {
     isLoggingOutRef.current = false;
     // 1. Sanitize incoming parameters (strip internal placeholder domain)
     const cleanEmail = email && !email.includes('@girirajpower.internal') ? email : '';
@@ -1526,15 +1598,18 @@ export default function App() {
       role: isUserAdmin ? 'admin' : 'customer'
     }).catch(() => {});
 
-    // Dispatch real-time security alert email whenever customer signs in (with email or phone account)
-    if (resolvedCleanEmail) {
+    // Dispatch real-time security alert email whenever an existing customer signs in (with email or phone account)
+    // Brand new accounts undergoing initial registration skip this alert and receive the Welcome Email
+    const isNewRegistration = options?.isNewRegistration === true || sessionStorage.getItem('smartrun_just_registered') === 'true';
+    if (!isNewRegistration && resolvedCleanEmail) {
       sendLoginNotificationEmail({
         email: resolvedCleanEmail,
         name: finalName || 'Customer',
         phone: finalPhone || undefined,
         accountId: resolvedCleanEmail || (finalPhone ? `+91 ${finalPhone}` : undefined),
         userId: authId || undefined,
-        loginMethod: finalPhone ? 'Phone Number & OTP' : 'Email & Password / Session'
+        loginMethod: finalPhone ? 'Phone Number & OTP' : 'Email & Password / Session',
+        isNewAccount: false
       }).catch((err) => console.debug('[Security Alert Background Trigger]:', err));
     }
 
@@ -1552,15 +1627,16 @@ export default function App() {
             const cloudEmailClean =
               cloudProf.email && !cloudProf.email.includes('@girirajpower.internal') ? cloudProf.email : resolvedCleanEmail;
             
-            // If email became known only after cloud profile resolution, send security alert
-            if (cloudEmailClean && !resolvedCleanEmail) {
+            // If email became known only after cloud profile resolution, send security alert for existing user
+            if (cloudEmailClean && !resolvedCleanEmail && !isNewRegistration) {
               sendLoginNotificationEmail({
                 email: cloudEmailClean,
                 name: cloudProf.name || finalName || 'Customer',
                 phone: finalPhone || undefined,
                 accountId: cloudEmailClean,
                 userId: targetUid,
-                loginMethod: finalPhone ? 'Phone Number & OTP' : 'Email & Password / Session'
+                loginMethod: finalPhone ? 'Phone Number & OTP' : 'Email & Password / Session',
+                isNewAccount: false
               }).catch(() => {});
             }
 
@@ -1652,7 +1728,6 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 selection:bg-yellow-400 selection:text-black">
       {/* Dynamic SEO Meta & Structured Data Manager */}
       <SEOHead />
-      <AndroidAppBridgePrompt />
       
       {/* Top Header - Hidden when viewing profile, live-order, cart, delete account, login, auth, sitemap, or reset-password */}
       {location.pathname !== '/profile' &&
@@ -1675,6 +1750,7 @@ export default function App() {
           currentArea={currentArea}
           activeAddress={activeSavedAddress}
           onOpenLocationModal={() => setIsLocationModalOpen(true)}
+          isLocationFetching={isLocationFetching}
           searchQuery={searchQuery}
           onSearchChange={handleSearchChange}
           allProducts={products}
@@ -2179,32 +2255,7 @@ export default function App() {
         isOpen={isInstallModalOpen}
         onClose={() => setIsInstallModalOpen(false)}
       />
-      <DeviceLocationPromptModal
-        isOpen={isDeviceLocationPromptOpen}
-        onClose={handleCloseDeviceLocationPrompt}
-        savedAddresses={savedAddresses}
-        currentArea={currentArea}
-        activeAddress={activeSavedAddress}
-        onSelectArea={(area, addr) => {
-          setCurrentArea(area);
-          try {
-            safeSetItem('smartrun_selected_area', JSON.stringify(area));
-            if (area?.pincode) {
-              safeSetItem('smartrun_user_pincode', area.pincode);
-            }
-          } catch (e) {}
-          if (addr) {
-            setActiveSavedAddress(addr);
-          } else {
-            setActiveSavedAddress(null);
-          }
-          handleCloseDeviceLocationPrompt();
-        }}
-        onOpenManualSearch={() => {
-          handleCloseDeviceLocationPrompt();
-          setIsLocationModalOpen(true);
-        }}
-      />
+
       <LocationModal
         isOpen={isLocationModalOpen}
         onClose={() => {

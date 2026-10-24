@@ -4,9 +4,10 @@ import path from 'path';
 import fs from 'fs';
 import {defineConfig} from 'vite';
 
-const APP_VERSION = process.env.npm_package_version || '2.4.0';
+const APP_VERSION = process.env.npm_package_version || '1.1.3';
+const APP_VERSION_CODE = 14;
 const BUILD_TIME = new Date().toISOString();
-const BUILD_ID = process.env.BUILD_ID || process.env.VITE_APP_BUILD_ID || `v${APP_VERSION}-${Date.now()}`;
+const BUILD_ID = process.env.BUILD_ID || process.env.VITE_APP_BUILD_ID || `v${APP_VERSION}-14-${Date.now()}`;
 
 export default defineConfig(({ command }) => {
   return {
@@ -24,6 +25,7 @@ export default defineConfig(({ command }) => {
             }
             const versionPayload = {
               version: APP_VERSION,
+              versionCode: APP_VERSION_CODE,
               buildId: BUILD_ID,
               builtAt: BUILD_TIME,
             };

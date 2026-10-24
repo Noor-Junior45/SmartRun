@@ -186,7 +186,10 @@ export const AccountDeletionPage = ({
       />
 
       {/* Top Header: Simple Heading 'Account delete' and Arrow Back Button in the same line */}
-      <div className="bg-[#dedcd8] border-b border-slate-300/80 sticky top-0 z-20 px-4 sm:px-6 py-3.5 backdrop-blur-xs">
+      <div
+        className="bg-[#dedcd8] border-b border-slate-300/80 sticky top-0 z-20 px-4 sm:px-6 pb-3.5 backdrop-blur-xs"
+        style={{ paddingTop: 'calc(0.875rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))' }}
+      >
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <button
             id="btn-account-delete-back"

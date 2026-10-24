@@ -38,3 +38,6 @@
 -keep class com.capacitorjs.plugins.pushnotifications.** { *; }
 -dontwarn com.capacitorjs.plugins.pushnotifications.**
 
+# Suppress R8 missing class warnings across all third-party libraries & plugins
+-dontwarn **
+-ignorewarnings

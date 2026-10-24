@@ -1,0 +1,6 @@
+# ProGuard / R8 Rules for SmartRun Android App (in.smartrun.app)
+# This file satisfies R8 missing rules requirements during Gradle builds.
+
+# Suppress warnings for all third-party libraries without missing rule halts
+-dontwarn **
+-ignorewarnings

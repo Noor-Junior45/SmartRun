@@ -43,7 +43,7 @@ import { PersonalInfoPage } from './PersonalInfoPage';
 import { setServerAuthToken } from '../services/serverAuthService';
 
 interface LoginPageProps {
-  onAuthSuccess: (phone: string, name: string, email?: string, userObj?: any) => void;
+  onAuthSuccess: (phone: string, name: string, email?: string, userObj?: any, options?: { isNewRegistration?: boolean }) => void;
 }
 
 type AuthStep = 'primary' | 'personal_info' | 'onboarding_phone' | 'onboarding_email' | 'forgot';
@@ -180,6 +180,34 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
     }
     return () => clearInterval(interval);
   }, [otpCooldown]);
+
+  // Track whether mobile virtual keyboard is active to keep logo and inputs in view
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const checkViewport = () => {
+      if (window.visualViewport) {
+        const isShrunk = window.visualViewport.height < window.innerHeight * 0.78;
+        setIsKeyboardOpen(isShrunk);
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', checkViewport);
+      window.visualViewport.addEventListener('scroll', checkViewport);
+    }
+    window.addEventListener('resize', checkViewport);
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', checkViewport);
+        window.visualViewport.removeEventListener('scroll', checkViewport);
+      }
+      window.removeEventListener('resize', checkViewport);
+    };
+  }, []);
 
   // Google Autofill WebOTP API integration for SMS OTP auto-detection
   useEffect(() => {
@@ -649,17 +677,21 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         })
       }).catch(() => {});
 
-      // Send welcome email to new user joining SmartRun
+      // Send welcome email strictly to new user joining SmartRun for the first time
       if (cleanEmail && !cleanEmail.includes('@girirajpower.internal')) {
+        try {
+          sessionStorage.setItem('smartrun_just_registered', 'true');
+        } catch {}
         sendWelcomeEmail({
           email: cleanEmail,
           name: cleanName,
           userId: currentUserId,
+          isNewAccount: true,
         }).catch(() => {});
       }
 
       saveTermsAgreed(true);
-      onAuthSuccess(formattedPhone, cleanName, cleanEmail || undefined, authData?.user);
+      onAuthSuccess(formattedPhone, cleanName, cleanEmail || undefined, authData?.user, { isNewRegistration: true });
       navigate(getPostAuthRedirect(), { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save profile.';
@@ -1023,17 +1055,21 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         })
       }).catch(() => {});
 
-      // Send welcome email to new user joining SmartRun
+      // Send welcome email strictly to new user joining SmartRun for the first time
       if (cleanEmail && !cleanEmail.includes('@girirajpower.internal')) {
+        try {
+          sessionStorage.setItem('smartrun_just_registered', 'true');
+        } catch {}
         sendWelcomeEmail({
           email: cleanEmail,
           name: cleanName,
           userId: userId,
+          isNewAccount: true,
         }).catch(() => {});
       }
 
       saveTermsAgreed(true);
-      onAuthSuccess(formattedPhone, cleanName, cleanEmail, regUser);
+      onAuthSuccess(formattedPhone, cleanName, cleanEmail, regUser, { isNewRegistration: true });
       navigate(getPostAuthRedirect(), { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save account.';
@@ -1145,7 +1181,7 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col justify-center items-center px-4 py-8 sm:py-12 relative">
+    <div className="min-h-[100dvh] bg-white flex flex-col justify-center items-center px-4 py-3 sm:py-8 relative overflow-x-hidden overflow-y-auto overscroll-contain">
       <SEOHead
         title="Sign In / Register | SmartRun Express Electricals"
         description="Sign in to your SmartRun account with mobile OTP, email, or Google to track express delivery orders, manage addresses, and access wholesale pricing."
@@ -1176,29 +1212,39 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
         </div>
       )}
 
-      {/* Main Login Container - Positioned in the middle of screen */}
-      <div className="w-full max-w-md bg-white border-0 shadow-none px-4 py-2 space-y-3 sm:space-y-3.5 my-auto">
+      {/* Main Login Container - Positioned in the middle/slightly lower of screen without changing design */}
+      <div
+        className={`w-full max-w-md bg-white border-0 shadow-none px-4 transition-all duration-300 ${
+          isKeyboardOpen ? 'space-y-2 py-1 my-0' : 'space-y-3 sm:space-y-3.5 my-auto pt-3 pb-8'
+        }`}
+      >
 
-        {/* Brand Logo & Name Header - Starts right from top with increased prominent size */}
-        <div className="flex flex-col items-center justify-center text-center space-y-1.5">
+        {/* Brand Logo & Name Header - Scales smoothly when virtual keyboard opens to keep input in view */}
+        <div className={`flex flex-col items-center justify-center text-center transition-all duration-200 ${isKeyboardOpen ? 'space-y-1' : 'space-y-1.5'}`}>
           <div>
             <img
               src="/SmartRun.png"
               alt="SmartRun Logo"
-              className="w-18 h-18 sm:w-22 sm:h-22 object-cover rounded-3xl"
+              className={`object-cover rounded-2xl sm:rounded-3xl transition-all duration-200 ${
+                isKeyboardOpen ? 'w-12 h-12' : 'w-18 h-18 sm:w-22 sm:h-22'
+              }`}
             />
           </div>
 
           <div>
             <div
-              className="text-3xl sm:text-4xl font-black font-baloo text-black flex items-center justify-center leading-none tracking-tight"
+              className={`font-black font-baloo text-black flex items-center justify-center leading-none tracking-tight transition-all duration-200 ${
+                isKeyboardOpen ? 'text-2xl' : 'text-3xl sm:text-4xl'
+              }`}
               style={{ fontFamily: "'Baloo 2', 'Baloo Bhai 2', cursive, sans-serif" }}
             >
               <span className="text-black">SmartRun</span>
             </div>
-            <p className="text-xs sm:text-sm text-slate-500 font-semibold mt-1">
-              Electrical &amp; Construction Materials Hub
-            </p>
+            {!isKeyboardOpen && (
+              <p className="text-xs sm:text-sm text-slate-500 font-semibold mt-1">
+                Electrical &amp; Construction Materials Hub
+              </p>
+            )}
           </div>
         </div>
 
@@ -1258,6 +1304,17 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                     autoComplete={isPhone ? 'tel webauthn' : 'username webauthn'}
                     placeholder="10-digit mobile number or email"
                     value={identifier}
+                    onFocus={(e) => {
+                      if (window.innerWidth < 640) setIsKeyboardOpen(true);
+                      e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        if (document.activeElement?.tagName !== 'INPUT') {
+                          setIsKeyboardOpen(false);
+                        }
+                      }, 200);
+                    }}
                     onChange={(e) => {
                       let val = e.target.value;
                       if (!val.includes('@')) {
@@ -1302,6 +1359,17 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                         maxLength={6}
                         placeholder="Enter 6-digit OTP"
                         value={otpCode}
+                        onFocus={(e) => {
+                          if (window.innerWidth < 640) setIsKeyboardOpen(true);
+                          e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            if (document.activeElement?.tagName !== 'INPUT') {
+                              setIsKeyboardOpen(false);
+                            }
+                          }, 200);
+                        }}
                         onChange={(e) => {
                           const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
                           setOtpCode(digits);
@@ -1364,6 +1432,17 @@ export const LoginPage = ({ onAuthSuccess }: LoginPageProps) => {
                         type={showPassword ? 'text' : 'password'}
                         placeholder="••••••••"
                         value={password}
+                        onFocus={(e) => {
+                          if (window.innerWidth < 640) setIsKeyboardOpen(true);
+                          e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            if (document.activeElement?.tagName !== 'INPUT') {
+                              setIsKeyboardOpen(false);
+                            }
+                          }, 200);
+                        }}
                         onChange={(e) => setPassword(e.target.value)}
                         className="w-full bg-transparent py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
                         required={showSecondField && !isPhone}

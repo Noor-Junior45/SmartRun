@@ -27,7 +27,10 @@ export const RefundPolicy = ({
         keywords="smartrun refund policy, return policy, replacement guarantee, order cancellation"
       />
       {/* Top Header: Simple Heading 'Refund policy' and Arrow Back Button in the same line with White Background */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 sm:px-6 py-3.5">
+      <div
+        className="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 sm:px-6 pb-3.5"
+        style={{ paddingTop: 'calc(0.875rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))' }}
+      >
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           {onBack && (
             <button
@@ -234,6 +237,9 @@ export const RefundPolicy = ({
                   <span>Open Help Center</span>
                 </button>
               )}
+            </div>
+            <div className="pt-2 border-t border-slate-200/80 text-[11px] text-slate-500">
+              <strong>SmartRun materials pvt. ltd</strong> • Kheyadah Village, Bhagabanpur, Kolkata 700150
             </div>
           </div>
         </section>

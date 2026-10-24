@@ -144,7 +144,7 @@ export const TermsOfServicePage: React.FC<TermsOfServicePageProps> = ({ onBack }
             1. Introduction &amp; Acceptance of Agreement
           </h2>
           <p className="text-sm sm:text-base text-[#4A4235] leading-relaxed">
-            These Terms govern your use of the SmartRun platform, browsing wholesale electrical and construction catalogs, placing orders, booking certified electricians, and interacting with our delivery partners.
+            These Terms govern your use of the SmartRun platform (operated by <strong>SmartRun materials pvt. ltd</strong>), browsing wholesale electrical and construction catalogs, placing orders, booking certified electricians, and interacting with our delivery partners.
           </p>
           <p className="text-sm sm:text-base text-[#4A4235] leading-relaxed">
             If you do not agree to all terms outlined herein, you must refrain from using the application or ordering materials. By signing in via SMS OTP, placing an order, or booking a technician, you confirm that you have read, understood, and agreed to all provisions of these Terms and our Privacy Policy.
@@ -412,13 +412,13 @@ export const TermsOfServicePage: React.FC<TermsOfServicePageProps> = ({ onBack }
           <div className="p-4 sm:p-5 rounded-xl bg-[#FBF9F4] border border-[#E6DEC8] space-y-3 text-sm text-[#4A4235]">
             <div className="flex items-center gap-2 text-[#2C261E] font-bold">
               <Building2 className="w-5 h-4 text-amber-800" />
-              <span>SmartRun Customer Support Desk</span>
+              <span>SmartRun materials pvt. ltd Customer Support Desk</span>
             </div>
 
             <div className="space-y-2">
               <p className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-[#7C7469] shrink-0 mt-0.5" />
-                <span><strong>Warehouse Address:</strong> SmartRun Kasba Depot, Bediadanga 1st Lane, Nator Park, Kasba, Kolkata, West Bengal 700039, India</span>
+                <span><strong>Company &amp; Warehouse Address:</strong> SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150, West Bengal, India</span>
               </p>
               <p className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-[#7C7469] shrink-0" />

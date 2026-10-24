@@ -512,8 +512,13 @@ export const LocationModal = ({
             mapInstanceRef.current.setLiveLocationMarker(coords);
           }
         }, 150);
+        showToast(`Location detected: ${street} (PIN ${resolvedPin})`, 'success');
+      } else {
+        onSelectArea(updatedArea);
+        showToast(`Location set: ${street} (PIN ${resolvedPin})`, 'success');
+        onClose();
+        return;
       }
-      showToast(`Location detected: ${street} (PIN ${resolvedPin})`, 'success');
     } catch (err: any) {
       console.warn('[LocationModal] GPS detection notice:', err);
       setGpsLoading(false);
@@ -710,20 +715,16 @@ export const LocationModal = ({
     setMatchedArea(updatedArea);
     setDetectedStreet(street);
 
-    const buildingInfo = result.building || result.name;
-    if (result.building) {
-      setDetectedBuilding(result.building);
-      setHouseName(result.building);
-    } else {
-      setDetectedBuilding('');
-    }
+    const buildingInfo = result.building || result.name || '';
+    setDetectedBuilding(buildingInfo);
+    setHouseName(buildingInfo);
+
     const fullStreetAddress = result.road && buildingInfo !== result.road
       ? `${buildingInfo}, ${result.road}`
       : (result.secondaryText || street);
 
     setBuildingRoad(fullStreetAddress);
-    if (result.building) setHouseFlat(result.building);
-    if (result.road) setLandmark(result.road);
+    if (result.road && result.road !== buildingInfo) setLandmark(result.road);
 
     setMapSearchQuery('');
     setFloatingSearchResults([]);
@@ -739,6 +740,9 @@ export const LocationModal = ({
 
   // Proceed to address details form (Step 3)
   const handleProceedToDetails = () => {
+    if (!houseName && detectedBuilding) {
+      setHouseName(detectedBuilding);
+    }
     setBuildingRoad(detectedStreet || matchedArea.exactStreet || matchedArea.name);
     setFormError(null);
     setStep('details_form');
@@ -775,13 +779,14 @@ export const LocationModal = ({
       setFormError('Please enter House / Apartment / Building Name');
       return;
     }
-    if (!houseFlat.trim()) {
-      setFormError('Please enter Flat / Floor / House Number');
-      return;
-    }
 
     const targetId = editingAddressId || `addr-${Date.now()}`;
-    const formatted = `${houseFlat.trim()}, ${houseName.trim()}, ${buildingRoad.trim()}, ${matchedArea.name} (PIN ${matchedArea.pincode})`;
+    const formatted = [
+      houseFlat.trim(),
+      houseName.trim(),
+      buildingRoad.trim(),
+      matchedArea.name ? `${matchedArea.name} (PIN ${matchedArea.pincode})` : ''
+    ].filter(Boolean).join(', ');
 
     const newAddress: SavedAddress = {
       id: targetId,
@@ -878,7 +883,12 @@ export const LocationModal = ({
         {step === 'search_home' && (
           <div className="flex-1 flex flex-col overflow-y-auto no-scrollbar bg-[#f8fafc]">
             {/* Top Header without description */}
-            <div className="bg-white px-5 sm:px-6 pt-5 pb-4 border-b border-slate-100 shrink-0 sticky top-0 z-20">
+            <div
+              className="bg-white px-5 sm:px-6 pb-4 border-b border-slate-100 shrink-0 sticky top-0 z-20"
+              style={{
+                paddingTop: 'calc(1.25rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))'
+              }}
+            >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-red-50 text-[#e23744] flex items-center justify-center font-black">
@@ -1008,6 +1018,28 @@ export const LocationModal = ({
                 </div>
               ) : null}
 
+              {/* Use Current Location (GPS) Instant Action */}
+              <button
+                type="button"
+                id="use-current-gps-location-btn"
+                disabled={gpsLoading}
+                onClick={() => handleDetectCurrentLocation(false)}
+                className="w-full bg-white hover:bg-red-50/40 border border-slate-200/90 hover:border-red-200 text-slate-900 rounded-2xl p-4 transition-all duration-200 cursor-pointer shadow-xs hover:shadow-md group flex items-center justify-between text-left disabled:opacity-60"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="flex items-center justify-center w-11 h-11 rounded-2xl bg-[#e23744] text-white shadow-md shadow-red-500/20 group-hover:scale-105 transition-all duration-200 shrink-0">
+                    <Crosshair className={`w-5 h-5 stroke-[2.5] text-white ${gpsLoading ? 'animate-spin' : ''}`} />
+                  </div>
+                  <div className="text-sm font-black text-slate-900 group-hover:text-[#e23744] transition-colors tracking-tight">
+                    {gpsLoading ? 'Detecting location...' : 'Current Location'}
+                  </div>
+                </div>
+
+                <div className="w-7 h-7 rounded-full bg-red-50 group-hover:bg-red-100 text-[#e23744] flex items-center justify-center transition-colors shrink-0">
+                  <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+                </div>
+              </button>
+
               {/* Set Location on Map Action */}
               <button
                 type="button"
@@ -1027,7 +1059,7 @@ export const LocationModal = ({
                     <MapPin className="w-5 h-5 stroke-[2.5] text-white" />
                   </div>
                   <div className="text-sm font-black text-slate-900 group-hover:text-black transition-colors tracking-tight">
-                    Set location on map
+                    Add Location
                   </div>
                 </div>
 
@@ -1167,7 +1199,12 @@ export const LocationModal = ({
         {step === 'map_pin' && (
           <div className="w-full h-full relative overflow-hidden bg-slate-100 flex flex-col">
             {/* Top Bar: Floating Search Bar on Top + Cross Button on Right */}
-            <div className="absolute top-3.5 inset-x-3.5 z-[1100] flex items-center gap-2">
+            <div
+              className="absolute inset-x-3.5 z-[1100] flex items-center gap-2"
+              style={{
+                top: 'calc(0.875rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))'
+              }}
+            >
               {/* Floating Search Input */}
               <div className="flex-1 relative min-w-0">
                 <div className="flex items-center bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl px-3.5 py-2.5 shadow-md">
@@ -1358,7 +1395,13 @@ export const LocationModal = ({
 
         {/* ================= STEP 3: ADDRESS DETAILS FORM ================= */}
         {step === 'details_form' && (
-          <form onSubmit={handleSaveAddress} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 no-scrollbar bg-white">
+          <form
+            onSubmit={handleSaveAddress}
+            className="flex-1 overflow-y-auto px-5 sm:px-6 pb-5 space-y-4 no-scrollbar bg-white"
+            style={{
+              paddingTop: 'calc(1.25rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))'
+            }}
+          >
             {/* Top Bar with Back Button */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
@@ -1438,11 +1481,10 @@ export const LocationModal = ({
             {/* 2. Flat / Floor / House Number */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Flat / House / Floor No. <span className="text-[#e23744]">*</span>
+                Flat / House / Floor No.
               </label>
               <input
                 type="text"
-                required
                 placeholder="e.g. Flat 4B, 3rd Floor"
                 value={houseFlat}
                 onChange={(e) => {

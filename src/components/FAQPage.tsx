@@ -197,7 +197,7 @@ export const ENRICHED_FAQ_LIST: FAQItem[] = [
     id: 'hub-contact',
     category: 'electricians',
     question: 'Where is your physical warehouse and how do I contact support?',
-    answer: 'Our central fulfillment depot and operations hub is located at: SMARTRUN MATERIALS Pvt. Ltd., Kheyadah Village, Bhagabanpur, West Bengal - 700150. You can reach our Kolkata support team via in-app chat, by calling +91 87774 00280 (Open every day 8:00 AM – 10:00 PM IST), or by emailing team@smartrun.in.',
+    answer: 'Our central fulfillment depot and operations hub is located at: SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150. You can reach our Kolkata support team via in-app chat, by calling +91 87774 00280 (Open every day 8:00 AM – 10:00 PM IST), or by emailing team@smartrun.in.',
   }
 ];
 
@@ -511,7 +511,7 @@ export const FAQPage: React.FC<FAQPageProps> = ({ onBack }) => {
           </div>
 
           <div className="mt-4 pt-3 border-t border-white/10 text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-2">
-            <span>SMARTRUN MATERIALS Pvt. Ltd. • Kheyadah Village, Bhagabanpur, Kolkata 700150</span>
+            <span>SmartRun materials pvt. ltd • Kheyadah Village, Bhagabanpur, Kolkata 700150</span>
             <span>Helpline: +91 87774 00280</span>
           </div>
         </div>

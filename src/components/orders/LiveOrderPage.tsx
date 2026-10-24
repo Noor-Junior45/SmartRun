@@ -28,6 +28,7 @@ import { getShortOrderUuid } from '../../utils/cryptoHelper';
 import { initiateRazorpayRefund } from '../../services/razorpayService';
 import { showToast } from '../../utils/toast';
 import { apiUrl } from '../../lib/apiBase';
+import { sendOrderDeliveredEmail } from '../../services/emailService';
 import {
   RiderDetailsCard,
   RiderReviewCard,
@@ -83,8 +84,21 @@ export const LiveOrderPage = ({
       }
       return orders[0];
     }
-    return null;
   }, [orderId, propOrder, orders]);
+
+  // Automated delivery invoice & details email trigger
+  useEffect(() => {
+    if (order && (order.status === 'delivered' || (order as any).delivery_status === 'delivered')) {
+      const email =
+        order.customerEmail ||
+        (order as any).customer_email ||
+        (order as any).recipient_email ||
+        userProfile?.email;
+      if (email && email.includes('@') && !email.includes('@girirajpower.internal')) {
+        sendOrderDeliveredEmail(order, email).catch(() => {});
+      }
+    }
+  }, [order?.id, order?.status, userProfile?.email]);
 
   const handleBack = () => {
     if (onBack) {
@@ -896,7 +910,10 @@ export const LiveOrderPage = ({
   if (!order) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900">
-        <div className="sticky top-0 z-30 bg-white px-4 py-3 sm:py-4 flex items-center justify-between shadow-xs">
+        <div
+          className="sticky top-0 z-30 bg-white px-4 pb-3 sm:pb-4 flex items-center justify-between shadow-xs"
+          style={{ paddingTop: 'calc(0.875rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))' }}
+        >
           <button
             onClick={handleBack}
             className="flex items-center gap-2 text-slate-600 hover:text-slate-900 font-bold text-sm px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
@@ -944,7 +961,10 @@ export const LiveOrderPage = ({
         noIndex={true}
       />
       {/* Top Sticky Header for Order Page: Shows Current Background Process */}
-      <div className="sticky top-0 z-30 bg-white px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-xs border-b border-slate-100">
+      <div
+        className="sticky top-0 z-30 bg-white px-4 sm:px-6 pb-3.5 flex items-center justify-between shadow-xs border-b border-slate-100"
+        style={{ paddingTop: 'calc(0.875rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))' }}
+      >
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={handleBack}

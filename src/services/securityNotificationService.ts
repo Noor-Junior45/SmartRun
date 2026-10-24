@@ -13,6 +13,7 @@ export interface LoginAlertPayload {
   phone?: string;
   accountId?: string;
   loginMethod?: string;
+  isNewAccount?: boolean;
   force?: boolean;
 }
 
@@ -136,6 +137,11 @@ export async function sendLoginNotificationEmail(payload: LoginAlertPayload): Pr
     return { success: false, message: 'Invalid email address.' };
   }
 
+  // Initial account registration guard: newly registered users receive Welcome Email, not Login Alert!
+  if (payload.isNewAccount === true) {
+    return { success: true, message: 'Login security alert skipped for initial account registration.' };
+  }
+
   // Check debounce unless explicitly forced
   if (!payload.force && typeof window !== 'undefined') {
     try {
@@ -205,6 +211,7 @@ export async function sendLoginNotificationEmail(payload: LoginAlertPayload): Pr
       clientTime: clientTimeIso,
       clientTimeFormatted,
       clientLocation: detectedLocation,
+      isNewAccount: payload.isNewAccount,
       force: payload.force,
     };
 

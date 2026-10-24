@@ -114,7 +114,10 @@ export const LegalView = ({ onBack, type }: LegalViewProps) => {
         description={meta.subtitle}
       />
       {/* Top Header */}
-      <div className="bg-white border-b border-slate-200 px-4 py-3.5 flex items-center justify-between shadow-2xs sticky top-0 z-20">
+      <div
+        className="bg-white border-b border-slate-200 px-4 pb-3.5 flex items-center justify-between shadow-2xs sticky top-0 z-20"
+        style={{ paddingTop: 'calc(0.875rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))' }}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -173,7 +176,7 @@ export const LegalView = ({ onBack, type }: LegalViewProps) => {
                   Who We Are
                 </h3>
                 <p>
-                  <strong>SmartRun</strong> (operating at <em>https://www.smartrun.in</em>) is Kolkata’s premier express electrical supplies platform, quick-commerce building materials hub, and verified on-demand electrician contractor service platform. Operating from our central Kasba warehouse depot, we supply retail homeowners, licensed contractors, real estate developers, architects, and electrical engineers with 100% genuine factory-certified materials with express 60-minute delivery.
+                  <strong>SmartRun</strong> (operated by <strong>SmartRun materials pvt. ltd</strong>, operating at <em>https://www.smartrun.in</em>) is Kolkata’s premier express electrical supplies platform, quick-commerce building materials hub, and verified on-demand electrician contractor service platform. Operating from our central facility at Kheyadah Village, Bhagabanpur, Kolkata 700150, we supply retail homeowners, licensed contractors, real estate developers, architects, and electrical engineers with 100% genuine factory-certified materials with express 60-minute delivery.
                 </p>
               </section>
 
@@ -264,9 +267,9 @@ export const LegalView = ({ onBack, type }: LegalViewProps) => {
               <div className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-[#00875a] shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-bold text-slate-900">Store &amp; Central Depot</p>
+                  <p className="font-bold text-slate-900">Registered Office &amp; Depot</p>
                   <p className="text-[11px] text-slate-600 leading-relaxed mt-0.5">
-                    SmartRun, Bediadanga 1st Lane, Nator Park, Kasba, Kolkata, West Bengal 700039, India
+                    SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150, West Bengal, India
                   </p>
                 </div>
               </div>

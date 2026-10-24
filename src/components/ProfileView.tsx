@@ -520,7 +520,10 @@ export const ProfileView = ({
         noIndex={true}
       />
       {/* 1. TOP HEADER BANNER (Full width touching top & both sides, bottom curves only) */}
-      <div className="bg-gradient-to-b from-[#8B0000] via-[#A30000] to-[#B31B1B] text-white pt-3.5 pb-5 px-4 sm:px-6 relative shadow-md rounded-b-2xl border-b border-red-950/30">
+      <div
+        className="bg-gradient-to-b from-[#8B0000] via-[#A30000] to-[#B31B1B] text-white pb-5 px-4 sm:px-6 relative shadow-md rounded-b-2xl border-b border-red-950/30"
+        style={{ paddingTop: 'calc(0.875rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))' }}
+      >
         {/* Top Control Bar with Back Arrow & Actions */}
         <div className="max-w-3xl mx-auto flex items-center justify-between mb-2.5">
           {/* Arrow Back Button */}

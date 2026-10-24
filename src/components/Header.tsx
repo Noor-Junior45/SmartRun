@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Zap, ShoppingBag, User, ChevronDown, Home, Briefcase, Building2, MapPin, Wrench, Search, X, SlidersHorizontal, ArrowUpDown, ArrowRight, ArrowLeft, Check } from 'lucide-react';
+import { Zap, ShoppingBag, User, ChevronDown, Home, Briefcase, Building2, MapPin, Wrench, Search, X, SlidersHorizontal, ArrowUpDown, ArrowRight, ArrowLeft, Check, Navigation } from 'lucide-react';
 import { KolkataArea, SavedAddress, UserProfile, Product } from '../types';
 import { detectQueryCategory, searchAllProducts } from '../utils/searchHelper';
 import { isConstructionProduct } from '../utils/categoryHelper';
@@ -10,6 +10,7 @@ interface HeaderProps {
   currentArea: KolkataArea;
   activeAddress?: SavedAddress | null;
   onOpenLocationModal: () => void;
+  isLocationFetching?: boolean;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
   allProducts?: Product[];
@@ -59,6 +60,7 @@ export const Header = ({
   currentArea,
   activeAddress,
   onOpenLocationModal,
+  isLocationFetching = false,
   searchQuery = '',
   onSearchChange,
   allProducts = [],
@@ -312,7 +314,7 @@ export const Header = ({
   return (
     <header
       className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs [transform:translateZ(0)] [backface-visibility:hidden] will-change-transform"
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px))' }}
     >
       {/* Main Brand & Action Bar (collapses smoothly on product detail page scroll) */}
       <div
@@ -340,25 +342,27 @@ export const Header = ({
 
               {/* Saved Address House Name Only / Location Selector */}
               <button
+                id="header-location-selector-btn"
                 onClick={onOpenLocationModal}
-                className="flex items-center gap-1.5 text-xs font-normal text-slate-700 hover:text-black transition-colors text-left cursor-pointer group leading-none mt-1 py-1 min-h-[28px] focus:outline-none max-w-[200px] sm:max-w-[320px] truncate"
+                className="flex items-center gap-1.5 text-xs font-normal text-slate-700 hover:text-black transition-colors text-left cursor-pointer group leading-none mt-1 py-1 min-h-[28px] focus:outline-none max-w-[210px] sm:max-w-[340px] truncate"
                 title="View full address or change location"
                 aria-label={`Current delivery address: ${locationInfo.houseNameOnly}. Click to change address`}
               >
-                {activeAddress?.tag === 'home' && (
+                {isLocationFetching && !activeAddress ? (
+                  <Navigation className="w-3.5 h-3.5 text-amber-500 animate-spin shrink-0" />
+                ) : activeAddress?.tag === 'home' ? (
                   <Home className="w-3.5 h-3.5 text-pink-600 shrink-0" />
-                )}
-                {activeAddress?.tag === 'work' && (
+                ) : activeAddress?.tag === 'work' ? (
                   <Briefcase className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                )}
-                {activeAddress?.tag === 'hotel' && (
+                ) : activeAddress?.tag === 'hotel' ? (
                   <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                )}
-                {!activeAddress && (
+                ) : (
                   <MapPin className="w-3.5 h-3.5 text-slate-600 shrink-0" />
                 )}
                 <span className="truncate text-slate-700 group-hover:text-slate-900 font-normal text-[12px] sm:text-[13px]">
-                  {locationInfo.houseNameOnly}
+                  {isLocationFetching && !activeAddress && (!currentArea?.exactStreet && (!currentArea?.name || currentArea?.name === 'Kasba'))
+                    ? 'Detecting location...'
+                    : locationInfo.houseNameOnly}
                 </span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 shrink-0 transition-transform group-hover:translate-y-0.5" />
               </button>

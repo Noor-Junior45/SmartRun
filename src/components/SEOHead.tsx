@@ -61,17 +61,17 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
     const path = location.pathname;
 
     // 1. Determine Title & Meta Defaults Based on Current Route
-    let defaultTitle = 'SmartRun | Electrical Goods, Construction Supplies & Wiring Services Kolkata';
+    let defaultTitle = 'SmartRun (Smart Run) | Electrical Goods, Construction Supplies & Wiring Services Kolkata';
     let defaultDesc =
-      'SmartRun: Kolkata’s trusted depot for electrical goods, modular switches, Polycab & Havells wires, UltraTech cement, Tata Tiscon TMT bars, and certified house wiring contractors with 60-minute express delivery.';
+      'SmartRun (Smart Run) by SmartRun materials pvt. ltd: Kolkata’s trusted depot for electrical goods, modular switches, Polycab & Havells wires, UltraTech cement, Tata Tiscon TMT bars, and certified house wiring contractors with 60-minute express delivery.';
     let defaultKeywords =
-      'SmartRun, smartrun, smartrun kolkata, smartrun electricals, electrical shop near me, buy electrical goods online Kolkata, house wiring contractor, electrical wiring services, modular switches, Polycab wire, Havells cables, Finolex wire, Schneider MCB, distribution board, LED lighting, construction materials Kolkata, cement delivery, UltraTech cement, ACC cement, TMT steel bars, Tata Tiscon rebars, waterproofing chemicals, real estate electrification, licensed electrician Kolkata, Kasba electrical shop, wholesale electrical market Kolkata, B2B building materials procurement, direct depot Kolkata';
+      'Smart Run, SmartRun, smart run, smartrun, smart run app, smartrun app, smart run kolkata, smart run electricals, smart run apk, smart run download, smart run play store, SmartRun materials pvt ltd, SmartRun materials pvt. ltd, electrical shop near me, buy electrical goods online Kolkata, house wiring contractor, electrical wiring services, modular switches, Polycab wire, Havells cables, Finolex wire, Schneider MCB, distribution board, LED lighting, construction materials Kolkata, cement delivery, UltraTech cement, ACC cement, TMT steel bars, Tata Tiscon rebars, waterproofing chemicals, real estate electrification, licensed electrician Kolkata, Kasba electrical shop, wholesale electrical market Kolkata, B2B building materials procurement, direct depot Kolkata';
     let defaultType = type;
     let shouldNoIndex = noIndex ?? false;
 
     if (path === '/') {
-      defaultTitle = 'SmartRun | Buy Electrical Goods, Construction Materials & Wiring Services Kolkata';
-      defaultDesc = 'Order genuine electrical supplies, house wiring cables, modular switches, UltraTech cement, and TMT steel bars with 60-minute express delivery across Kolkata.';
+      defaultTitle = 'SmartRun (Smart Run) | Buy Electrical Goods, Construction Materials & Wiring Services Kolkata';
+      defaultDesc = 'Order genuine electrical supplies, house wiring cables, modular switches, UltraTech cement, and TMT steel bars on SmartRun (Smart Run) with 60-minute express delivery across Kolkata.';
     } else if (path === '/electrical') {
       defaultTitle = 'Electrical Goods & House Wiring Cables Wholesale Kolkata | SmartRun';
       defaultDesc = 'Shop RR Kabel, Polycab, Havells copper wires, Schneider MCBs, distribution boards, and modular switches at factory-direct wholesale prices in Kolkata.';
@@ -299,6 +299,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
           seller: {
             '@type': 'Organization',
             name: 'SmartRun',
+            legalName: 'SmartRun materials pvt. ltd',
             url: 'https://www.smartrun.in/'
           }
         },

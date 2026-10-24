@@ -95,7 +95,7 @@ export const STORE_FAQS = [
   {
     id: 'store_address',
     question: 'Where is the central warehouse located in Kolkata?',
-    shortAnswer: 'Giriraj Power Kasba Central Hub, Kolkata 700039. Open 8:00 AM – 9:30 PM every day.',
+    shortAnswer: 'SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150. Open 8:00 AM – 10:00 PM every day.',
     keywords: ['address', 'location', 'where', 'hub', 'kasba', 'store', 'shop', 'timing', 'hours', 'office']
   }
 ];
@@ -226,7 +226,7 @@ export function processOfflineQuery(
 
   if (lower.includes('who are you') || lower.includes('your name') || lower.includes('what are you')) {
     return {
-      text: `Hello ${userName}! I am **Mayra**, your dedicated 24/7 Support Specialist at Giriraj Power (Kasba, Kolkata). 🤖✨\n\n• ⚡ Technical wire gauges & MCB recommendations\n• 🚀 60-minute express Kolkata delivery tracking\n• 📄 GST tax invoices & B2B Input Tax Credit\n• 🔧 Booking certified licensed electricians\n• 📦 Tracking your personal orders and account details\n• 🤝 Direct escalation to our human support team`,
+      text: `Hello ${userName}! I am **Mayra**, your dedicated 24/7 Support Specialist at SmartRun (SmartRun materials pvt. ltd, Kolkata). 🤖✨\n\n• ⚡ Technical wire gauges & MCB recommendations\n• 🚀 60-minute express Kolkata delivery tracking\n• 📄 GST tax invoices & B2B Input Tax Credit\n• 🔧 Booking certified licensed electricians\n• 📦 Tracking your personal orders and account details\n• 🤝 Direct escalation to our human support team`,
       suggestedActions: [
         { label: '⚡ Wire Gauge Guide', query: 'Wire gauge recommendations' },
         { label: '🚀 60-Min Delivery', query: 'How fast is delivery?' },
@@ -302,7 +302,7 @@ export function processOfflineQuery(
     const balance = userProfile?.walletBalance || 0;
     const cashback = userProfile?.cashbackBalance || 0;
     return {
-      text: `💰 **Your Giriraj Power Wallet Summary**:\n\n• **Available Balance**: ₹${balance.toLocaleString('en-IN')}\n• **Cashback Balance**: ₹${cashback.toLocaleString('en-IN')}\n\nYou can use your wallet balance during checkout for instant one-tap discounts on your electrical purchases!`,
+      text: `💰 **Your SmartRun Wallet Summary**:\n\n• **Available Balance**: ₹${balance.toLocaleString('en-IN')}\n• **Cashback Balance**: ₹${cashback.toLocaleString('en-IN')}\n\nYou can use your wallet balance during checkout for instant one-tap discounts on your electrical purchases!`,
       suggestedActions: [
         { label: '💳 Payment Options', query: 'What payment methods do you accept?' },
         { label: '⚡ Wire Gauge Guide', query: 'Wire gauge recommendations' }
@@ -478,7 +478,7 @@ export function processOfflineQuery(
     lower.includes('hub')
   ) {
     return {
-      text: `📍 **Giriraj Power Kasba Central Hub**:\n\n• **Address**: Kasba Central Hub, Near Nator Park, Kolkata, West Bengal 700039\n• **Operating Hours**: 8:00 AM – 9:30 PM (Open 7 Days a week)\n• **Services**: Express local dispatch, contractor pick-up counter, product inspections, and technical advice.`,
+      text: `📍 **SmartRun materials pvt. ltd Central Fulfillment Hub**:\n\n• **Company Name**: SmartRun materials pvt. ltd\n• **Address**: Kheyadah Village, Bhagabanpur, Kolkata 700150\n• **Operating Hours**: 8:00 AM – 10:00 PM (Open 7 Days a week)\n• **Services**: Express local dispatch, contractor pick-up counter, product inspections, and technical advice.`,
       faqCategory: 'store_address',
       suggestedActions: [
         { label: '🚀 60-Min Delivery', query: 'How fast is delivery?' },
@@ -504,7 +504,7 @@ export function processOfflineQuery(
 
   // 15. DEFAULT SMART DOMAIN FALLBACK
   return {
-    text: `I've noted your question regarding "${clean}".\n\nAt Giriraj Power (Kasba, Kolkata), we provide **60-minute express delivery**, 100% genuine ISI certified electricals (Polycab, Havells, Schneider, Anchor), verified electrician services, and official GST invoices.\n\nWould you like technical wire specifications, delivery updates, or to connect directly with our human support desk?`,
+    text: `I've noted your question regarding "${clean}".\n\nAt SmartRun (SmartRun materials pvt. ltd, Kolkata), we provide **60-minute express delivery**, 100% genuine ISI certified electricals (Polycab, Havells, Schneider, Anchor), verified electrician services, and official GST invoices.\n\nWould you like technical wire specifications, delivery updates, or to connect directly with our human support desk?`,
     suggestedActions: [
       { label: '⚡ Wire Gauge Guide', query: 'Wire gauge recommendations' },
       { label: '🚀 60-Min Delivery', query: 'How fast is delivery?' },

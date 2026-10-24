@@ -867,7 +867,10 @@ export const CartView = ({
           description="Your SmartRun shopping cart is empty. Explore express electrical items and building materials."
           noIndex={true}
         />
-        <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+        <div
+          className="max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6"
+          style={{ paddingTop: 'calc(1rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))' }}
+        >
           {/* Header */}
           <div className="flex items-center gap-2.5 mb-6">
             <button
@@ -971,7 +974,10 @@ export const CartView = ({
         description="Review your electrical supplies and building materials cart with instant express delivery to your doorstep in Kolkata."
         noIndex={true}
       />
-      <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+      <div
+        className="max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6"
+        style={{ paddingTop: 'calc(1rem + max(env(safe-area-inset-top, 0px), var(--safe-area-top, 0px)))' }}
+      >
         
         {/* 1. HEADER */}
         <div className="flex items-center justify-between mb-4">

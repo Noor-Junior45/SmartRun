@@ -6,10 +6,6 @@ import android.os.Bundle;
 import android.view.View;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
-import androidx.activity.EdgeToEdge;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 
@@ -22,18 +18,38 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // Enable official Android 15 edge-to-edge support with backward compatibility (SDK 35+)
-        EdgeToEdge.enable(this);
         super.onCreate(savedInstanceState);
 
-        // Handle system bars and display cutout insets cleanly
+        // Hide any native Android ActionBar or Toolbar so web app navbar is unobstructed
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
+        }
+        if (getActionBar() != null) {
+            getActionBar().hide();
+        }
+
+        // Keep system status bar always visible with solid white background and clear dark icons (WiFi, Network, Battery)
+        getWindow().setStatusBarColor(android.graphics.Color.WHITE);
+        androidx.core.view.WindowInsetsControllerCompat insetsController =
+            androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        if (insetsController != null) {
+            insetsController.setAppearanceLightStatusBars(true);
+            insetsController.setAppearanceLightNavigationBars(true);
+        }
+
+        // Ensure root content view fits system windows so APK starts strictly below WiFi, network, and battery status bar
         View contentView = findViewById(android.R.id.content);
         if (contentView != null) {
-            ViewCompat.setOnApplyWindowInsetsListener(contentView, (view, windowInsets) -> {
-                Insets insets = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+            contentView.setFitsSystemWindows(true);
+        }
+
+        // Set --safe-area-top to 0px in WebView since the WebView starts directly below the status bar with zero gap
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().post(() -> {
+                getBridge().getWebView().evaluateJavascript(
+                    "document.documentElement.style.setProperty('--safe-area-top', '0px');",
+                    null
                 );
-                return windowInsets;
             });
         }
 

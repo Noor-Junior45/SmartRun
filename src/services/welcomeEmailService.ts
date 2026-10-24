@@ -10,6 +10,7 @@ export interface WelcomeEmailPayload {
   name?: string;
   userId?: string;
   force?: boolean;
+  isNewAccount?: boolean;
 }
 
 const WELCOME_EMAIL_SENT_PREFIX = 'smartrun_welcome_sent_';
@@ -37,6 +38,11 @@ export async function sendWelcomeEmail(
     } catch {}
   }
 
+  // Double check: If this is NOT explicitly an active registration, do not dispatch
+  if (!payload.force && !payload.isNewAccount) {
+    return { success: true, message: 'Welcome email skipped: not an active new account registration.', alreadySent: true };
+  }
+
   try {
     const targetUrl = apiUrl('/api/auth/send-welcome-email');
     const res = await fetch(targetUrl, {
@@ -49,6 +55,7 @@ export async function sendWelcomeEmail(
         name: payload.name || cleanEmail.split('@')[0] || 'Valued Customer',
         userId: payload.userId,
         force: payload.force,
+        isNewAccount: payload.isNewAccount,
       }),
     });
 

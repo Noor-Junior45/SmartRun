@@ -226,7 +226,7 @@ export function formatOrderWhatsAppMessage(order: Order): string {
     `${(order.discount || 0) > 0 ? `🎟️ *Discount:* -₹${order.discount}\n` : ''}` +
     `💳 *GRAND TOTAL:* ₹${(order.totalAmount || 0).toLocaleString('en-IN')}\n` +
     `💵 *Payment Mode:* ${order.paymentMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Online UPI / Card (PAID)'}\n\n` +
-    `⚡ *Central Dispatch:* SmartRun Kasba Hub, Kolkata 700039`
+    `⚡ *Central Dispatch:* SmartRun materials pvt. ltd, Kheyadah Village, Bhagabanpur, Kolkata 700150`
   );
 }
 
@@ -322,6 +322,72 @@ export async function sendOrderConfirmationEmail(
     return {
       success: false,
       message: `Failed to send email: ${errorMessage}`,
+      error: errorMessage
+    };
+  }
+}
+
+/**
+ * Sends an automated order delivered confirmation email with official Tax Invoice PDF attached
+ */
+export async function sendOrderDeliveredEmail(
+  order: Order,
+  emailRecipient?: string,
+  force = false
+): Promise<EmailSendResult> {
+  const targetEmail =
+    emailRecipient ||
+    order.customerEmail ||
+    (order as any).customer_email ||
+    (order as any).recipient_email;
+
+  if (!targetEmail || !targetEmail.includes('@') || targetEmail.includes('@girirajpower.internal')) {
+    return {
+      success: false,
+      message: 'No valid customer email address available on this order.'
+    };
+  }
+
+  // Client-side deduplication check so we never send duplicate delivery emails
+  const orderId = order.id || (order as any).order_id || (order as any).orderId;
+  const deliverySentKey = `smartrun_delivery_email_sent_${orderId}`;
+  if (!force && typeof window !== 'undefined') {
+    try {
+      if (localStorage.getItem(deliverySentKey) === 'true') {
+        return {
+          success: true,
+          message: 'Delivery email and Tax Invoice PDF already sent to this customer.'
+        };
+      }
+    } catch {}
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/send-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'order_delivered',
+        to: targetEmail,
+        customerName: order.customerName || (order as any).recipient_name || 'Customer',
+        order,
+        force
+      })
+    });
+
+    const data = await res.json();
+    if (typeof window !== 'undefined' && res.ok) {
+      try {
+        localStorage.setItem(deliverySentKey, 'true');
+      } catch {}
+    }
+    return data;
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Network error';
+    console.error('Failed to send order delivered email:', err);
+    return {
+      success: false,
+      message: `Failed to send delivery email: ${errorMessage}`,
       error: errorMessage
     };
   }
